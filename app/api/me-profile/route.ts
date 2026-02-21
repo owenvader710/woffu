@@ -1,3 +1,4 @@
+// app/api/me-profile/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseFromRequest } from "@/utils/supabase/api";
 
@@ -7,15 +8,14 @@ export async function GET(req: NextRequest) {
 
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
-    if (!authData?.user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+    const user = authData?.user;
+    if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
     const { data, error } = await supabase
-      .from("projects")
-      .select(`
-        id, title, type, department, status, created_at, start_date, due_date,
-        brand, video_priority, video_purpose, graphic_job_type
-      `)
-      .order("created_at", { ascending: false });
+      .from("profiles")
+      .select("id, role, is_active, display_name, department")
+      .eq("id", user.id)
+      .single();
 
     if (error) {
       const res = NextResponse.json({ error: error.message }, { status: 400 });

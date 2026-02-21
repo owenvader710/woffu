@@ -1,17 +1,8 @@
+// app/my-work/useRealtimeMyWork.ts
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/utils/supabase/client";
-
-export type RequestMini = {
-  id: string;
-  project_id: string;
-  from_status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
-  to_status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
-  request_status: "PENDING" | "APPROVED" | "REJECTED";
-  created_at: string;
-  approved_at: string | null;
-};
 
 export type MyWorkItem = {
   id: string;
@@ -22,11 +13,13 @@ export type MyWorkItem = {
   created_at: string;
   start_date: string | null;
   due_date: string | null;
-  assignee_id: string | null;
 
-  // ✅ เพิ่ม
-  last_request?: RequestMini | null;
-  pending_request?: RequestMini | null;
+  // ✅ fields ใหม่ (summary-only)
+  brand: string | null;
+  video_priority: "2" | "3" | "5" | "SPECIAL" | null;
+  video_purpose: string | null;
+  graphic_job_type: string | null;
+  graphic_category: string | null;
 };
 
 async function safeJson(res: Response) {
@@ -71,17 +64,14 @@ export function useRealtimeMyWork() {
 
     const supabase: any = supabaseBrowser;
 
-    // ✅ รองรับทั้ง v2 และ v1
+    // รองรับทั้ง v2/v1
     let cleanup: null | (() => void) = null;
 
     try {
-      if (supabase && typeof supabase.channel === "function") {
+      if (typeof supabase?.channel === "function") {
         const channel = supabase
-          .channel("realtime-my-work")
+          .channel("realtime-my-work-projects")
           .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, () => {
-            if (mounted.current) refresh();
-          })
-          .on("postgres_changes", { event: "*", schema: "public", table: "status_change_requests" }, () => {
             if (mounted.current) refresh();
           })
           .subscribe();
@@ -91,22 +81,22 @@ export function useRealtimeMyWork() {
             supabase.removeChannel(channel);
           } catch {}
         };
-      } else if (supabase && typeof supabase.from === "function") {
-        const sub1 = supabase.from("projects").on("*", () => mounted.current && refresh()).subscribe();
-        const sub2 = supabase
-          .from("status_change_requests")
-          .on("*", () => mounted.current && refresh())
+      } else if (typeof supabase?.from === "function") {
+        const sub = supabase
+          .from("projects")
+          .on("*", () => {
+            if (mounted.current) refresh();
+          })
           .subscribe();
 
         cleanup = () => {
           try {
-            supabase.removeSubscription(sub1);
-            supabase.removeSubscription(sub2);
+            supabase.removeSubscription(sub);
           } catch {}
         };
       }
     } catch {
-      // ignore
+      // realtime ใช้ไม่ได้ก็ยังใช้งานหน้าได้ปกติ
     }
 
     return () => {

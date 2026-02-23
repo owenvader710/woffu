@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
     const user = authData?.user;
     if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
+    // ✅ เห็นเฉพาะงานที่ assign ให้ตัวเอง
     const { data, error } = await supabase
       .from("projects")
       .select(`

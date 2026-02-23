@@ -1,26 +1,157 @@
 @import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@layer components {
+  .app-bg {
+    @apply bg-black text-white;
+  }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  .card {
+    @apply rounded-3xl border border-white/10 bg-white/5 shadow-[0_20px_60px_rgba(0,0,0,0.35)];
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  .panel {
+    @apply rounded-[36px] border border-white/10 bg-white/5;
+  }
+
+  .btn {
+    @apply rounded-2xl border px-4 py-2 text-sm font-semibold transition;
+  }
+
+  .btn-ghost {
+    @apply border-white/10 bg-white/5 text-white/85 hover:bg-white/10;
+  }
+
+  .btn-primary {
+    @apply border-[#e5ff78]/20 bg-[#e5ff78] text-black hover:opacity-90;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78];
   }
 }
 
+:root {
+  --background: #050505;
+  --foreground: rgba(255, 255, 255, 0.88);
+  --brand: #e5ff78;
+  --panel: rgba(255,255,255,0.05);
+  --panel2: rgba(255,255,255,0.03);
+  --stroke: rgba(255,255,255,0.10);
+  --text: rgba(255,255,255,0.88);
+  --muted: rgba(255,255,255,0.55);
+  --muted2: rgba(255,255,255,0.40);
+  --brand: #e5ff78;
+  --sidebar: #1D1615; /* ตามที่ทำแล้ว */
+}
+
+html,
 body {
+  background: var(--background);
+  color: var(--text);
+  height: 100%;
+}
+
+body {
+  min-height: 100%;
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+/* Layout */
+.wof-page { width:100%; min-height:100vh; }
+.wof-shell { width:100%; }
+
+/* Panels */
+.wof-card {
+  border: 1px solid var(--stroke);
+  background: var(--panel);
+  border-radius: 24px;
+}
+.wof-card-soft {
+  border: 1px solid var(--stroke);
+  background: var(--panel2);
+  border-radius: 24px;
+}
+
+/* Buttons */
+.wof-btn {
+  border: 1px solid var(--stroke);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 16px;
+}
+.wof-btn:hover { background: rgba(255,255,255,0.10); }
+
+.wof-btn-brand {
+  background: var(--brand);
+  color: #000;
+  border-radius: 16px;
+}
+.wof-btn-brand:hover { filter: brightness(0.96); }
+
+/* Inputs */
+.wof-input {
+  border: 1px solid var(--stroke);
+  background: rgba(0,0,0,0.20);
+  color: var(--text);
+  border-radius: 16px;
+  outline: none;
+}
+.wof-input:focus { border-color: var(--brand); }
+@layer components {
+  .woffu-page {
+    @apply min-h-screen w-full bg-black text-white;
+  }
+
+  .woffu-container {
+    @apply w-full px-8 py-8;
+  }
+
+  .woffu-panel {
+    @apply rounded-[36px] border border-white/10 bg-white/5 shadow-[0_20px_60px_rgba(0,0,0,0.35)];
+  }
+
+  .woffu-card {
+    @apply rounded-3xl border border-white/10 bg-white/5 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)];
+  }
+
+  .woffu-btn {
+    @apply rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10 transition;
+  }
+
+  .woffu-btn-primary {
+    @apply rounded-2xl border border-[#e5ff78]/20 bg-[#e5ff78] px-4 py-2 text-sm font-semibold text-black hover:opacity-90 transition;
+  }
+
+  .woffu-input {
+    @apply w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78];
+  }
+}
+/* Force date/time picker icon visible (Chrome/Edge/Safari) */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  color-scheme: dark; /* ให้เบราว์เซอร์วาด UI เป็นโทนมืด */
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  opacity: 1;
+  display: block;
+  filter: invert(1); /* ทำไอคอนให้เป็นสีอ่อนบนพื้นดำ */
+  cursor: pointer;
+}
+/* Make date picker icon visible on dark theme (Chrome/Edge) */
+input[type="date"] {
+  color-scheme: dark;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.9;
+  cursor: pointer;
 }

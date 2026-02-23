@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useToast } from "../components/ToastStack";
+import { useToast } from "@/app/components/ToastStack";
 
 type ApprovalItem = {
   id: string;
@@ -102,9 +102,14 @@ export default function ApprovalsPage() {
 
   useEffect(() => {
     load();
-  }, []);
-
+  }, []); 
+  <div className="wof-page w-full">
+    <div className="wof-shell">
+      {/* content */}
+    </div>
+  </div>
   return (
+    
     <div className="p-10">
       <div className="flex items-start justify-between">
         <div>
@@ -162,6 +167,7 @@ export default function ApprovalsPage() {
               >
                 {busyId === r.id ? "..." : "Approve"}
               </button>
+              
             </div>
           </div>
         ))}

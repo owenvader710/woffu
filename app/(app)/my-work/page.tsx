@@ -48,10 +48,8 @@ function compactMeta(p: WorkItem) {
 export default function MyWorkPage() {
   const { items, loading, error, refresh } = useRealtimeMyWork();
 
-  // ✅ ข้อ 4: filter ฝ่าย + status + ค้นหา
+  // ✅ my-work: เอาแค่ filter สถานะพอ
   const [statusFilter, setStatusFilter] = useState<WorkItem["status"] | "ALL">("ALL");
-  const [typeFilter, setTypeFilter] = useState<"ALL" | "VIDEO" | "GRAPHIC">("ALL");
-  const [q, setQ] = useState("");
 
   const counts = useMemo(() => {
     const base = { ALL: (items as any[]).length, TODO: 0, IN_PROGRESS: 0, BLOCKED: 0, COMPLETED: 0 } as Record<
@@ -63,20 +61,10 @@ export default function MyWorkPage() {
   }, [items]);
 
   const filtered = useMemo(() => {
-    let out = (items as WorkItem[]) ?? [];
-
-    if (statusFilter !== "ALL") out = out.filter((x) => x.status === statusFilter);
-    if (typeFilter !== "ALL") out = out.filter((x) => x.type === typeFilter);
-
-    const qq = q.trim().toLowerCase();
-    if (qq) {
-      out = out.filter((p) => {
-        const hay = `${p.title ?? ""} ${p.brand ?? ""} ${p.video_purpose ?? ""} ${p.graphic_job_type ?? ""}`.toLowerCase();
-        return hay.includes(qq);
-      });
-    }
-    return out;
-  }, [items, statusFilter, typeFilter, q]);
+    const list = items as WorkItem[];
+    if (statusFilter === "ALL") return list;
+    return list.filter((x) => x.status === statusFilter);
+  }, [items, statusFilter]);
 
   return (
     <div className="p-10">
@@ -110,33 +98,6 @@ export default function MyWorkPage() {
             </button>
           );
         })}
-      </div>
-
-      {/* ✅ type filter + search */}
-      <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-wrap gap-2">
-          {(["ALL", "VIDEO", "GRAPHIC"] as const).map((t) => {
-            const active = typeFilter === t;
-            return (
-              <button
-                key={t}
-                onClick={() => setTypeFilter(t)}
-                className={`rounded-xl border px-3 py-2 text-xs hover:bg-gray-50 ${
-                  active ? "bg-black text-white hover:bg-black" : ""
-                }`}
-              >
-                {t === "ALL" ? "ทุกฝ่าย" : t}
-              </button>
-            );
-          })}
-        </div>
-
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="ค้นหา: ชื่อโปรเจกต์ / แบรนด์ / รูปแบบงาน / ประเภทงาน"
-          className="w-full rounded-xl border px-3 py-2 text-sm md:w-[420px]"
-        />
       </div>
 
       {loading && <div className="mt-6 rounded-xl border p-4 text-sm text-gray-600">กำลังโหลด...</div>}

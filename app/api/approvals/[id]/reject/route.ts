@@ -28,19 +28,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const { data: reqRow, error: reqErr } = await supabase
     .from("status_change_requests")
-    .select("id, project_id, from_status, to_status, status, requested_by")
+    .select("id, project_id, from_status, to_status, request_status, requested_by")
     .eq("id", id)
     .single();
   if (reqErr) return NextResponse.json({ error: reqErr.message }, { status: 500 });
   if (!reqRow) return NextResponse.json({ error: "Request not found" }, { status: 404 });
-  if (String(reqRow.status).toUpperCase() !== "PENDING") {
+  if (String(reqRow.request_status).toUpperCase() !== "PENDING") {
     return NextResponse.json({ error: "Request is not pending" }, { status: 400 });
   }
 
   const now = new Date().toISOString();
   const { error: updReqErr } = await supabase
     .from("status_change_requests")
-    .update({ status: "REJECTED", approved_by: user.id, approved_at: now })
+    .update({ request_status: "REJECTED", approved_by: user.id, approved_at: now })
     .eq("id", id);
   if (updReqErr) return NextResponse.json({ error: updReqErr.message }, { status: 500 });
 

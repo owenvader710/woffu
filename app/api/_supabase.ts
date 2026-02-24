@@ -1,7 +1,12 @@
 // app/api/_supabase.ts
+import type { NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+export async function supabaseFromRequest(_req: NextRequest) {
+  const supabase = createSupabaseServer();
+  return { supabase };
+}
 export async function createSupabaseServer() {
   const cookieStore = await cookies();
 

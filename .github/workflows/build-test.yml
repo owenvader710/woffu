@@ -1,0 +1,32 @@
+name: Node.js Build Test
+
+on:
+  push:
+    branches: [ main, dev ] # รันเมื่อ push ลง branch เหล่านี้
+  pull_request:
+    branches: [ main ]      # รันเมื่อมีการสร้าง Pull Request
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # ระบุเวอร์ชัน Node ที่คุณใช้
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+        env:
+          # ใส่ Environment Variables ที่จำเป็นต่อการ Build (ถ้ามี)
+          # ถ้า Build ของคุณต้องต่อ Database ให้ใส่คีย์จำลองไว้ตรงนี้
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}

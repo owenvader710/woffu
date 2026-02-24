@@ -135,27 +135,37 @@ export default function ProjectsPage() {
   }
 
   async function loadProjects() {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/projects", { cache: "no-store" });
-      const json = await safeJson(res);
+  setLoading(true);
+  setError("");
+  try {
+    const res = await fetch("/api/projects", { cache: "no-store" });
+    const json = await safeJson(res);
 
-      if (!res.ok) {
-        setItems([]);
-        setError((json && (json.error || json.message)) || `Load projects failed (${res.status})`);
-        return;
-      }
-
-      const data = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-      setItems(data);
-    } catch (e: any) {
+    if (!res.ok) {
       setItems([]);
-      setError(e?.message || "Load projects failed");
-    } finally {
-      setLoading(false);
+      setError((json && (json.error || json.message)) || `Load projects failed (${res.status})`);
+      return;
     }
+
+    const raw = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+
+    // ✅ normalize id กันเคส id ไม่ได้ชื่อ id
+    const normalized = raw
+      .map((p: any) => ({
+        ...p,
+        id: p?.id ?? p?.project_id ?? p?.projectId ?? p?.uuid ?? null,
+      }))
+      .filter((p: any) => !!p.id);
+
+    setItems(normalized);
+  } catch (e: any) {
+    setItems([]);
+    setError(e?.message || "Load projects failed");
+  } finally {
+    setLoading(false);
   }
+}
+
 
   async function loadMembers() {
     if (!isLeader) {
@@ -213,34 +223,58 @@ export default function ProjectsPage() {
     if (statusFilter !== "ALL") list = list.filter((p) => p.status === statusFilter);
     return list;
   }, [baseList, statusFilter]);
+  
 
   async function onDelete(p: Project) {
+  if (!isLeader) return;
+  if (!p?.id) {
+    alert("Invalid project id");
+    return;
+  }
     if (!isLeader) return;
-    const ok = window.confirm(`ลบโปรเจกต์นี้จริงไหม?\n\n${p.title}`);
+
+    if (!p?.id || p.id === "undefined" || p.id === "null") {
+      alert("Invalid project id");
+      return;
+    }
+
+const ok = window.confirm(`ลบโปรเจกต์นี้จริงไหม?\n\n${p.title}`);
     if (!ok) return;
 
-    const prev = items;
-    setItems((x) => x.filter((it) => it.id !== p.id));
+  const prev = items;
+  setItems((x) => x.filter((it) => it.id !== p.id));
 
-    try {
-      const res = await fetch(`/api/projects/${p.id}`, { method: "DELETE" });
-      const json = await safeJson(res);
-      if (!res.ok) {
-        setItems(prev);
-        alert((json && (json.error || json.message)) || `Delete failed (${res.status})`);
-        return;
-      }
-    } catch (e: any) {
+  try {
+    const res = await fetch(`/api/projects/${p.id}`, { method: "DELETE" });
+    const json = await safeJson(res);
+    if (!res.ok) {
       setItems(prev);
-      alert(e?.message || "Delete failed");
+      alert((json && (json.error || json.message)) || `Delete failed (${res.status})`);
+      return;
     }
+  } catch (e: any) {
+    setItems(prev);
+    alert(e?.message || "Delete failed");
+  }
+}
+
+function onEdit(p: Project) {
+  if (!isLeader) return;
+  if (!p?.id) {
+    alert("Invalid project id");
+    return;
+  }
+  if (!isLeader) return;
+
+  // ✅ กัน id หาย
+  if (!p?.id) {
+    alert("Invalid project id");
+    return;
   }
 
-  function onEdit(p: Project) {
-    if (!isLeader) return;
-    setEditingProject(p);
-    setEditOpen(true);
-  }
+  setEditingProject(p);
+  setEditOpen(true);
+}
 
   // ✅ ปุ่มไอคอนเวอร์ชันใหม่: "แก้ไข" โทนเดียวกับปุ่มสั่งงานใหม่, "ลบ" เป็นแดง
   const IconBtn = ({

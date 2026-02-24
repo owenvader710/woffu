@@ -1,72 +1,135 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { supabaseBrowser } from "@/utils/supabase/client";
+import { Camera, Edit2, RefreshCw } from "lucide-react";
+import { createBrowserClient } from "@supabase/ssr";
 import AvatarCropModal from "./AvatarCropModal";
+import EditMemberModal from "./EditMemberModal";
 
 type Member = {
   id: string;
   display_name: string | null;
-  department: "VIDEO" | "GRAPHIC" | "ALL";
-  role: "LEADER" | "MEMBER";
+  department: string;
+  role: string;
   is_active: boolean;
-  phone: string | null;
-  avatar_url: string | null;
+  avatar_url?: string | null;
+  phone?: string | null;
+  email?: string | null;
 };
 
 async function safeJson(res: Response) {
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
+  const t = await res.text();
+  return t ? JSON.parse(t) : null;
+}
+
+function initials(name?: string | null) {
+  const s = (name || "").trim();
+  if (!s) return "•";
+  return s[0].toUpperCase();
+}
+
+function Badge({
+  children,
+  tone = "neutral",
+}: {
+  children: React.ReactNode;
+  tone?: "neutral" | "lime" | "green" | "red";
+}) {
+  const cls =
+    tone === "lime"
+      ? "border-[#e5ff78]/30 bg-[#e5ff78]/15 text-[#e5ff78]"
+      : tone === "green"
+      ? "border-green-500/30 bg-green-500/10 text-green-200"
+      : tone === "red"
+      ? "border-red-500/30 bg-red-500/10 text-red-200"
+      : "border-white/10 bg-white/5 text-white/75";
+
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-tight ${cls}`}>
+      {children}
+    </span>
+  );
+}
+
+function AvatarSquare({ url, name }: { url?: string | null; name?: string | null }) {
+  return (
+    <div className="relative h-[260px] w-[260px] overflow-hidden rounded-[40px] border border-white/10 bg-white/5 shadow-2xl">
+      {url ? (
+        <img src={url} alt={name || "avatar"} className="h-full w-full object-cover" loading="lazy" />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-6xl font-extrabold text-white/20">
+          {initials(name)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AvatarCardImage({ url, name }: { url?: string | null; name?: string | null }) {
+  return (
+    <div className="relative h-44 w-full overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+      {url ? (
+        <img src={url} alt={name || "avatar"} className="h-full w-full object-cover" loading="lazy" />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-5xl font-extrabold text-white/20">
+          {initials(name)}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function MembersPage() {
+  const [items, setItems] = useState<Member[]>([]);
   const [me, setMe] = useState<Member | null>(null);
-  const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
 
-  const [msg, setMsg] = useState<string>("");
-  const [err, setErr] = useState<string>("");
+  // ✅ field modal (Tel/E-mail ของตัวเอง)
+  const [fieldOpen, setFieldOpen] = useState<null | "phone" | "email">(null);
+  const [fieldSaving, setFieldSaving] = useState(false);
+  const [fieldErr, setFieldErr] = useState("");
 
-  // Avatar crop modal
+  // ✅ edit member (หัวหน้าแก้คนอื่น)
+  const [memberEditOpen, setMemberEditOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
+
+  // crop avatar
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [cropOpen, setCropOpen] = useState(false);
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [savingAvatar, setSavingAvatar] = useState(false);
 
-  // invite
-  const [inviteEmail, setInviteEmail] = useState("");
+  const isLeader =
+  String(me?.role || "").toUpperCase() === "LEADER" && me?.is_active !== false;
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  async function load() {
+  async function loadAll() {
     setLoading(true);
-    setMsg("");
     setErr("");
     try {
-      const res = await fetch("/api/members", { cache: "no-store" });
-      const json = await safeJson(res);
+      const [rMembers, rMe] = await Promise.all([
+        fetch("/api/members", { cache: "no-store" }),
+        fetch("/api/me-profile", { cache: "no-store" }),
+      ]);
 
-      if (!res.ok) {
-        setErr((json && (json.error || json.message)) || `Load members failed (${res.status})`);
-        setMembers([]);
-        setMe(null);
-        return;
+      const jMembers = await safeJson(rMembers);
+      const jMe = await safeJson(rMe);
+
+      if (!rMembers.ok) {
+        throw new Error((jMembers?.error || jMembers?.message) || `Load failed (${rMembers.status})`);
       }
 
-      const data = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-      setMembers(data);
+      const list = Array.isArray(jMembers?.data) ? jMembers.data : Array.isArray(jMembers) ? jMembers : [];
+      const meRaw = jMe?.data ?? jMe ?? null;
 
-      // ✅ กัน supabaseBrowser undefined / auth ไม่มี
-      const sb: any = supabaseBrowser as any;
-      if (!sb?.auth?.getUser) {
+      setItems(list);
+
+      if (meRaw?.id) {
+        const fromList = list.find((x: Member) => x.id === meRaw.id);
+        setMe(fromList || meRaw);
+      } else {
         setMe(null);
-        setErr("Supabase client ฝั่ง browser ไม่พร้อม (supabaseBrowser.auth.getUser ไม่เจอ) — เช็ค utils/supabase/client.ts");
-        return;
       }
-
-      const { data: u } = await sb.auth.getUser();
-      const uid = u?.user?.id;
-
-      if (uid) setMe(data.find((m: Member) => m.id === uid) ?? null);
-      else setMe(null);
     } catch (e: any) {
       setErr(e?.message || "Load members failed");
     } finally {
@@ -75,254 +138,385 @@ export default function MembersPage() {
   }
 
   useEffect(() => {
-    load();
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const isLeader = useMemo(() => me?.role === "LEADER" && me?.is_active, [me]);
+  const activeItems = useMemo(() => items.filter((m) => m?.is_active !== false), [items]);
+  const sortByName = (a: Member, b: Member) => String(a.display_name || a.id).localeCompare(String(b.display_name || b.id));
 
-  // ✅ Apply from CropModal: upload PNG -> storage -> update profiles.avatar_url
-  async function applyCroppedAvatar(payload: { blob: Blob; previewDataUrl: string }) {
-    setMsg("");
+  const leaders = useMemo(
+    () => activeItems.filter((m) => String(m.role).toUpperCase() === "LEADER").sort(sortByName),
+    [activeItems]
+  );
+  const videoSorted = useMemo(
+    () => activeItems.filter((m) => String(m.role).toUpperCase() !== "LEADER" && String(m.department).toUpperCase() === "VIDEO").sort(sortByName),
+    [activeItems]
+  );
+  const graphicSorted = useMemo(
+    () => activeItems.filter((m) => String(m.role).toUpperCase() !== "LEADER" && String(m.department).toUpperCase() === "GRAPHIC").sort(sortByName),
+    [activeItems]
+  );
+
+  function openFilePicker() {
+    fileInputRef.current?.click();
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setCropFile(file);
+    setCropOpen(true);
+  }
+
+  async function applyCroppedAvatar(pngBlob: Blob) {
+    if (!me?.id) return;
+    setSavingAvatar(true);
     setErr("");
-
-    if (!me?.id) {
-      setErr("ยังไม่ได้ login");
-      return;
-    }
-
     try {
-      const sb: any = supabaseBrowser as any;
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
 
-      const path = `${me.id}/avatar.png`;
+      const fileName = `${me.id}/${Date.now()}.png`;
+      const { error: upErr } = await supabase.storage
+        .from("avatars")
+        .upload(fileName, pngBlob, { contentType: "image/png", upsert: true });
+      if (upErr) throw upErr;
 
-      const { error: upErr } = await sb.storage.from("avatars").upload(path, payload.blob, {
-        upsert: true,
-        contentType: "image/png",
-        cacheControl: "3600",
-      });
+      const { data: pub } = supabase.storage.from("avatars").getPublicUrl(fileName);
+      const avatar_url = pub?.publicUrl || null;
 
-      if (upErr) {
-        setErr(upErr.message);
-        return;
-      }
+      const { error: updErr } = await supabase.from("profiles").update({ avatar_url }).eq("id", me.id);
+      if (updErr) throw updErr;
 
-      const { data } = sb.storage.from("avatars").getPublicUrl(path);
-      const publicUrl = data.publicUrl;
-
-      const { error: dbErr } = await sb.from("profiles").update({ avatar_url: publicUrl }).eq("id", me.id);
-      if (dbErr) {
-        setErr(dbErr.message);
-        return;
-      }
-
-      setMsg("อัปเดตรูปโปรไฟล์แล้ว");
-      setAvatarFile(null);
-      setCropOpen(false);
-      await load();
+      await loadAll();
     } catch (e: any) {
       setErr(e?.message || "Upload failed");
+    } finally {
+      setSavingAvatar(false);
     }
   }
 
-  async function invite() {
-    setMsg("");
-    setErr("");
+  async function saveField(kind: "phone" | "email", next: string) {
+    setFieldSaving(true);
+    setFieldErr("");
+    try {
+      const payload: any = {};
+      payload[kind] = next.trim() || null;
 
-    const email = inviteEmail.trim();
-    if (!email) {
-      setErr("กรุณาใส่ email");
+      const res = await fetch("/api/me-profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await safeJson(res);
+      if (!res.ok) throw new Error((json && (json.error || json.message)) || `Save failed (${res.status})`);
+
+      setMe((prev) => (prev ? { ...prev, ...payload } : prev));
+      setItems((prev) => prev.map((m) => (m.id === me?.id ? ({ ...m, ...payload } as any) : m)));
+      setFieldOpen(null);
+    } catch (e: any) {
+      setFieldErr(e?.message || "Save failed");
+    } finally {
+      setFieldSaving(false);
+    }
+  }
+
+  function openEditMember(m: Member) {
+    // ✅ กันเคส id หาย
+    if (!m?.id || m.id === "undefined" || m.id === "null") {
+      setErr("Invalid member id");
       return;
     }
-
-    try {
-      const res = await fetch("/api/admin/invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-
-      const json = await safeJson(res);
-      if (!res.ok) {
-        setErr((json && (json.error || json.message)) || `Invite failed (${res.status})`);
-        return;
-      }
-
-      setMsg("ส่ง Invite แล้ว (เช็คอีเมลผู้ใช้)");
-      setInviteEmail("");
-      await load();
-    } catch (e: any) {
-      setErr(e?.message || "Invite failed");
-    }
+    setEditingMember(m);
+    setMemberEditOpen(true);
   }
 
+  if (loading) return <div className="p-10 text-white/50 animate-pulse text-center">กำลังโหลดข้อมูล...</div>;
+
   return (
-    <div className="p-10">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">สมาชิก</h1>
-          <p className="mt-1 text-sm text-gray-600">รายชื่อสมาชิกทั้งหมดในระบบ</p>
+    <div className="min-h-screen bg-black text-white p-6 md:p-12">
+      <div className="max-w-6xl mx-auto">
+        <header className="flex justify-between items-end mb-10">
+          <div>
+            <p className="text-[10px] font-black tracking-[0.3em] text-white/30 uppercase">WOFFU SYSTEM</p>
+            <h1 className="text-4xl font-black mt-1">
+              Members <span className="text-sm font-normal text-white/20 ml-2">({activeItems.length})</span>
+            </h1>
+          </div>
+          <button onClick={loadAll} className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all active:scale-95">
+            <RefreshCw size={20} />
+          </button>
+        </header>
+
+        {err ? <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-200 text-sm">{err}</div> : null}
+
+        {me ? (
+          <section className="bg-[#0f0f0f] border border-white/5 rounded-[48px] p-8 md:p-10 mb-16 shadow-2xl">
+            <div className="flex flex-col lg:flex-row gap-12 items-center lg:items-start">
+              <div className="flex flex-col gap-4 w-full max-w-[260px]">
+                <AvatarSquare url={me.avatar_url} name={me.display_name} />
+
+                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+                <button
+                  onClick={openFilePicker}
+                  disabled={savingAvatar}
+                  className="w-full py-3 bg-white/5 border border-white/10 rounded-2xl text-[11px] font-bold hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <Camera size={14} /> {savingAvatar ? "กำลังอัปโหลด..." : "เปลี่ยนรูปโปรไฟล์"}
+                </button>
+                <p className="text-[10px] text-white/20 text-center">* เลือกแล้วปรับซูม/ครอปได้</p>
+              </div>
+
+              <div className="flex-1 w-full">
+                <div className="flex items-center gap-2 mb-4 justify-center lg:justify-start">
+                  <Badge tone="neutral">{String(me.role || "MEMBER").toUpperCase()}</Badge>
+                  <Badge tone={me.is_active === false ? "red" : "lime"}>{me.is_active === false ? "INACTIVE" : "ACTIVE"}</Badge>
+                </div>
+
+                <h2 className="text-5xl font-black mb-8 tracking-tighter text-center lg:text-left">{me.display_name || "Guest"}</h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white/5 border border-white/5 p-5 rounded-[24px] flex justify-between items-center hover:bg-white/10 transition-all">
+                    <div>
+                      <p className="text-[10px] text-white/30 font-bold uppercase mb-1">Tel.</p>
+                      <p className="text-base font-semibold">{me.phone || "-"}</p>
+                    </div>
+                    <button
+                      onClick={() => { setFieldErr(""); setFieldOpen("phone"); }}
+                      className="p-2.5 rounded-xl bg-white/5 text-white/20 hover:text-[#e5ff78] hover:bg-[#e5ff78]/10 transition-all"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                  </div>
+
+                  <div className="bg-white/5 border border-white/5 p-5 rounded-[24px] flex justify-between items-center hover:bg-white/10 transition-all">
+                    <div className="min-w-0">
+                      <p className="text-[10px] text-white/30 font-bold uppercase mb-1">E-mail</p>
+                      <p className="text-base font-semibold truncate">{me.email || "-"}</p>
+                    </div>
+                    <button
+                      onClick={() => { setFieldErr(""); setFieldOpen("email"); }}
+                      className="p-2.5 rounded-xl bg-white/5 text-white/20 hover:text-[#e5ff78] hover:bg-[#e5ff78]/10 transition-all"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                <p className="mt-8 text-sm text-white/40 leading-relaxed text-center lg:text-left">
+                  หน้านี้สำหรับดูรายชื่อทีมทั้งหมด และจัดการโปรไฟล์ของตัวเอง
+                </p>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        <div className="space-y-16">
+          <TeamSection title="หัวหน้า" subtitle="LEADER" data={leaders} canEdit={isLeader} onEditMember={openEditMember} />
+          <TeamSection title="ทีมวิดีโอ" subtitle="VIDEO" data={videoSorted} canEdit={isLeader} onEditMember={openEditMember} />
+          <TeamSection title="ทีมกราฟิก" subtitle="GRAPHIC" data={graphicSorted} canEdit={isLeader} onEditMember={openEditMember} />
         </div>
 
-        <button onClick={load} className="rounded-xl border px-4 py-2 text-sm hover:bg-gray-50">
-          รีเฟรช
-        </button>
+        <div className="h-20" />
       </div>
 
-      {loading && <div className="mt-6 rounded-xl border p-4 text-sm text-gray-600">กำลังโหลด...</div>}
+      <AvatarCropModal
+        open={cropOpen}
+        imageFile={cropFile}
+        onClose={() => { setCropOpen(false); setCropFile(null); }}
+        onConfirm={async (blob) => {
+          setCropOpen(false);
+          setCropFile(null);
+          await applyCroppedAvatar(blob);
+        }}
+      />
 
-      {!loading && msg && (
-        <div className="mt-6 rounded-xl border border-green-300 bg-green-50 p-4 text-sm text-green-800">{msg}</div>
-      )}
+      {/* ✅ แก้ Tel / Email ของตัวเอง */}
+      <EditFieldModal
+        open={fieldOpen === "phone"}
+        label="Tel."
+        value={me?.phone || ""}
+        placeholder="เช่น 0612345678"
+        type="tel"
+        submitting={fieldSaving}
+        error={fieldErr}
+        onClose={() => setFieldOpen(null)}
+        onSave={(v) => saveField("phone", v)}
+      />
+      <EditFieldModal
+        open={fieldOpen === "email"}
+        label="E-mail"
+        value={me?.email || ""}
+        placeholder="เช่น name@company.com"
+        type="email"
+        submitting={fieldSaving}
+        error={fieldErr}
+        onClose={() => setFieldOpen(null)}
+        onSave={(v) => saveField("email", v)}
+      />
 
-      {!loading && err && (
-        <div className="mt-6 rounded-xl border border-yellow-300 bg-yellow-50 p-4 text-sm text-yellow-900">{err}</div>
-      )}
+      {/* ✅ หัวหน้าแก้สมาชิก */}
+      <EditMemberModal
+        open={memberEditOpen}
+        member={editingMember}
+        onClose={() => { setMemberEditOpen(false); setEditingMember(null); }}
+        onSaved={async () => { setMemberEditOpen(false); setEditingMember(null); await loadAll(); }}
+      />
+    </div>
+  );
+}
 
-      {/* โปรไฟล์ของฉัน */}
-      <div className="mt-6 rounded-2xl border p-5">
-        <div className="text-sm text-gray-600">โปรไฟล์ของฉัน</div>
+function EditFieldModal({
+  open,
+  label,
+  value,
+  placeholder,
+  type = "text",
+  submitting,
+  error,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  label: string;
+  value: string;
+  placeholder?: string;
+  type?: "text" | "email" | "tel";
+  submitting: boolean;
+  error?: string;
+  onClose: () => void;
+  onSave: (next: string) => void;
+}) {
+  const [v, setV] = useState(value);
 
-        <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            {/* ✅ Avatar วงกลมเล็ก + ปุ่มกล้อง */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="group relative h-24 w-24 overflow-hidden rounded-full border bg-gray-50"
-                title="เปลี่ยนรูปโปรไฟล์"
-              >
-                {me?.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={me.avatar_url} alt="avatar" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-xs text-gray-400">No avatar</div>
-                )}
+  useEffect(() => {
+    if (!open) return;
+    setV(value);
+  }, [open, value]);
 
-                {/* hover overlay */}
-                <div className="absolute inset-0 hidden items-center justify-center bg-black/35 text-white group-hover:flex">
-                  <span className="text-xs">แก้ไข</span>
-                </div>
-              </button>
+  if (!open) return null;
 
-              {/* icon button แบบ Discord */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="absolute bottom-0 right-0 grid h-8 w-8 place-items-center rounded-full border bg-white shadow-sm hover:bg-gray-50"
-                title="อัปโหลดรูป"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M9 7l1.5-2h3L15 7h3a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V9a2 2 0 012-2h3z"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M12 17a4 4 0 100-8 4 4 0 000 8z"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  />
-                </svg>
-              </button>
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-lg overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0b0b] text-white shadow-[0_30px_120px_rgba(0,0,0,0.75)]">
+        <div className="flex items-start justify-between border-b border-white/10 px-6 py-5">
+          <div>
+            <div className="text-lg font-extrabold tracking-tight">{`แก้ไข ${label}`}</div>
+            <div className="mt-1 text-sm text-white/45">Edit</div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10"
+            title="ปิด"
+          >
+            ✕
+          </button>
+        </div>
 
-              {/* input ซ่อน */}
+        <div className="px-6 py-5">
+          {error ? (
+            <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+              {error}
+            </div>
+          ) : null}
+
+          <div className="space-y-4">
+            <div>
+              <div className="mb-2 text-xs font-bold tracking-widest text-white/45 uppercase">{label}</div>
               <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0] ?? null;
-                  setAvatarFile(f);
-                  if (f) setCropOpen(true);
-                  // reset value เพื่อเลือกไฟล์เดิมซ้ำได้
-                  e.currentTarget.value = "";
-                }}
+                type={type}
+                value={v}
+                onChange={(e) => setV(e.target.value)}
+                placeholder={placeholder}
+                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none focus:border-[#e5ff78]"
               />
             </div>
 
-            <div>
-              <div className="font-semibold">{me?.display_name || "-"}</div>
-              <div className="text-xs text-gray-500">
-                role: {me?.role || "-"} / dept: {me?.department || "-"}
-              </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => onSave(v)}
+                className="rounded-2xl border border-[#e5ff78]/20 bg-[#e5ff78] px-5 py-2 text-sm font-extrabold text-black hover:opacity-90 disabled:opacity-50"
+              >
+                {submitting ? "กำลังบันทึก..." : "บันทึก"}
+              </button>
             </div>
           </div>
-
-          <div className="text-xs text-gray-500 md:w-[420px]">
-            เลือกรูปจากเครื่อง → ปรับ “ซูม/เลื่อน” ในหน้าต่างเล็ก → Apply
-          </div>
         </div>
+      </div>
+    </div>
+  );
+}
 
-        <p className="mt-3 text-xs text-gray-500">
-          * ระบบจะอัปโหลดเป็น PNG วงกลม (พื้นหลังโปร่งใส) และอัปเดต avatar_url
-        </p>
+function TeamSection({
+  title,
+  subtitle,
+  data,
+  canEdit,
+  onEditMember,
+}: {
+  title: string;
+  subtitle: string;
+  data: Member[];
+  canEdit: boolean;
+  onEditMember: (m: Member) => void;
+}) {
+  if (data.length === 0) return null;
+
+  return (
+    <div>
+      <div className="flex items-end gap-3 mb-8 px-2">
+        <h3 className="text-2xl font-black">{title}</h3>
+        <span className="text-[11px] font-bold text-white/20 mb-1.5 uppercase tracking-widest">
+          {subtitle} ({data.length})
+        </span>
       </div>
 
-      {/* Invite (Leader เท่านั้น) */}
-      {isLeader && (
-        <div className="mt-6 rounded-2xl border p-5">
-          <div className="text-sm font-semibold">เพิ่มสมาชิก (Invite)</div>
-          <div className="mt-1 text-xs text-gray-500">
-            ส่ง invite ไปที่อีเมล (ต้องตั้งค่า SERVICE ROLE ใน server route)
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {data.map((m) => (
+          <div key={m.id} className="bg-[#0f0f0f] border border-white/5 p-5 rounded-[32px] hover:border-white/15 transition-all">
+            <AvatarCardImage url={m.avatar_url} name={m.display_name} />
 
-          <div className="mt-4 flex flex-col gap-2 md:flex-row">
-            <input
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="email@example.com"
-              className="flex-1 rounded-xl border px-4 py-2 text-sm"
-            />
-            <button onClick={invite} className="rounded-xl bg-lime-300 px-4 py-2 text-sm font-medium hover:opacity-90">
-              Invite
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* รายชื่อสมาชิก */}
-      <div className="mt-6">
-        <div className="text-sm font-semibold">รายชื่อสมาชิก</div>
-
-        <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-          {members.map((m) => (
-            <div key={m.id} className="rounded-2xl border p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 overflow-hidden rounded-full border bg-gray-50">
-                    {m.avatar_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={m.avatar_url} alt="avatar" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-[10px] text-gray-400">-</div>
-                    )}
-                  </div>
-
-                  <div>
-                    <div className="font-semibold">{m.display_name || "-"}</div>
-                    <div className="mt-1 text-xs text-gray-500">
-                      dept: {m.department} • phone: {m.phone || "-"}
-                    </div>
-                  </div>
+            <div className="mt-4 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-base font-extrabold truncate text-white">{m.display_name || "-"}</p>
+                <div className="mt-1 space-y-0.5 text-[11px] text-white/45">
+                  <div className="truncate">Tel: {m.phone || "-"}</div>
+                  <div className="truncate">Mail: {m.email || "-"}</div>
                 </div>
+              </div>
 
-                <div className="text-xs text-gray-500">{m.role}</div>
+              <div className="flex flex-col items-end gap-2">
+                <Badge tone={m.is_active === false ? "red" : "neutral"}>{String(m.role || "MEMBER").toUpperCase()}</Badge>
+
+                {canEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => onEditMember(m)}
+                    className="mt-1 inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 p-2 text-white/70 hover:bg-white/10 hover:text-[#e5ff78]"
+                    title="แก้ไขสมาชิก"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                ) : null}
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
-
-      {/* ✅ Crop Modal (ขนาดไม่เต็มหน้า) */}
-      <AvatarCropModal
-        open={cropOpen}
-        file={avatarFile}
-        onClose={() => setCropOpen(false)}
-        onApply={applyCroppedAvatar}
-      />
     </div>
   );
 }

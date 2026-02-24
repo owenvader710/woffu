@@ -80,7 +80,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="flex h-screen w-[260px] flex-col bg-[#0B0F0F] px-5 py-6"> 
+    <aside className="sticky top-0 flex h-screen w-[260px] flex-col overflow-hidden bg-[#0B0F0F] px-5 py-6">
       {/* Logo */}
       <div className="mb-5 select-none text-3xl font-extrabold tracking-tight text-[#e5ff78]">
         WOFFU

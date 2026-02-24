@@ -4,140 +4,187 @@ import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRealtimeMyWork } from "./useRealtimeMyWork";
 
+type Status = "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
+
 type WorkItem = {
   id: string;
   title: string;
   type: "VIDEO" | "GRAPHIC";
   department: "VIDEO" | "GRAPHIC" | "ALL";
-  status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
+  status: Status;
   created_at: string;
-  start_date: string | null;
   due_date: string | null;
 
   brand: string | null;
   video_priority: "2" | "3" | "5" | "SPECIAL" | null;
   video_purpose: string | null;
   graphic_job_type: string | null;
-  graphic_category: string | null;
 };
 
-const STATUSES: WorkItem["status"][] = ["TODO", "IN_PROGRESS", "BLOCKED", "COMPLETED"];
+const STATUSES: Status[] = ["TODO", "IN_PROGRESS", "BLOCKED", "COMPLETED"];
 
 function formatDateTH(iso?: string | null) {
   if (!iso) return "-";
-  const d = new Date(iso);
-  return d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
+  return new Date(iso).toLocaleDateString("th-TH", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
 }
 
-function priorityLabel(p?: WorkItem["video_priority"] | null) {
-  if (!p) return "-";
-  if (p === "SPECIAL") return "SPECIAL";
-  return `${p} ดาว`;
+function Pill({
+  children,
+  tone = "neutral",
+}: {
+  children: React.ReactNode;
+  tone?: "neutral" | "green" | "amber" | "red" | "blue";
+}) {
+  const cls =
+    tone === "green"
+      ? "border-green-500/30 bg-green-500/10 text-green-200"
+      : tone === "amber"
+      ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+      : tone === "red"
+      ? "border-red-500/30 bg-red-500/10 text-red-200"
+      : tone === "blue"
+      ? "border-sky-500/30 bg-sky-500/10 text-sky-200"
+      : "border-white/10 bg-white/5 text-white/70";
+
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] ${cls}`}>
+      {children}
+    </span>
+  );
 }
 
-function compactMeta(p: WorkItem) {
-  if (p.type === "VIDEO") {
-    const pr = priorityLabel(p.video_priority);
-    const purpose = p.video_purpose || "-";
-    return `⭐ ${pr} · ${purpose}`;
-  }
-  const g = p.graphic_job_type || p.graphic_category || "-";
-  return `🖼️ ${g}`;
+function statusTone(s: Status) {
+  if (s === "TODO") return "neutral";
+  if (s === "IN_PROGRESS") return "blue";
+  if (s === "BLOCKED") return "red";
+  return "green";
 }
 
 export default function MyWorkPage() {
   const { items, loading, error, refresh } = useRealtimeMyWork();
 
-  // ✅ my-work: เอาแค่ filter สถานะพอ
-  const [statusFilter, setStatusFilter] = useState<WorkItem["status"] | "ALL">("ALL");
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  const counts = useMemo(() => {
-    const base = { ALL: (items as any[]).length, TODO: 0, IN_PROGRESS: 0, BLOCKED: 0, COMPLETED: 0 } as Record<
-      WorkItem["status"] | "ALL",
-      number
-    >;
-    for (const p of items as any[]) base[p.status] += 1;
-    return base;
-  }, [items]);
+  async function changeStatus(id: string, status: Status) {
+    try {
+      setUpdatingId(id);
 
-  const filtered = useMemo(() => {
-    const list = items as WorkItem[];
-    if (statusFilter === "ALL") return list;
-    return list.filter((x) => x.status === statusFilter);
-  }, [items, statusFilter]);
+      await fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+
+      refresh();
+    } finally {
+      setUpdatingId(null);
+    }
+  }
 
   return (
-    <div className="p-10">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+    <div>
+      {/* Header */}
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold">งานของฉัน</h1>
-          <p className="mt-1 text-sm text-gray-600">รายการทั้งหมด: {filtered.length}</p>
-        </div>
-
-        <div className="flex flex-col gap-2 md:flex-row md:items-center">
-          <button onClick={refresh} className="rounded-xl border px-4 py-2 text-sm hover:bg-gray-50">
-            รีเฟรช
-          </button>
-        </div>
-      </div>
-
-      {/* ✅ status tabs */}
-      <div className="mt-6 flex flex-wrap gap-2">
-        {(["ALL", ...STATUSES] as const).map((s) => {
-          const active = statusFilter === s;
-          return (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(s)}
-              className={`rounded-xl border px-3 py-2 text-xs hover:bg-gray-50 ${
-                active ? "bg-black text-white hover:bg-black" : ""
-              }`}
-            >
-              {s === "ALL" ? "ทั้งหมด" : s}{" "}
-              <span className={active ? "opacity-90" : "text-gray-500"}>({counts[s] ?? 0})</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {loading && <div className="mt-6 rounded-xl border p-4 text-sm text-gray-600">กำลังโหลด...</div>}
-
-      {!loading && error && (
-        <div className="mt-6 rounded-xl border border-yellow-300 bg-yellow-50 p-4 text-sm text-yellow-900">
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && filtered.length === 0 && (
-        <div className="mt-6 rounded-xl border p-4 text-sm text-gray-600">ยังไม่มีงานตามเงื่อนไขนี้</div>
-      )}
-
-      <div className="mt-6 space-y-4">
-        {filtered.map((item) => (
-          <div key={item.id} className="rounded-2xl border p-5">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div className="min-w-0">
-                <Link href={`/projects/${item.id}`} className="text-lg font-semibold underline underline-offset-4">
-                  {item.title}
-                </Link>
-
-                <div className="mt-1 text-sm text-gray-600">
-                  {item.type} · {item.department} · <b>{item.status}</b>
-                </div>
-
-                <div className="mt-1 text-xs text-gray-500">
-                  brand: <span className="font-medium">{item.brand || "-"}</span> · {compactMeta(item)}
-                </div>
-
-                <div className="mt-1 text-xs text-gray-500">
-                  start: {formatDateTH(item.start_date)} · due: {formatDateTH(item.due_date)}
-                </div>
-              </div>
-
-              <div className="text-[11px] text-gray-400">id: {item.id}</div>
-            </div>
+          <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
+          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-white">งานของฉัน</h1>
+          <div className="mt-2 text-sm text-white/60">
+            รายการทั้งหมด: {(items as any[]).length}
           </div>
-        ))}
+        </div>
+
+        <button
+          onClick={refresh}
+          className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
+        >
+          รีเฟรช
+        </button>
+      </div>
+
+      {/* Table */}
+      <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+        <table className="w-full text-sm text-white/80">
+          <thead className="bg-white/5 text-xs text-white/50">
+            <tr className="text-left">
+              <th className="p-4">งาน</th>
+              <th className="p-4">ฝ่าย</th>
+              <th className="p-4">สถานะ</th>
+              <th className="p-4">Deadline</th>
+              <th className="p-4 text-right">จัดการ</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {loading && (
+              <tr>
+                <td colSpan={5} className="p-6 text-white/40">
+                  กำลังโหลด...
+                </td>
+              </tr>
+            )}
+
+            {!loading &&
+              !error &&
+              (items as WorkItem[]).map((item) => (
+                <tr key={item.id} className="border-t border-white/10 hover:bg-white/[0.06]">
+                  <td className="p-4">
+                    <Link
+                      href={`/projects/${item.id}`}
+                      className="font-semibold text-white underline underline-offset-4"
+                    >
+                      {item.title}
+                    </Link>
+                  </td>
+
+                  <td className="p-4">
+                    <Pill tone={item.type === "VIDEO" ? "blue" : "amber"}>
+                      {item.type}
+                    </Pill>
+                  </td>
+
+                  <td className="p-4">
+                    <Pill tone={statusTone(item.status)}>
+                      {item.status}
+                    </Pill>
+                  </td>
+
+                  <td className="p-4 text-white/60">
+                    {formatDateTH(item.due_date)}
+                  </td>
+
+                  {/* ✅ ปุ่มเปลี่ยนสถานะ */}
+                  <td className="p-4 text-right">
+                    <select
+                      value={item.status}
+                      disabled={updatingId === item.id}
+                      onChange={(e) =>
+                        changeStatus(item.id, e.target.value as Status)
+                      }
+                      className="rounded-xl border border-white/10 bg-black px-3 py-2 text-xs text-white outline-none hover:border-white/30"
+                    >
+                      {STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+
+            {!loading && !error && (items as any[]).length === 0 && (
+              <tr>
+                <td colSpan={5} className="p-6 text-white/40">
+                  ยังไม่มีงาน
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

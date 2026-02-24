@@ -77,57 +77,16 @@ const GRAPHIC_JOB_TYPES = [
 ] as const;
 
 async function safeJson(res: Response) {
-  const t = await res.text();
-  return t ? JSON.parse(t) : null;
-}
-
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <div className="mb-2 text-sm font-semibold text-white/80">{children}</div>;
-}
-
-function InputBase(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      {...props}
-      className={[
-        "w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white",
-        "placeholder:text-white/30 outline-none focus:border-[#e5ff78] focus:ring-2 focus:ring-[#e5ff78]/15",
-        props.className ?? "",
-      ].join(" ")}
-    />
-  );
-}
-
-function SelectBase(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select
-      {...props}
-      className={[
-        "w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none",
-        "focus:border-[#e5ff78] focus:ring-2 focus:ring-[#e5ff78]/15",
-        props.className ?? "",
-      ].join(" ")}
-    />
-  );
-}
-
-function TextareaBase(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return (
-    <textarea
-      {...props}
-      className={[
-        "w-full resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white",
-        "placeholder:text-white/30 outline-none focus:border-[#e5ff78] focus:ring-2 focus:ring-[#e5ff78]/15",
-        props.className ?? "",
-      ].join(" ")}
-    />
-  );
+  try {
+    const t = await res.text();
+    return t ? JSON.parse(t) : null;
+  } catch {
+    return null;
+  }
 }
 
 export default function CreateProjectModal({ open, onClose, onCreated }: Props) {
-  // ✅ Hooks ต้องอยู่ top-level เสมอ (ห้ามมี hook หลัง if(!open) return null)
   const [type, setType] = useState<"VIDEO" | "GRAPHIC">("VIDEO");
-
   const brands = useMemo(() => (type === "VIDEO" ? VIDEO_BRANDS : GRAPHIC_BRANDS), [type]);
 
   const [title, setTitle] = useState("");
@@ -141,7 +100,6 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
 
   const [videoPriority, setVideoPriority] = useState<(typeof VIDEO_PRIORITIES)[number]>("3ดาว");
   const [videoPurpose, setVideoPurpose] = useState<(typeof VIDEO_PURPOSES)[number]>("สร้างความต้องการ");
-
   const [graphicJobType, setGraphicJobType] = useState<(typeof GRAPHIC_JOB_TYPES)[number]>("ซัพพอร์ต MKT");
 
   const [description, setDescription] = useState("");
@@ -150,39 +108,61 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
 
-  // ✅ reset brand ให้สัมพันธ์กับ type
-  useEffect(() => {
-    setBrand(brands[0] ?? "IRONTEC");
-  }, [brands]);
+  const activeMembers = useMemo(
+    () => (Array.isArray(members) ? members.filter((m) => m?.is_active !== false) : []),
+    [members]
+  );
 
-  // ✅ โหลดสมาชิกตอนเปิด modal
+  const groupedMembers = useMemo(() => {
+    const video: Member[] = [];
+    const graphic: Member[] = [];
+    const all: Member[] = [];
+
+    for (const m of activeMembers) {
+      if (m.department === "VIDEO") video.push(m);
+      else if (m.department === "GRAPHIC") graphic.push(m);
+      else all.push(m);
+    }
+
+    const sortByName = (a: Member, b: Member) =>
+      String(a.display_name || a.id).localeCompare(String(b.display_name || b.id));
+
+    return {
+      video: video.sort(sortByName),
+      graphic: graphic.sort(sortByName),
+      all: all.sort(sortByName),
+    };
+  }, [activeMembers]);
+
+  // ✅ กรองรายชื่อที่จะแสดงใน Dropdown ตามฝ่ายที่เลือก (VIDEO หรือ GRAPHIC)
+  const displayAssignees = useMemo(() => {
+    const primaryGroup = type === "VIDEO" ? groupedMembers.video : groupedMembers.graphic;
+    const allGroup = groupedMembers.all;
+    return { primaryGroup, allGroup };
+  }, [type, groupedMembers]);
+
+  // โหลดสมาชิก
   useEffect(() => {
     if (!open) return;
 
     (async () => {
       setErr("");
-      setMsg("");
       try {
         const r = await fetch("/api/members", { cache: "no-store" });
         const j = await safeJson(r);
         const data = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
-        setMembers((data as Member[]).filter((m) => m.is_active !== false));
+        setMembers(data);
       } catch {
         setMembers([]);
       }
     })();
   }, [open]);
 
-  // ✅ แยกสมาชิกตามฝ่าย + ให้เลือกตาม type (แต่ ALL แสดงได้ทั้งสอง)
-  const memberOptions = useMemo(() => {
-    const list = members.filter((m) => m.is_active !== false);
-    const video = list.filter((m) => m.department === "VIDEO" || m.department === "ALL");
-    const graphic = list.filter((m) => m.department === "GRAPHIC" || m.department === "ALL");
-
-    // เวลาเลือก VIDEO -> ให้ขึ้นกลุ่ม VIDEO ก่อน, GRAPHIC ซ่อนไปเลย (กันเลือกผิด)
-    if (type === "VIDEO") return { video, graphic: [] as Member[] };
-    return { video: [] as Member[], graphic };
-  }, [members, type]);
+  // เมื่อเปลี่ยน type (ฝ่าย) ให้ reset brand และ assignee
+  useEffect(() => {
+    setBrand(brands[0] ?? "IRONTEC");
+    setAssigneeId(""); // ล้างค่าผู้รับงานเดิมเมื่อเปลี่ยนฝ่าย
+  }, [brands, type]);
 
   async function submit() {
     setErr("");
@@ -250,17 +230,17 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-3xl rounded-[28px] border border-white/10 bg-[#0b0b0b] text-white shadow-[0_30px_120px_rgba(0,0,0,0.7)]">
+      <div className="w-full max-w-3xl overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0b0b] text-white shadow-[0_30px_120px_rgba(0,0,0,0.75)]">
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-white/10 p-5">
+        <div className="flex items-start justify-between border-b border-white/10 px-6 py-5">
           <div>
             <div className="text-lg font-extrabold tracking-tight">สั่งงานใหม่</div>
-            <div className="mt-0.5 text-sm text-white/50">Create new project</div>
+            <div className="mt-1 text-sm text-white/45">Create new project</div>
           </div>
-
           <button
+            type="button"
             onClick={onClose}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70 hover:bg-white/10"
+            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10"
             title="ปิด"
           >
             ✕
@@ -268,21 +248,21 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
         </div>
 
         {/* Body */}
-        <div className="max-h-[75vh] overflow-auto p-5">
-          {err && (
+        <div className="max-h-[75vh] overflow-auto px-6 py-5">
+          {err ? (
             <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
               {err}
             </div>
-          )}
-          {msg && (
-            <div className="mb-4 rounded-2xl border border-[#e5ff78]/25 bg-[#e5ff78]/10 p-3 text-sm text-[#e5ff78]">
+          ) : null}
+          {msg ? (
+            <div className="mb-4 rounded-2xl border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-200">
               {msg}
             </div>
-          )}
+          ) : null}
 
-          {/* type */}
+          {/* Type */}
           <div className="mb-5">
-            <FieldLabel>ฝ่าย</FieldLabel>
+            <div className="mb-2 text-sm font-semibold text-white/80">ฝ่าย</div>
             <div className="flex gap-2">
               <button
                 type="button"
@@ -290,20 +270,19 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
                 className={[
                   "rounded-2xl border px-4 py-2 text-sm font-semibold transition",
                   type === "VIDEO"
-                    ? "border-[#e5ff78]/30 bg-[#e5ff78] text-black"
+                    ? "border-[#e5ff78]/20 bg-[#e5ff78] text-black"
                     : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10",
                 ].join(" ")}
               >
                 VIDEO
               </button>
-
               <button
                 type="button"
                 onClick={() => setType("GRAPHIC")}
                 className={[
                   "rounded-2xl border px-4 py-2 text-sm font-semibold transition",
                   type === "GRAPHIC"
-                    ? "border-[#e5ff78]/30 bg-[#e5ff78] text-black"
+                    ? "border-[#e5ff78]/20 bg-[#e5ff78] text-black"
                     : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10",
                 ].join(" ")}
               >
@@ -312,147 +291,175 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
             </div>
           </div>
 
-          {/* title */}
+          {/* Title */}
           <div className="mb-5">
-            <FieldLabel>ชื่อโปรเจกต์</FieldLabel>
-            <InputBase value={title} onChange={(e) => setTitle(e.target.value)} placeholder="เช่น ทำคลิปรีวิวลู่วิ่ง" />
+            <div className="mb-2 text-sm font-semibold text-white/80">ชื่อโปรเจกต์</div>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
+              placeholder="เช่น ทำคลิปรีวิวลู่วิ่ง"
+            />
           </div>
 
-          {/* brand */}
+          {/* Brand */}
           <div className="mb-5">
-            <FieldLabel>แบรนด์ของสินค้า</FieldLabel>
-            <SelectBase value={brand} onChange={(e) => setBrand(e.target.value)}>
+            <div className="mb-2 text-sm font-semibold text-white/80">แบรนด์ของสินค้า</div>
+            <select
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+            >
               {brands.map((b) => (
-                <option key={b} value={b}>
+                <option key={b} value={b} className="bg-black">
                   {b}
                 </option>
               ))}
-            </SelectBase>
+            </select>
           </div>
 
-          {/* assignee */}
+          {/* Assignee (ปรับปรุงให้กรองตามฝ่ายที่เลือก) */}
           <div className="mb-5">
-            <FieldLabel>ผู้รับงาน (Assignee)</FieldLabel>
-            <SelectBase value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
+            <div className="mb-2 text-sm font-semibold text-white/80">ผู้รับงาน (Assignee)</div>
+            <select
+              value={assigneeId}
+              onChange={(e) => setAssigneeId(e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+            >
               <option value="">- ไม่ระบุ -</option>
 
-              {type === "VIDEO" ? (
-                <optgroup label="VIDEO">
-                  {memberOptions.video.map((m) => (
-                    <option key={m.id} value={m.id}>
+              {/* แสดงกลุ่มคนตามฝ่ายที่เลือก */}
+              {displayAssignees.primaryGroup.length ? (
+                <optgroup label={type}>
+                  {displayAssignees.primaryGroup.map((m) => (
+                    <option key={m.id} value={m.id} className="bg-black">
                       {m.display_name || m.id}
                     </option>
                   ))}
                 </optgroup>
-              ) : (
-                <optgroup label="GRAPHIC">
-                  {memberOptions.graphic.map((m) => (
-                    <option key={m.id} value={m.id}>
+              ) : null}
+
+              {/* แสดงกลุ่ม ALL (เช่น คุณขวัญ) เสมอ */}
+              {displayAssignees.allGroup.length ? (
+                <optgroup label="ADMIN / ALL">
+                  {displayAssignees.allGroup.map((m) => (
+                    <option key={m.id} value={m.id} className="bg-black">
                       {m.display_name || m.id}
                     </option>
                   ))}
                 </optgroup>
-              )}
-            </SelectBase>
-            <div className="mt-2 text-xs text-white/40">* จะแสดงเฉพาะสมาชิกฝ่ายที่เลือก (รวม ALL)</div>
+              ) : null}
+            </select>
+
+            {!activeMembers.length ? (
+              <div className="mt-2 text-xs text-white/40">
+                * กำลังโหลดรายชื่อสมาชิก...
+              </div>
+            ) : null}
           </div>
 
-          {/* extras */}
-          <div className="mb-5 rounded-3xl border border-white/10 bg-white/5 p-4">
-            <div className="mb-3 text-sm font-extrabold tracking-tight">ตั้งค่าเพิ่มเติม ({type})</div>
+          {/* Extras */}
+          <div className="mb-5 rounded-[22px] border border-white/10 bg-white/5 p-5">
+            <div className="mb-3 text-sm font-extrabold text-white/85">ตั้งค่าเพิ่มเติม ({type})</div>
 
             {type === "VIDEO" ? (
-              <>
-                <div className="mb-4">
-                  <FieldLabel>ความสำคัญของงาน</FieldLabel>
-                  <div className="flex flex-wrap gap-2">
-                    {VIDEO_PRIORITIES.map((p) => {
-                      const active = videoPriority === p;
-                      return (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => setVideoPriority(p)}
-                          className={[
-                            "rounded-2xl border px-4 py-2 text-sm font-semibold transition",
-                            active
-                              ? "border-[#e5ff78]/30 bg-[#e5ff78] text-black"
-                              : "border-white/10 bg-black/20 text-white/80 hover:bg-white/10",
-                          ].join(" ")}
-                        >
-                          {p === "2ดาว" ? "2 ★" : p === "3ดาว" ? "3 ★" : p === "5ดาว" ? "5 ★" : "SPECIAL"}
-                        </button>
-                      );
-                    })}
-                  </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <div className="mb-2 text-sm font-semibold text-white/80">ความสำคัญของงาน</div>
+                  <select
+                    value={videoPriority}
+                    onChange={(e) => setVideoPriority(e.target.value as any)}
+                    className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+                  >
+                    {VIDEO_PRIORITIES.map((p) => (
+                      <option key={p} value={p} className="bg-black">
+                        {p}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
-                  <FieldLabel>รูปแบบของงาน</FieldLabel>
-                  <SelectBase value={videoPurpose} onChange={(e) => setVideoPurpose(e.target.value as any)}>
+                  <div className="mb-2 text-sm font-semibold text-white/80">รูปแบบของงาน</div>
+                  <select
+                    value={videoPurpose}
+                    onChange={(e) => setVideoPurpose(e.target.value as any)}
+                    className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+                  >
                     {VIDEO_PURPOSES.map((v) => (
-                      <option key={v} value={v}>
+                      <option key={v} value={v} className="bg-black">
                         {v}
                       </option>
                     ))}
-                  </SelectBase>
+                  </select>
                 </div>
-              </>
+              </div>
             ) : (
               <div>
-                <FieldLabel>ประเภทงาน</FieldLabel>
-                <SelectBase value={graphicJobType} onChange={(e) => setGraphicJobType(e.target.value as any)}>
+                <div className="mb-2 text-sm font-semibold text-white/80">ประเภทงาน</div>
+                <select
+                  value={graphicJobType}
+                  onChange={(e) => setGraphicJobType(e.target.value as any)}
+                  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+                >
                   {GRAPHIC_JOB_TYPES.map((v) => (
-                    <option key={v} value={v}>
+                    <option key={v} value={v} className="bg-black">
                       {v}
                     </option>
                   ))}
-                </SelectBase>
+                </select>
               </div>
             )}
           </div>
 
-          {/* dates */}
-          <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2">
+          {/* Dates */}
+          <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <FieldLabel>เริ่ม</FieldLabel>
-              <InputBase type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              <div className="mb-2 text-sm font-semibold text-white/80">เริ่ม</div>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+              />
             </div>
-
             <div>
-              <FieldLabel>Deadline</FieldLabel>
-              <InputBase type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <div className="mb-2 text-sm font-semibold text-white/80">Deadline</div>
+<input
+  type="date"
+  value={startDate}
+  onChange={(e) => setStartDate(e.target.value)}
+  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78] [color-scheme:dark]" 
+/>
             </div>
           </div>
 
-          {/* description */}
+          {/* Description */}
           <div className="mb-2">
-            <FieldLabel>คำอธิบาย</FieldLabel>
-            <TextareaBase
+            <div className="mb-2 text-sm font-semibold text-white/80">คำอธิบาย</div>
+            <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="h-28"
+              className="h-28 w-full resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
               placeholder="ใส่รายละเอียดของงาน / ข้อมูลสำคัญ / ลิงก์ ref ฯลฯ"
             />
-            <div className="mt-2 text-xs text-white/40">
-              * หน้า list จะไม่โชว์คำอธิบายทั้งหมด (โชว์ตอนเข้าไปดูรายละเอียดโปรเจกต์)
-            </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-white/10 p-5">
+        <div className="flex items-center justify-end gap-2 border-t border-white/10 px-6 py-5">
           <button
+            type="button"
             onClick={onClose}
-            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10"
+            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10"
           >
             ยกเลิก
           </button>
-
           <button
+            type="button"
             onClick={submit}
             disabled={submitting}
-            className="rounded-2xl bg-[#e5ff78] px-5 py-2 text-sm font-extrabold text-black disabled:opacity-50"
+            className="rounded-2xl border border-[#e5ff78]/20 bg-[#e5ff78] px-5 py-2 text-sm font-extrabold text-black hover:opacity-90 disabled:opacity-50"
           >
             {submitting ? "กำลังสั่งงาน..." : "สั่งงาน"}
           </button>

@@ -155,3 +155,30 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   opacity: 0.9;
   cursor: pointer;
 }
+/* บังคับไอคอนปฏิทินให้เป็นสีสว่าง */
+input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1); /* เปลี่ยนจากสีดำเป็นสีขาว */
+    cursor: pointer;
+}
+
+/* บังคับธีมสีของช่อง input date */
+input[type="date"] {
+    color-scheme: dark;
+}
+/* Date input calendar icon -> make it visible on dark UI */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.9;
+  cursor: pointer;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+/* (optional) if you use datetime-local too */
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.9;
+  cursor: pointer;
+}

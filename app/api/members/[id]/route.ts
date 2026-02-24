@@ -1,4 +1,3 @@
-// app/api/members/[id]/route.ts
 import { NextResponse } from "next/server";
 import { createSupabaseServer } from "../../_supabase";
 
@@ -6,68 +5,72 @@ function badId(id?: string) {
   return !id || id === "undefined" || id === "null";
 }
 
-async function getParamId(params: any) {
-  // Next.js v16: params อาจเป็น Promise
-  const p = typeof params?.then === "function" ? await params : params;
-  return p?.id as string | undefined;
+function pickDefined<T extends Record<string, any>>(obj: T) {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
 }
 
-export async function PATCH(req: Request, ctx: { params: any }) {
-  const id = await getParamId(ctx.params);
+// ✅ Next.js v15+: params เป็น Promise ต้อง await ก่อน
+export async function PATCH(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  const { id } = await ctx.params;
+
   if (badId(id)) {
     return NextResponse.json({ error: "Invalid member id" }, { status: 400 });
   }
 
+  // ✅ แก้ไข: เพิ่ม await และเช็ค undefined เพื่อกัน Error
   const supabase = await createSupabaseServer();
+  
+  if (!supabase) {
+    return NextResponse.json({ error: "Supabase client not initialized" }, { status: 500 });
+  }
 
-  // ต้อง login ก่อน
+  // ✅ บรรทัดนี้จะไม่พังแล้ว เพราะเราตรวจสอบตัวแปร supabase ก่อนเรียกใช้
   const { data: authData, error: authErr } = await supabase.auth.getUser();
   if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
   if (!authData?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // เช็คว่า "คนที่กำลังแก้" เป็นหัวหน้า (LEADER) เท่านั้น
+  // ✅ เช็คสิทธิ์: ให้ LEADER เท่านั้นที่แก้สมาชิกได้
   const { data: meProfile, error: meErr } = await supabase
     .from("profiles")
-    .select("id, role, is_active")
+    .select("role, is_active")
     .eq("id", authData.user.id)
-    .single();
+    .maybeSingle();
 
   if (meErr) return NextResponse.json({ error: meErr.message }, { status: 500 });
 
   const isLeader =
-    String(meProfile?.role || "").toUpperCase() === "LEADER" && meProfile?.is_active !== false;
+    String(meProfile?.role || "").toUpperCase() === "LEADER" &&
+    meProfile?.is_active !== false;
 
   if (!isLeader) {
-    return NextResponse.json({ error: "Forbidden (leader only)" }, { status: 403 });
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
 
-  // whitelist ฟิลด์ที่อนุญาตให้หัวหน้าแก้
-  const patch: any = {};
-
-  if ("display_name" in body) patch.display_name = body.display_name ?? null;
-  if ("phone" in body) patch.phone = body.phone ? String(body.phone).trim() : null;
-  if ("email" in body) patch.email = body.email ? String(body.email).trim() : null;
-
-  if ("department" in body) patch.department = body.department ?? null;
-  if ("role" in body) patch.role = body.role ?? null;
-  if ("is_active" in body) patch.is_active = body.is_active ?? null;
-
-  // กันส่งค่าว่างแบบแปลกๆ
-  for (const k of Object.keys(patch)) {
-    if (patch[k] === "undefined") patch[k] = null;
-  }
+  // ✅ ทำความสะอาด payload: กันส่ง "" / undefined
+  const patch = pickDefined({
+    display_name: body.display_name ?? undefined,
+    department: body.department ?? undefined,
+    role: body.role ?? undefined,
+    is_active: typeof body.is_active === "boolean" ? body.is_active : undefined,
+    phone: body.phone === "" ? null : body.phone ?? undefined,
+    email: body.email === "" ? null : body.email ?? undefined,
+  });
 
   const { data, error } = await supabase
     .from("profiles")
     .update(patch)
     .eq("id", id)
     .select("id, display_name, department, role, is_active, avatar_url, phone, email")
-    .single();
+    .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) return NextResponse.json({ error: "Member not found" }, { status: 404 });
 
   return NextResponse.json({ data });
 }

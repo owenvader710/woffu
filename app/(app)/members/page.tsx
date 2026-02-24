@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Edit2, RefreshCw } from "lucide-react";
+import { Camera, Edit2, RefreshCw, X } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import AvatarCropModal from "./AvatarCropModal";
 import EditMemberModal from "./EditMemberModal";
@@ -79,18 +79,118 @@ function AvatarCardImage({ url, name }: { url?: string | null; name?: string | n
   );
 }
 
+function ModalShell({
+  open,
+  title,
+  subtitle,
+  children,
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-lg overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0b0b] text-white shadow-[0_30px_120px_rgba(0,0,0,0.75)]">
+        <div className="flex items-start justify-between border-b border-white/10 px-6 py-5">
+          <div>
+            <div className="text-lg font-extrabold tracking-tight">{title}</div>
+            {subtitle ? <div className="mt-1 text-sm text-white/45">{subtitle}</div> : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10"
+            title="ปิด"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="px-6 py-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function EditFieldModal({
+  open,
+  label,
+  value,
+  placeholder,
+  type = "text",
+  submitting,
+  error,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  label: string;
+  value: string;
+  placeholder?: string;
+  type?: "text" | "email" | "tel";
+  submitting: boolean;
+  error?: string;
+  onClose: () => void;
+  onSave: (next: string) => void;
+}) {
+  const [v, setV] = useState(value);
+
+  useEffect(() => {
+    if (!open) return;
+    setV(value);
+  }, [open, value]);
+
+  return (
+    <ModalShell open={open} title={`แก้ไข ${label}`} subtitle="Edit" onClose={onClose}>
+      {error ? (
+        <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+          {error}
+        </div>
+      ) : null}
+      <div className="space-y-4">
+        <div>
+          <div className="mb-2 text-xs font-bold tracking-widest text-white/45 uppercase">{label}</div>
+          <input
+            type={type}
+            value={v}
+            onChange={(e) => setV(e.target.value)}
+            placeholder={placeholder}
+            className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none focus:border-[#e5ff78]"
+          />
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10"
+          >
+            ยกเลิก
+          </button>
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={() => onSave(v)}
+            className="rounded-2xl border border-[#e5ff78]/20 bg-[#e5ff78] px-5 py-2 text-sm font-extrabold text-black hover:opacity-90 disabled:opacity-50"
+          >
+            {submitting ? "กำลังบันทึก..." : "บันทึก"}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
 export default function MembersPage() {
   const [items, setItems] = useState<Member[]>([]);
   const [me, setMe] = useState<Member | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  // ✅ field modal (Tel/E-mail ของตัวเอง)
-  const [fieldOpen, setFieldOpen] = useState<null | "phone" | "email">(null);
-  const [fieldSaving, setFieldSaving] = useState(false);
-  const [fieldErr, setFieldErr] = useState("");
-
-  // ✅ edit member (หัวหน้าแก้คนอื่น)
+  // ✅ แยก state ไม่ให้ชื่อชนกัน
   const [memberEditOpen, setMemberEditOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
 
@@ -100,8 +200,18 @@ export default function MembersPage() {
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [savingAvatar, setSavingAvatar] = useState(false);
 
-  const isLeader =
-  String(me?.role || "").toUpperCase() === "LEADER" && me?.is_active !== false;
+  // edit field modal
+  const [fieldEditOpen, setFieldEditOpen] = useState<null | "phone" | "email">(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editErr, setEditErr] = useState<string>("");
+
+  // invite
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [inviteErr, setInviteErr] = useState("");
+  const [inviteOk, setInviteOk] = useState("");
+
+  const isLeader = String(me?.role || "").toUpperCase() === "LEADER" && me?.is_active !== false;
 
   async function loadAll() {
     setLoading(true);
@@ -124,6 +234,7 @@ export default function MembersPage() {
 
       setItems(list);
 
+      // ✅ ให้ me มาจาก list เป็นหลัก เพื่อให้ role/department/is_active มาครบ
       if (meRaw?.id) {
         const fromList = list.find((x: Member) => x.id === meRaw.id);
         setMe(fromList || meRaw);
@@ -143,18 +254,25 @@ export default function MembersPage() {
   }, []);
 
   const activeItems = useMemo(() => items.filter((m) => m?.is_active !== false), [items]);
-  const sortByName = (a: Member, b: Member) => String(a.display_name || a.id).localeCompare(String(b.display_name || b.id));
+  const sortByName = (a: Member, b: Member) =>
+    String(a.display_name || a.id).localeCompare(String(b.display_name || b.id));
 
   const leaders = useMemo(
     () => activeItems.filter((m) => String(m.role).toUpperCase() === "LEADER").sort(sortByName),
     [activeItems]
   );
   const videoSorted = useMemo(
-    () => activeItems.filter((m) => String(m.role).toUpperCase() !== "LEADER" && String(m.department).toUpperCase() === "VIDEO").sort(sortByName),
+    () =>
+      activeItems
+        .filter((m) => String(m.role).toUpperCase() !== "LEADER" && String(m.department).toUpperCase() === "VIDEO")
+        .sort(sortByName),
     [activeItems]
   );
   const graphicSorted = useMemo(
-    () => activeItems.filter((m) => String(m.role).toUpperCase() !== "LEADER" && String(m.department).toUpperCase() === "GRAPHIC").sort(sortByName),
+    () =>
+      activeItems
+        .filter((m) => String(m.role).toUpperCase() !== "LEADER" && String(m.department).toUpperCase() === "GRAPHIC")
+        .sort(sortByName),
     [activeItems]
   );
 
@@ -201,8 +319,8 @@ export default function MembersPage() {
   }
 
   async function saveField(kind: "phone" | "email", next: string) {
-    setFieldSaving(true);
-    setFieldErr("");
+    setEditSaving(true);
+    setEditErr("");
     try {
       const payload: any = {};
       payload[kind] = next.trim() || null;
@@ -212,27 +330,44 @@ export default function MembersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+
       const json = await safeJson(res);
       if (!res.ok) throw new Error((json && (json.error || json.message)) || `Save failed (${res.status})`);
 
       setMe((prev) => (prev ? { ...prev, ...payload } : prev));
       setItems((prev) => prev.map((m) => (m.id === me?.id ? ({ ...m, ...payload } as any) : m)));
-      setFieldOpen(null);
+      setFieldEditOpen(null);
     } catch (e: any) {
-      setFieldErr(e?.message || "Save failed");
+      setEditErr(e?.message || "Save failed");
     } finally {
-      setFieldSaving(false);
+      setEditSaving(false);
     }
   }
 
-  function openEditMember(m: Member) {
-    // ✅ กันเคส id หาย
-    if (!m?.id || m.id === "undefined" || m.id === "null") {
-      setErr("Invalid member id");
-      return;
+  async function submitInvite() {
+    setInviteErr("");
+    setInviteOk("");
+    const email = inviteEmail.trim();
+    if (!email) return setInviteErr("กรุณาใส่ email");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setInviteErr("รูปแบบอีเมลไม่ถูกต้อง");
+
+    setInviting(true);
+    try {
+      const res = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const json = await safeJson(res);
+      if (!res.ok) throw new Error((json && (json.error || json.message)) || `Invite failed (${res.status})`);
+
+      setInviteOk("ส่ง invite แล้ว");
+      setInviteEmail("");
+    } catch (e: any) {
+      setInviteErr(e?.message || "Invite failed");
+    } finally {
+      setInviting(false);
     }
-    setEditingMember(m);
-    setMemberEditOpen(true);
   }
 
   if (loading) return <div className="p-10 text-white/50 animate-pulse text-center">กำลังโหลดข้อมูล...</div>;
@@ -252,7 +387,9 @@ export default function MembersPage() {
           </button>
         </header>
 
-        {err ? <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-200 text-sm">{err}</div> : null}
+        {err ? (
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-200 text-sm">{err}</div>
+        ) : null}
 
         {me ? (
           <section className="bg-[#0f0f0f] border border-white/5 rounded-[48px] p-8 md:p-10 mb-16 shadow-2xl">
@@ -286,7 +423,7 @@ export default function MembersPage() {
                       <p className="text-base font-semibold">{me.phone || "-"}</p>
                     </div>
                     <button
-                      onClick={() => { setFieldErr(""); setFieldOpen("phone"); }}
+                      onClick={() => { setEditErr(""); setFieldEditOpen("phone"); }}
                       className="p-2.5 rounded-xl bg-white/5 text-white/20 hover:text-[#e5ff78] hover:bg-[#e5ff78]/10 transition-all"
                     >
                       <Edit2 size={16} />
@@ -299,7 +436,7 @@ export default function MembersPage() {
                       <p className="text-base font-semibold truncate">{me.email || "-"}</p>
                     </div>
                     <button
-                      onClick={() => { setFieldErr(""); setFieldOpen("email"); }}
+                      onClick={() => { setEditErr(""); setFieldEditOpen("email"); }}
                       className="p-2.5 rounded-xl bg-white/5 text-white/20 hover:text-[#e5ff78] hover:bg-[#e5ff78]/10 transition-all"
                     >
                       <Edit2 size={16} />
@@ -307,18 +444,64 @@ export default function MembersPage() {
                   </div>
                 </div>
 
-                <p className="mt-8 text-sm text-white/40 leading-relaxed text-center lg:text-left">
-                  หน้านี้สำหรับดูรายชื่อทีมทั้งหมด และจัดการโปรไฟล์ของตัวเอง
-                </p>
+                {/* ✅ Invite ต้องขึ้นเฉพาะหัวหน้า */}
+                {isLeader ? (
+                  <div className="mt-8 rounded-[22px] border border-white/10 bg-white/5 p-5">
+                    <div className="text-sm font-extrabold text-white/85">เพิ่มสมาชิกใหม่ (Invite)</div>
+                    <div className="mt-1 text-xs text-white/45">ส่ง invite ไปที่อีเมล</div>
+
+                    {inviteErr ? (
+                      <div className="mt-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{inviteErr}</div>
+                    ) : null}
+                    {inviteOk ? (
+                      <div className="mt-3 rounded-2xl border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-200">{inviteOk}</div>
+                    ) : null}
+
+                    <div className="mt-4 flex gap-2">
+                      <input
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        placeholder="email@example.com"
+                        className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none focus:border-[#e5ff78]"
+                        inputMode="email"
+                      />
+                      <button
+                        onClick={submitInvite}
+                        disabled={inviting}
+                        className="rounded-2xl border border-[#e5ff78]/20 bg-[#e5ff78] px-6 py-3 text-sm font-extrabold text-black hover:opacity-90 disabled:opacity-50"
+                      >
+                        {inviting ? "กำลังส่ง..." : "Invite"}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </section>
         ) : null}
 
         <div className="space-y-16">
-          <TeamSection title="หัวหน้า" subtitle="LEADER" data={leaders} canEdit={isLeader} onEditMember={openEditMember} />
-          <TeamSection title="ทีมวิดีโอ" subtitle="VIDEO" data={videoSorted} canEdit={isLeader} onEditMember={openEditMember} />
-          <TeamSection title="ทีมกราฟิก" subtitle="GRAPHIC" data={graphicSorted} canEdit={isLeader} onEditMember={openEditMember} />
+          <TeamSection
+            title="หัวหน้า"
+            subtitle="LEADER"
+            data={leaders}
+            isLeader={isLeader}
+            onEditMember={(m) => { setEditingMember(m); setMemberEditOpen(true); }}
+          />
+          <TeamSection
+            title="ทีมวิดีโอ"
+            subtitle="VIDEO"
+            data={videoSorted}
+            isLeader={isLeader}
+            onEditMember={(m) => { setEditingMember(m); setMemberEditOpen(true); }}
+          />
+          <TeamSection
+            title="ทีมกราฟิก"
+            subtitle="GRAPHIC"
+            data={graphicSorted}
+            isLeader={isLeader}
+            onEditMember={(m) => { setEditingMember(m); setMemberEditOpen(true); }}
+          />
         </div>
 
         <div className="h-20" />
@@ -335,128 +518,37 @@ export default function MembersPage() {
         }}
       />
 
-      {/* ✅ แก้ Tel / Email ของตัวเอง */}
       <EditFieldModal
-        open={fieldOpen === "phone"}
+        open={fieldEditOpen === "phone"}
         label="Tel."
         value={me?.phone || ""}
         placeholder="เช่น 0612345678"
         type="tel"
-        submitting={fieldSaving}
-        error={fieldErr}
-        onClose={() => setFieldOpen(null)}
+        submitting={editSaving}
+        error={editErr}
+        onClose={() => setFieldEditOpen(null)}
         onSave={(v) => saveField("phone", v)}
       />
+
       <EditFieldModal
-        open={fieldOpen === "email"}
+        open={fieldEditOpen === "email"}
         label="E-mail"
         value={me?.email || ""}
         placeholder="เช่น name@company.com"
         type="email"
-        submitting={fieldSaving}
-        error={fieldErr}
-        onClose={() => setFieldOpen(null)}
+        submitting={editSaving}
+        error={editErr}
+        onClose={() => setFieldEditOpen(null)}
         onSave={(v) => saveField("email", v)}
       />
 
-      {/* ✅ หัวหน้าแก้สมาชิก */}
+      {/* Edit member modal (หัวหน้าเท่านั้น) */}
       <EditMemberModal
         open={memberEditOpen}
         member={editingMember}
         onClose={() => { setMemberEditOpen(false); setEditingMember(null); }}
-        onSaved={async () => { setMemberEditOpen(false); setEditingMember(null); await loadAll(); }}
+        onSaved={async () => { await loadAll(); }}
       />
-    </div>
-  );
-}
-
-function EditFieldModal({
-  open,
-  label,
-  value,
-  placeholder,
-  type = "text",
-  submitting,
-  error,
-  onClose,
-  onSave,
-}: {
-  open: boolean;
-  label: string;
-  value: string;
-  placeholder?: string;
-  type?: "text" | "email" | "tel";
-  submitting: boolean;
-  error?: string;
-  onClose: () => void;
-  onSave: (next: string) => void;
-}) {
-  const [v, setV] = useState(value);
-
-  useEffect(() => {
-    if (!open) return;
-    setV(value);
-  }, [open, value]);
-
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-lg overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0b0b] text-white shadow-[0_30px_120px_rgba(0,0,0,0.75)]">
-        <div className="flex items-start justify-between border-b border-white/10 px-6 py-5">
-          <div>
-            <div className="text-lg font-extrabold tracking-tight">{`แก้ไข ${label}`}</div>
-            <div className="mt-1 text-sm text-white/45">Edit</div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10"
-            title="ปิด"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="px-6 py-5">
-          {error ? (
-            <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-              {error}
-            </div>
-          ) : null}
-
-          <div className="space-y-4">
-            <div>
-              <div className="mb-2 text-xs font-bold tracking-widest text-white/45 uppercase">{label}</div>
-              <input
-                type={type}
-                value={v}
-                onChange={(e) => setV(e.target.value)}
-                placeholder={placeholder}
-                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none focus:border-[#e5ff78]"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10"
-              >
-                ยกเลิก
-              </button>
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={() => onSave(v)}
-                className="rounded-2xl border border-[#e5ff78]/20 bg-[#e5ff78] px-5 py-2 text-sm font-extrabold text-black hover:opacity-90 disabled:opacity-50"
-              >
-                {submitting ? "กำลังบันทึก..." : "บันทึก"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -465,13 +557,13 @@ function TeamSection({
   title,
   subtitle,
   data,
-  canEdit,
+  isLeader,
   onEditMember,
 }: {
   title: string;
   subtitle: string;
   data: Member[];
-  canEdit: boolean;
+  isLeader: boolean;
   onEditMember: (m: Member) => void;
 }) {
   if (data.length === 0) return null;
@@ -489,7 +581,6 @@ function TeamSection({
         {data.map((m) => (
           <div key={m.id} className="bg-[#0f0f0f] border border-white/5 p-5 rounded-[32px] hover:border-white/15 transition-all">
             <AvatarCardImage url={m.avatar_url} name={m.display_name} />
-
             <div className="mt-4 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-base font-extrabold truncate text-white">{m.display_name || "-"}</p>
@@ -502,14 +593,13 @@ function TeamSection({
               <div className="flex flex-col items-end gap-2">
                 <Badge tone={m.is_active === false ? "red" : "neutral"}>{String(m.role || "MEMBER").toUpperCase()}</Badge>
 
-                {canEdit ? (
+                {/* ✅ ปุ่มแก้สมาชิก เฉพาะหัวหน้า */}
+                {isLeader ? (
                   <button
-                    type="button"
                     onClick={() => onEditMember(m)}
-                    className="mt-1 inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 p-2 text-white/70 hover:bg-white/10 hover:text-[#e5ff78]"
-                    title="แก้ไขสมาชิก"
+                    className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white/80 hover:bg-white/10"
                   >
-                    <Edit2 size={14} />
+                    แก้ไข
                   </button>
                 ) : null}
               </div>

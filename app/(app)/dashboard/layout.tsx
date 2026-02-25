@@ -11,7 +11,6 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // ✅ ไม่ fetch เข้าเว็บตัวเองอีกต่อไป
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.auth.getUser();
   const user = data?.user;

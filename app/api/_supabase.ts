@@ -4,14 +4,13 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 export async function supabaseFromRequest(_req: NextRequest) {
-  // ✅ ต้อง await เพื่อให้ได้ SupabaseClient จริง ๆ (ไม่ใช่ Promise)
   const supabase = await createSupabaseServer();
   return { supabase };
 }
 
 export async function createSupabaseServer() {
-  // ✅ cookies() เป็น synchronous แต่ใช้ await ได้ ไม่พัง
-  const cookieStore = cookies();
+  // ✅ Next.js 16: cookies() อาจเป็น Promise ในบาง context → ต้อง await
+  const cookieStore = await cookies();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,7 +26,7 @@ export async function createSupabaseServer() {
               cookieStore.set(name, value, options);
             });
           } catch {
-            // ป้องกัน error เมื่อเรียกจาก server component
+            // กันพังในบางกรณีที่ set cookie ไม่ได้ (เช่น server component)
           }
         },
       },

@@ -1,4 +1,4 @@
-// middleware.ts
+// proxy.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
@@ -10,10 +10,10 @@ function normalizeSameSite(v: unknown): SameSite | undefined {
   return undefined;
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // ✅ บังคับ root ให้ไป /login เสมอ (กันหน้า template โผล่)
+  // root → /login
   if (pathname === "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
@@ -48,21 +48,18 @@ export async function middleware(request: NextRequest) {
   const { data } = await supabase.auth.getUser();
   const user = data?.user;
 
-  // public routes
   const isPublic =
     pathname.startsWith("/login") ||
     pathname.startsWith("/api") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico";
 
-  // ✅ login แล้วเข้า /login → เด้งไป /dashboard
   if (user && pathname.startsWith("/login")) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 
-  // ✅ ยังไม่ login แล้วพยายามเข้าหน้าในระบบ → เด้งไป /login
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";

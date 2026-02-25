@@ -514,15 +514,19 @@ export default function ProjectsPage() {
         </div>
       )}
 
+      {/* ✅ Create Modal */}
       <CreateProjectModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={async () => {
-          setCreateOpen(false);
-          await loadProjects();
+          await loadProjects(); // ✅ เดิมเรียก fetchProjects() ซึ่งไม่มีอยู่
+          await loadMembers();
+          await loadMe();
         }}
+        members={members}
       />
 
+      {/* ✅ Edit Modal */}
       {isLeader && editingProject && (
         <EditProjectModal
           open={editOpen}

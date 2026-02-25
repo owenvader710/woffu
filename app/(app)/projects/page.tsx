@@ -10,9 +10,8 @@ type Project = {
   id: string;
   title: string;
 
-  // ✅ เพิ่ม field ใหม่ (เผื่อ DB/API มีแล้ว หรือจะเพิ่มทีหลัง)
-  product_code?: string | null;
-  product_group?: string | null; // A-H
+  // ✅ รหัสโปรเจกต์
+  code?: string | null;
 
   type: "VIDEO" | "GRAPHIC";
   status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
@@ -49,38 +48,51 @@ function formatDateTH(iso?: string | null) {
   return d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
 }
 
-// ✅ โชว์เนื้อหาเหมือนเดิม แต่ "ไม่โชว์หัวข้อ" (แบรนด์/ความสำคัญ/รูปแบบ/ประเภทงาน)
+// ✅ Deadline ต้องมีเวลา
+function formatDateTimeTH(iso?: string | null) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  const date = d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
+  const time = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+  return `${date} ${time}`;
+}
+
 function secondLine(p: Project) {
-  const brand = p.brand ? `${p.brand}` : null;
+  const brand = p.brand ? `แบรนด์: ${p.brand}` : null;
 
   const videoBits =
     p.type === "VIDEO"
       ? [
           p.video_priority
-            ? p.video_priority === "SPECIAL"
-              ? "SPECIAL"
-              : `${p.video_priority}ดาว`
+            ? `ความสำคัญ: ${p.video_priority === "SPECIAL" ? "SPECIAL" : `${p.video_priority}ดาว`}`
             : null,
-          p.video_purpose ? `${p.video_purpose}` : null,
+          p.video_purpose ? `รูปแบบ: ${p.video_purpose}` : null,
         ].filter(Boolean)
       : [];
 
   const graphicBits =
-    p.type === "GRAPHIC"
-      ? [p.graphic_job_type ? `${p.graphic_job_type}` : null].filter(Boolean)
-      : [];
+    p.type === "GRAPHIC" ? [p.graphic_job_type ? `ประเภทงาน: ${p.graphic_job_type}` : null].filter(Boolean) : [];
 
   const all = [brand, ...videoBits, ...graphicBits].filter(Boolean);
   return all.length ? all.join(" · ") : "";
 }
 
-function matchQuery(p: Project, q: string) {
+function statusTone(status: Project["status"]) {
+  if (status === "TODO") return "neutral";
+  if (status === "IN_PROGRESS") return "blue";
+  if (status === "BLOCKED") return "red";
+  if (status === "COMPLETED") return "green";
+  return "neutral";
+}
+
+// ✅ ค้นหาได้ถึงชื่อผู้รับผิดชอบด้วย
+function matchQuery(p: Project, q: string, assigneeName?: string) {
   const needle = q.trim().toLowerCase();
   if (!needle) return true;
 
-  const hay = `${p.product_code ?? ""} ${p.title ?? ""} ${p.product_group ?? ""} ${p.brand ?? ""} ${
-    p.video_priority ?? ""
-  } ${p.video_purpose ?? ""} ${p.graphic_job_type ?? ""}`.toLowerCase();
+  const hay = `${p.code ?? ""} ${p.title ?? ""} ${p.brand ?? ""} ${p.video_priority ?? ""} ${p.video_purpose ?? ""} ${
+    p.graphic_job_type ?? ""
+  } ${assigneeName ?? ""}`.toLowerCase();
 
   return hay.includes(needle);
 }
@@ -100,17 +112,19 @@ function Pill({
       : tone === "red"
       ? "border-red-500/30 bg-red-500/10 text-red-200"
       : tone === "blue"
-      ? "border-sky-500/30 bg-sky-500/10 text-sky-200"
+      ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
       : "border-white/10 bg-white/5 text-white/70";
 
-  return <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] ${cls}`}>{children}</span>;
+  return <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs ${cls}`}>{children}</span>;
 }
 
-function statusTone(s: Project["status"]) {
-  if (s === "TODO") return "neutral";
-  if (s === "IN_PROGRESS") return "blue";
-  if (s === "BLOCKED") return "red";
-  return "green";
+function CodeBadge({ code }: { code?: string | null }) {
+  if (!code) return null;
+  return (
+    <span className="inline-flex items-center rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs font-semibold text-white/80">
+      {code}
+    </span>
+  );
 }
 
 export default function ProjectsPage() {
@@ -130,6 +144,12 @@ export default function ProjectsPage() {
   const [statusFilter, setStatusFilter] = useState<"ALL" | "TODO" | "IN_PROGRESS">("ALL");
   const [typeFilter, setTypeFilter] = useState<"ALL" | "VIDEO" | "GRAPHIC">("ALL");
   const [q, setQ] = useState("");
+
+  const memberMap = useMemo(() => {
+    const m = new Map<string, Member>();
+    for (const it of members) m.set(it.id, it);
+    return m;
+  }, [members]);
 
   async function loadMe() {
     try {
@@ -173,7 +193,7 @@ export default function ProjectsPage() {
     }
   }
 
-  // ✅ โหลดรายชื่อสมาชิกเพื่อ map ผู้รับผิดชอบ (ถ้า API ปิดไว้สำหรับ MEMBER ก็ไม่พัง แค่โชว์ "-")
+  // ✅ โหลด members ให้ทุก role เพื่อใช้ค้นหา + แสดงผู้รับผิดชอบ
   async function loadMembers() {
     try {
       const res = await fetch("/api/members", { cache: "no-store" });
@@ -189,20 +209,10 @@ export default function ProjectsPage() {
   useEffect(() => {
     (async () => {
       await loadMe();
-      await loadProjects();
-      await loadMembers();
+      await Promise.all([loadProjects(), loadMembers()]);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const assigneeMap = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const mem of members) {
-      if (!mem?.id) continue;
-      m.set(mem.id, mem.display_name || mem.id);
-    }
-    return m;
-  }, [members]);
 
   // ✅ baseList: ตัด COMPLETED/BLOCKED ออกเสมอในหน้า /projects + filter ฝ่าย + search
   const baseList = useMemo(() => {
@@ -212,10 +222,16 @@ export default function ProjectsPage() {
     list = list.filter((p) => p.status !== "COMPLETED" && p.status !== "BLOCKED");
 
     if (typeFilter !== "ALL") list = list.filter((p) => p.type === typeFilter);
-    if (q.trim()) list = list.filter((p) => matchQuery(p, q));
+
+    if (q.trim()) {
+      list = list.filter((p) => {
+        const assigneeName = p.assignee_id ? memberMap.get(p.assignee_id)?.display_name ?? "" : "";
+        return matchQuery(p, q, assigneeName || "");
+      });
+    }
 
     return list;
-  }, [items, typeFilter, q]);
+  }, [items, typeFilter, q, memberMap]);
 
   const counts = useMemo(() => {
     const base = { ALL: baseList.length, TODO: 0, IN_PROGRESS: 0 } as Record<"ALL" | "TODO" | "IN_PROGRESS", number>;
@@ -379,7 +395,7 @@ export default function ProjectsPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="ค้นหา: รหัสสินค้า / ชื่อโปรเจกต์ / แบรนด์ / รูปแบบงาน / ประเภทงาน"
+            placeholder="ค้นหา: รหัสโปรเจกต์ / ชื่อโปรเจกต์ / ผู้รับผิดชอบ / แบรนด์ / รูปแบบงาน / ประเภทงาน"
             className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78] md:w-[520px]"
           />
         </div>
@@ -387,15 +403,11 @@ export default function ProjectsPage() {
 
       {/* Content */}
       {loading && (
-        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">
-          กำลังโหลด...
-        </div>
+        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">กำลังโหลด...</div>
       )}
 
       {!loading && error && (
-        <div className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
-          {error}
-        </div>
+        <div className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>
       )}
 
       {!loading && !error && (
@@ -405,8 +417,11 @@ export default function ProjectsPage() {
               <tr className="text-left">
                 <th className="p-4">โปรเจกต์</th>
                 <th className="p-4">ฝ่าย</th>
-                <th className="p-4">สถานะ</th>
+
+                {/* ✅ สลับตำแหน่ง: ผู้รับผิดชอบ มาก่อน สถานะ */}
                 <th className="p-4">ผู้รับผิดชอบ</th>
+                <th className="p-4">สถานะ</th>
+
                 <th className="p-4">วันที่สั่ง</th>
                 <th className="p-4">Deadline</th>
                 <th className="p-4 text-right">จัดการ</th>
@@ -422,21 +437,21 @@ export default function ProjectsPage() {
                 </tr>
               ) : (
                 filteredItems.map((p) => {
-                  const assigneeName = p.assignee_id ? assigneeMap.get(p.assignee_id) : null;
+                  const assigneeName =
+                    p.assignee_id ? memberMap.get(p.assignee_id)?.display_name ?? "-" : "-";
 
                   return (
                     <tr key={p.id} className="border-t border-white/10 hover:bg-white/[0.06]">
                       <td className="p-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {/* ✅ รหัสสินค้า (ก่อนชื่อโปรเจกต์) */}
-                          {p.product_code ? <Pill tone="neutral">{p.product_code}</Pill> : null}
+                        <div className="flex items-center gap-2">
+                          {/* ✅ รหัสโปรเจกต์หน้าชื่อ */}
+                          <CodeBadge code={p.code} />
 
                           <Link className="font-semibold text-white underline underline-offset-4" href={`/projects/${p.id}`}>
                             {p.title}
                           </Link>
 
                           {p.brand ? <Pill tone="neutral">{p.brand}</Pill> : null}
-                          {p.product_group ? <Pill tone="amber">{p.product_group}</Pill> : null}
                         </div>
 
                         {secondLine(p) ? <div className="mt-1 text-xs text-white/45">{secondLine(p)}</div> : null}
@@ -446,16 +461,19 @@ export default function ProjectsPage() {
                         <Pill tone={p.type === "VIDEO" ? "blue" : "amber"}>{p.type}</Pill>
                       </td>
 
+                      {/* ✅ ผู้รับผิดชอบ */}
+                      <td className="p-4">
+                        <span className="text-white/80">{assigneeName || "-"}</span>
+                      </td>
+
                       <td className="p-4">
                         <Pill tone={statusTone(p.status) as any}>{p.status}</Pill>
                       </td>
 
-                      <td className="p-4 text-white/60">
-                        {assigneeName ? <span className="text-white/80">{assigneeName}</span> : <span className="text-white/35">-</span>}
-                      </td>
-
                       <td className="p-4 text-white/60">{formatDateTH(p.created_at)}</td>
-                      <td className="p-4 text-white/60">{formatDateTH(p.due_date)}</td>
+
+                      {/* ✅ Deadline แสดงเวลา */}
+                      <td className="p-4 text-white/60">{formatDateTimeTH(p.due_date)}</td>
 
                       <td className="p-4">
                         <div className="flex justify-end gap-2">
@@ -490,7 +508,6 @@ export default function ProjectsPage() {
         onCreated={async () => {
           setCreateOpen(false);
           await loadProjects();
-          await loadMembers();
         }}
       />
 
@@ -505,7 +522,6 @@ export default function ProjectsPage() {
             setEditOpen(false);
             setEditingProject(null);
             await loadProjects();
-            await loadMembers();
           }}
         />
       )}

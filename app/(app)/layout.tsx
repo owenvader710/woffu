@@ -1,14 +1,20 @@
 // app/(app)/layout.tsx
 import React from "react";
-import { createSupabaseServerClient } from "@/utils/supabase/server";
-import ClientShell from "./ClientShell";
+import Sidebar from "./components/Sidebar";
 
 export const dynamic = "force-dynamic";
 
-export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.auth.getUser();
-  const email = data?.user?.email ?? null;
-
-  return <ClientShell userEmail={email}>{children}</ClientShell>;
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-black text-white">
+      <div className="flex min-h-screen">
+        <Sidebar />
+        <main className="min-w-0 flex-1">
+          <div className="mx-auto w-full max-w-7xl px-4 py-6 md:px-8 md:py-8">
+            {children}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
 }

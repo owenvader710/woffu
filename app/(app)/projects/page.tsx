@@ -10,8 +10,15 @@ type Project = {
   id: string;
   title: string;
 
-  // ✅ รหัสโปรเจกต์
+  // ✅ รองรับหลายชื่อคอลัมน์รหัส (เผื่อ DB ไม่ได้ใช้ชื่อ code)
   code?: string | null;
+  project_code?: string | null;
+  projectCode?: string | null;
+  product_code?: string | null;
+  productCode?: string | null;
+  project_no?: string | null;
+  projectNo?: string | null;
+  ref?: string | null;
 
   type: "VIDEO" | "GRAPHIC";
   status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
@@ -57,21 +64,37 @@ function formatDateTimeTH(iso?: string | null) {
   return `${date} ${time}`;
 }
 
+// ✅ ดึง “รหัสโปรเจกต์” แบบรองรับหลายชื่อคอลัมน์
+function getProjectCode(p: Project) {
+  return (
+    p.code ??
+    p.project_code ??
+    p.projectCode ??
+    p.product_code ??
+    p.productCode ??
+    p.project_no ??
+    p.projectNo ??
+    p.ref ??
+    null
+  );
+}
+
+// ✅ บรรทัดรอง: โชว์เนื้อหาเหมือนเดิม แต่ "ไม่โชว์หัวข้อ"
 function secondLine(p: Project) {
-  const brand = p.brand ? `แบรนด์: ${p.brand}` : null;
+  const brand = p.brand ? `${p.brand}` : null;
 
   const videoBits =
     p.type === "VIDEO"
       ? [
           p.video_priority
-            ? `ความสำคัญ: ${p.video_priority === "SPECIAL" ? "SPECIAL" : `${p.video_priority}ดาว`}`
+            ? `${p.video_priority === "SPECIAL" ? "SPECIAL" : `${p.video_priority}ดาว`}`
             : null,
-          p.video_purpose ? `รูปแบบ: ${p.video_purpose}` : null,
+          p.video_purpose ? `${p.video_purpose}` : null,
         ].filter(Boolean)
       : [];
 
   const graphicBits =
-    p.type === "GRAPHIC" ? [p.graphic_job_type ? `ประเภทงาน: ${p.graphic_job_type}` : null].filter(Boolean) : [];
+    p.type === "GRAPHIC" ? [p.graphic_job_type ? `${p.graphic_job_type}` : null].filter(Boolean) : [];
 
   const all = [brand, ...videoBits, ...graphicBits].filter(Boolean);
   return all.length ? all.join(" · ") : "";
@@ -90,9 +113,9 @@ function matchQuery(p: Project, q: string, assigneeName?: string) {
   const needle = q.trim().toLowerCase();
   if (!needle) return true;
 
-  const hay = `${p.code ?? ""} ${p.title ?? ""} ${p.brand ?? ""} ${p.video_priority ?? ""} ${p.video_purpose ?? ""} ${
-    p.graphic_job_type ?? ""
-  } ${assigneeName ?? ""}`.toLowerCase();
+  const hay = `${getProjectCode(p) ?? ""} ${p.title ?? ""} ${p.brand ?? ""} ${p.video_priority ?? ""} ${
+    p.video_purpose ?? ""
+  } ${p.graphic_job_type ?? ""} ${assigneeName ?? ""}`.toLowerCase();
 
   return hay.includes(needle);
 }
@@ -193,7 +216,6 @@ export default function ProjectsPage() {
     }
   }
 
-  // ✅ โหลด members ให้ทุก role เพื่อใช้ค้นหา + แสดงผู้รับผิดชอบ
   async function loadMembers() {
     try {
       const res = await fetch("/api/members", { cache: "no-store" });
@@ -350,7 +372,6 @@ export default function ProjectsPage() {
 
       {/* Filters */}
       <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
-        {/* status tabs */}
         <div className="flex flex-wrap gap-2">
           {(["ALL", "TODO", "IN_PROGRESS"] as const).map((s) => {
             const active = statusFilter === s;
@@ -371,7 +392,6 @@ export default function ProjectsPage() {
           })}
         </div>
 
-        {/* type + search */}
         <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-wrap gap-2">
             {(["ALL", "VIDEO", "GRAPHIC"] as const).map((t) => {
@@ -401,7 +421,6 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      {/* Content */}
       {loading && (
         <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">กำลังโหลด...</div>
       )}
@@ -417,11 +436,8 @@ export default function ProjectsPage() {
               <tr className="text-left">
                 <th className="p-4">โปรเจกต์</th>
                 <th className="p-4">ฝ่าย</th>
-
-                {/* ✅ สลับตำแหน่ง: ผู้รับผิดชอบ มาก่อน สถานะ */}
                 <th className="p-4">ผู้รับผิดชอบ</th>
                 <th className="p-4">สถานะ</th>
-
                 <th className="p-4">วันที่สั่ง</th>
                 <th className="p-4">Deadline</th>
                 <th className="p-4 text-right">จัดการ</th>
@@ -437,15 +453,15 @@ export default function ProjectsPage() {
                 </tr>
               ) : (
                 filteredItems.map((p) => {
-                  const assigneeName =
-                    p.assignee_id ? memberMap.get(p.assignee_id)?.display_name ?? "-" : "-";
+                  const assigneeName = p.assignee_id ? memberMap.get(p.assignee_id)?.display_name ?? "-" : "-";
+                  const code = getProjectCode(p);
 
                   return (
                     <tr key={p.id} className="border-t border-white/10 hover:bg-white/[0.06]">
                       <td className="p-4">
                         <div className="flex items-center gap-2">
                           {/* ✅ รหัสโปรเจกต์หน้าชื่อ */}
-                          <CodeBadge code={p.code} />
+                          <CodeBadge code={code} />
 
                           <Link className="font-semibold text-white underline underline-offset-4" href={`/projects/${p.id}`}>
                             {p.title}
@@ -454,6 +470,7 @@ export default function ProjectsPage() {
                           {p.brand ? <Pill tone="neutral">{p.brand}</Pill> : null}
                         </div>
 
+                        {/* ✅ โชว์เนื้อหาเหมือนเดิม แต่ไม่โชว์หัวข้อ */}
                         {secondLine(p) ? <div className="mt-1 text-xs text-white/45">{secondLine(p)}</div> : null}
                       </td>
 
@@ -461,7 +478,6 @@ export default function ProjectsPage() {
                         <Pill tone={p.type === "VIDEO" ? "blue" : "amber"}>{p.type}</Pill>
                       </td>
 
-                      {/* ✅ ผู้รับผิดชอบ */}
                       <td className="p-4">
                         <span className="text-white/80">{assigneeName || "-"}</span>
                       </td>
@@ -471,8 +487,6 @@ export default function ProjectsPage() {
                       </td>
 
                       <td className="p-4 text-white/60">{formatDateTH(p.created_at)}</td>
-
-                      {/* ✅ Deadline แสดงเวลา */}
                       <td className="p-4 text-white/60">{formatDateTimeTH(p.due_date)}</td>
 
                       <td className="p-4">
@@ -482,7 +496,6 @@ export default function ProjectsPage() {
                               <IconBtn title="แก้ไข" variant="edit" onClick={() => onEdit(p)}>
                                 ✏️
                               </IconBtn>
-
                               <IconBtn title="ลบ" variant="danger" onClick={() => onDelete(p)}>
                                 🗑️
                               </IconBtn>
@@ -501,7 +514,6 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Create */}
       <CreateProjectModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
@@ -511,7 +523,6 @@ export default function ProjectsPage() {
         }}
       />
 
-      {/* Edit */}
       {isLeader && editingProject && (
         <EditProjectModal
           open={editOpen}

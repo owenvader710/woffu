@@ -5,11 +5,10 @@ import { createSupabaseServer } from "../_supabase";
 export async function GET() {
   const supabase = await createSupabaseServer();
 
+  // ✅ ดึงทุกคอลัมน์ (กันชื่อคอลัมน์รหัสไม่ตรงกับที่ UI คาด)
   const { data, error } = await supabase
     .from("projects")
-    .select(
-      "id,title,type,status,created_at,start_date,due_date,brand,video_priority,video_purpose,graphic_job_type,assignee_id,description,department,created_by"
-    )
+    .select("*")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -36,13 +35,8 @@ export async function POST(req: Request) {
     created_by: user.id, // ✅ กัน null created_by
   };
 
-  const { data, error } = await supabase
-    .from("projects")
-    .insert(insertRow)
-    .select(
-      "id,title,type,status,created_at,start_date,due_date,brand,video_priority,video_purpose,graphic_job_type,assignee_id,description,department,created_by"
-    )
-    .single();
+  // ✅ คืนค่าทุกคอลัมน์ (รวมรหัส)
+  const { data, error } = await supabase.from("projects").insert(insertRow).select("*").single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

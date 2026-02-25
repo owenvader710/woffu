@@ -48,14 +48,14 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico";
 
-  // ถ้า login แล้ว แต่ไป /login → เด้งเข้า dashboard
+  // login แล้วเข้า /login → ไป dashboard
   if (user && pathname.startsWith("/login")) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 
-  // ถ้ายังไม่ login และพยายามเข้าหน้าภายในระบบ → เด้งไป /login
+  // ยังไม่ login แล้วพยายามเข้าหน้าระบบ → ไป login
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";

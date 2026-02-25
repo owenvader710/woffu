@@ -3,7 +3,6 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 type SameSite = "lax" | "strict" | "none";
-
 function normalizeSameSite(v: unknown): SameSite | undefined {
   if (v === true) return "lax";
   if (v === false) return undefined;
@@ -12,34 +11,36 @@ function normalizeSameSite(v: unknown): SameSite | undefined {
 }
 
 export async function createSupabaseServerClient() {
-  // ✅ Next.js 16: cookies() อาจถูก type เป็น Promise → ต้อง await
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !key) {
+    throw new Error(
+      "Missing Supabase ENV. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel Environment Variables."
+    );
+  }
+
   const cookieStore = await cookies();
 
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          // Route Handlers / Server Actions set cookie ได้
-          try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              const sameSite = normalizeSameSite((options as any)?.sameSite);
-
-              cookieStore.set(
-                name,
-                value,
-                sameSite ? { ...(options ?? {}), sameSite } : (options ?? {})
-              );
-            });
-          } catch {
-            // กันพังในบาง context ที่ set cookie ไม่ได้ (เช่น server component บางแบบ)
-          }
-        },
+  return createServerClient(url, key, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
       },
-    }
-  );
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            const sameSite = normalizeSameSite((options as any)?.sameSite);
+            cookieStore.set(
+              name,
+              value,
+              sameSite ? { ...(options ?? {}), sameSite } : (options ?? {})
+            );
+          });
+        } catch {
+          // ignore (บาง context set cookie ไม่ได้)
+        }
+      },
+    },
+  });
 }

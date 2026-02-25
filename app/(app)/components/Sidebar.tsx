@@ -83,9 +83,9 @@ export default function Sidebar() {
           {/* Brand */}
           <div className="mb-6">
             <div className="text-[18px] font-extrabold tracking-[0.22em]" style={{ color: LIME }}>
-              WOFFU
+              WOFFU OS
             </div>
-            <div className="mt-1 text-[11px] text-white/40">Work Tracking</div>
+            <div className="mt-1 text-[11px] text-white/40">Production Workflow</div>
           </div>
 
           {/* Nav */}

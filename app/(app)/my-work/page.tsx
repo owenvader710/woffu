@@ -3,9 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRealtimeMyWork } from "./useRealtimeMyWork";
-// NOTE: ไม่ใช้ StatusButtons (ของ approval) ในหน้านี้
-
-type Status = "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
+import StatusDropdown, { Status } from "./StatusDropdown";
 
 type WorkItem = {
   id: string;
@@ -21,8 +19,6 @@ type WorkItem = {
   video_purpose: string | null;
   graphic_job_type: string | null;
 };
-
-const STATUSES: Status[] = ["TODO", "IN_PROGRESS", "BLOCKED", "COMPLETED"];
 
 function formatDateTH(iso?: string | null) {
   if (!iso) return "-";
@@ -85,39 +81,9 @@ export default function MyWorkPage() {
     }
   }
 
-  function StatusAction({ item }: { item: WorkItem }) {
-    const btnBase =
-      "rounded-xl border px-3 py-2 text-xs font-semibold transition disabled:opacity-60";
-
-    const tone = (s: Status) =>
-      s === "COMPLETED"
-        ? "border-green-500/30 bg-green-500/10 text-green-200 hover:bg-green-500/15"
-        : s === "BLOCKED"
-        ? "border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/15"
-        : s === "IN_PROGRESS"
-        ? "border-sky-500/30 bg-sky-500/10 text-sky-200 hover:bg-sky-500/15"
-        : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10";
-
-    return (
-      <div className="flex flex-wrap justify-end gap-2">
-        {STATUSES.map((s) => (
-          <button
-            key={s}
-            type="button"
-            disabled={updatingId === item.id}
-            onClick={() => changeStatus(item.id, s)}
-            className={`${btnBase} ${tone(s)} ${item.status === s ? "ring-1 ring-white/20" : ""}`}
-            title={`เปลี่ยนเป็น ${s}`}
-          >
-            {s}
-          </button>
-        ))}
-      </div>
-    );
-  }
-
   return (
     <div>
+      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
@@ -133,6 +99,7 @@ export default function MyWorkPage() {
         </button>
       </div>
 
+      {/* Table */}
       <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
         <table className="w-full text-sm text-white/80">
           <thead className="bg-white/5 text-xs text-white/50">
@@ -159,7 +126,10 @@ export default function MyWorkPage() {
               (items as WorkItem[]).map((item) => (
                 <tr key={item.id} className="border-t border-white/10 hover:bg-white/[0.06]">
                   <td className="p-4">
-                    <Link href={`/projects/${item.id}`} className="font-semibold text-white underline underline-offset-4">
+                    <Link
+                      href={`/projects/${item.id}`}
+                      className="font-semibold text-white underline underline-offset-4"
+                    >
                       {item.title}
                     </Link>
                   </td>
@@ -174,8 +144,13 @@ export default function MyWorkPage() {
 
                   <td className="p-4 text-white/60">{formatDateTH(item.due_date)}</td>
 
+                  {/* ✅ Dropdown เปลี่ยนสถานะ (มีสี) */}
                   <td className="p-4 text-right">
-                    <StatusAction item={item} />
+                    <StatusDropdown
+                      value={item.status}
+                      disabled={updatingId === item.id}
+                      onChange={(next) => changeStatus(item.id, next)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -189,12 +164,6 @@ export default function MyWorkPage() {
             )}
           </tbody>
         </table>
-
-        {error ? (
-          <div className="border-t border-white/10 p-4 text-sm text-red-200">
-            {String(error)}
-          </div>
-        ) : null}
       </div>
     </div>
   );

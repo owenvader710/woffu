@@ -9,6 +9,11 @@ import EditProjectModal from "./EditProjectModal";
 type Project = {
   id: string;
   title: string;
+
+  // ✅ เพิ่ม field ใหม่ (เผื่อ DB/API มีแล้ว หรือจะเพิ่มทีหลัง)
+  product_code?: string | null;
+  product_group?: string | null; // A-H
+
   type: "VIDEO" | "GRAPHIC";
   status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
   created_at: string;
@@ -44,21 +49,26 @@ function formatDateTH(iso?: string | null) {
   return d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
 }
 
+// ✅ โชว์เนื้อหาเหมือนเดิม แต่ "ไม่โชว์หัวข้อ" (แบรนด์/ความสำคัญ/รูปแบบ/ประเภทงาน)
 function secondLine(p: Project) {
-  const brand = p.brand ? `แบรนด์: ${p.brand}` : null;
+  const brand = p.brand ? `${p.brand}` : null;
 
   const videoBits =
     p.type === "VIDEO"
       ? [
           p.video_priority
-            ? `ความสำคัญ: ${p.video_priority === "SPECIAL" ? "SPECIAL" : `${p.video_priority}ดาว`}`
+            ? p.video_priority === "SPECIAL"
+              ? "SPECIAL"
+              : `${p.video_priority}ดาว`
             : null,
-          p.video_purpose ? `รูปแบบ: ${p.video_purpose}` : null,
+          p.video_purpose ? `${p.video_purpose}` : null,
         ].filter(Boolean)
       : [];
 
   const graphicBits =
-    p.type === "GRAPHIC" ? [p.graphic_job_type ? `ประเภทงาน: ${p.graphic_job_type}` : null].filter(Boolean) : [];
+    p.type === "GRAPHIC"
+      ? [p.graphic_job_type ? `${p.graphic_job_type}` : null].filter(Boolean)
+      : [];
 
   const all = [brand, ...videoBits, ...graphicBits].filter(Boolean);
   return all.length ? all.join(" · ") : "";
@@ -67,9 +77,11 @@ function secondLine(p: Project) {
 function matchQuery(p: Project, q: string) {
   const needle = q.trim().toLowerCase();
   if (!needle) return true;
-  const hay = `${p.title ?? ""} ${p.brand ?? ""} ${p.video_priority ?? ""} ${p.video_purpose ?? ""} ${
-    p.graphic_job_type ?? ""
-  }`.toLowerCase();
+
+  const hay = `${p.product_code ?? ""} ${p.title ?? ""} ${p.product_group ?? ""} ${p.brand ?? ""} ${
+    p.video_priority ?? ""
+  } ${p.video_purpose ?? ""} ${p.graphic_job_type ?? ""}`.toLowerCase();
+
   return hay.includes(needle);
 }
 
@@ -91,11 +103,7 @@ function Pill({
       ? "border-sky-500/30 bg-sky-500/10 text-sky-200"
       : "border-white/10 bg-white/5 text-white/70";
 
-  return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] ${cls}`}>
-      {children}
-    </span>
-  );
+  return <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] ${cls}`}>{children}</span>;
 }
 
 function statusTone(s: Project["status"]) {
@@ -135,43 +143,38 @@ export default function ProjectsPage() {
   }
 
   async function loadProjects() {
-  setLoading(true);
-  setError("");
-  try {
-    const res = await fetch("/api/projects", { cache: "no-store" });
-    const json = await safeJson(res);
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/projects", { cache: "no-store" });
+      const json = await safeJson(res);
 
-    if (!res.ok) {
+      if (!res.ok) {
+        setItems([]);
+        setError((json && (json.error || json.message)) || `Load projects failed (${res.status})`);
+        return;
+      }
+
+      const raw = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+
+      const normalized = raw
+        .map((p: any) => ({
+          ...p,
+          id: p?.id ?? p?.project_id ?? p?.projectId ?? p?.uuid ?? null,
+        }))
+        .filter((p: any) => !!p.id);
+
+      setItems(normalized);
+    } catch (e: any) {
       setItems([]);
-      setError((json && (json.error || json.message)) || `Load projects failed (${res.status})`);
-      return;
+      setError(e?.message || "Load projects failed");
+    } finally {
+      setLoading(false);
     }
-
-    const raw = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-
-    // ✅ normalize id กันเคส id ไม่ได้ชื่อ id
-    const normalized = raw
-      .map((p: any) => ({
-        ...p,
-        id: p?.id ?? p?.project_id ?? p?.projectId ?? p?.uuid ?? null,
-      }))
-      .filter((p: any) => !!p.id);
-
-    setItems(normalized);
-  } catch (e: any) {
-    setItems([]);
-    setError(e?.message || "Load projects failed");
-  } finally {
-    setLoading(false);
   }
-}
 
-
+  // ✅ โหลดรายชื่อสมาชิกเพื่อ map ผู้รับผิดชอบ (ถ้า API ปิดไว้สำหรับ MEMBER ก็ไม่พัง แค่โชว์ "-")
   async function loadMembers() {
-    if (!isLeader) {
-      setMembers([]);
-      return;
-    }
     try {
       const res = await fetch("/api/members", { cache: "no-store" });
       const json = await safeJson(res);
@@ -187,14 +190,19 @@ export default function ProjectsPage() {
     (async () => {
       await loadMe();
       await loadProjects();
+      await loadMembers();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    loadMembers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLeader]);
+  const assigneeMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const mem of members) {
+      if (!mem?.id) continue;
+      m.set(mem.id, mem.display_name || mem.id);
+    }
+    return m;
+  }, [members]);
 
   // ✅ baseList: ตัด COMPLETED/BLOCKED ออกเสมอในหน้า /projects + filter ฝ่าย + search
   const baseList = useMemo(() => {
@@ -223,89 +231,73 @@ export default function ProjectsPage() {
     if (statusFilter !== "ALL") list = list.filter((p) => p.status === statusFilter);
     return list;
   }, [baseList, statusFilter]);
-  
 
   async function onDelete(p: Project) {
-  if (!isLeader) return;
-  if (!p?.id) {
-    alert("Invalid project id");
-    return;
-  }
     if (!isLeader) return;
-
-    if (!p?.id || p.id === "undefined" || p.id === "null") {
+    if (!p?.id) {
       alert("Invalid project id");
       return;
     }
 
-const ok = window.confirm(`ลบโปรเจกต์นี้จริงไหม?\n\n${p.title}`);
+    const ok = window.confirm(`ลบโปรเจกต์นี้จริงไหม?\n\n${p.title}`);
     if (!ok) return;
 
-  const prev = items;
-  setItems((x) => x.filter((it) => it.id !== p.id));
+    const prev = items;
+    setItems((x) => x.filter((it) => it.id !== p.id));
 
-  try {
-    const res = await fetch(`/api/projects/${p.id}`, { method: "DELETE" });
-    const json = await safeJson(res);
-    if (!res.ok) {
+    try {
+      const res = await fetch(`/api/projects/${p.id}`, { method: "DELETE" });
+      const json = await safeJson(res);
+      if (!res.ok) {
+        setItems(prev);
+        alert((json && (json.error || json.message)) || `Delete failed (${res.status})`);
+        return;
+      }
+    } catch (e: any) {
       setItems(prev);
-      alert((json && (json.error || json.message)) || `Delete failed (${res.status})`);
+      alert(e?.message || "Delete failed");
+    }
+  }
+
+  function onEdit(p: Project) {
+    if (!isLeader) return;
+    if (!p?.id) {
+      alert("Invalid project id");
       return;
     }
-  } catch (e: any) {
-    setItems(prev);
-    alert(e?.message || "Delete failed");
-  }
-}
-
-function onEdit(p: Project) {
-  if (!isLeader) return;
-  if (!p?.id) {
-    alert("Invalid project id");
-    return;
-  }
-  if (!isLeader) return;
-
-  // ✅ กัน id หาย
-  if (!p?.id) {
-    alert("Invalid project id");
-    return;
+    setEditingProject(p);
+    setEditOpen(true);
   }
 
-  setEditingProject(p);
-  setEditOpen(true);
-}
-
-  // ✅ ปุ่มไอคอนเวอร์ชันใหม่: "แก้ไข" โทนเดียวกับปุ่มสั่งงานใหม่, "ลบ" เป็นแดง
   const IconBtn = ({
-  title,
-  onClick,
-  children,
-  variant = "default",
-}: {
-  title: string;
-  onClick: () => void;
-  children: React.ReactNode;
-  variant?: "default" | "edit" | "danger";
-}) => {
-  const cls =
-    variant === "edit"
-      ? "border-[#e5ff78]/20 bg-[#e5ff78] text-black hover:opacity-90"
-      : variant === "danger"
-      ? "border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/15"
-      : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10";
+    title,
+    onClick,
+    children,
+    variant = "default",
+  }: {
+    title: string;
+    onClick: () => void;
+    children: React.ReactNode;
+    variant?: "default" | "edit" | "danger";
+  }) => {
+    const cls =
+      variant === "edit"
+        ? "border-[#e5ff78]/20 bg-[#e5ff78] text-black hover:opacity-90"
+        : variant === "danger"
+        ? "border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/15"
+        : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10";
 
     return (
-    <button
-      type="button"
-      title={title}
-      onClick={onClick}
-      className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition ${cls}`}
-    >
-      {children}
-    </button>
-  );
-};
+      <button
+        type="button"
+        title={title}
+        onClick={onClick}
+        className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition ${cls}`}
+      >
+        {children}
+      </button>
+    );
+  };
 
   return (
     <div>
@@ -322,6 +314,7 @@ function onEdit(p: Project) {
             onClick={() => {
               loadMe();
               loadProjects();
+              loadMembers();
             }}
             className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
           >
@@ -386,19 +379,23 @@ function onEdit(p: Project) {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="ค้นหา: ชื่อโปรเจกต์ / แบรนด์ / รูปแบบงาน / ประเภทงาน"
-            className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78] md:w-[420px]"
+            placeholder="ค้นหา: รหัสสินค้า / ชื่อโปรเจกต์ / แบรนด์ / รูปแบบงาน / ประเภทงาน"
+            className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78] md:w-[520px]"
           />
         </div>
       </div>
 
       {/* Content */}
       {loading && (
-        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">กำลังโหลด...</div>
+        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">
+          กำลังโหลด...
+        </div>
       )}
 
       {!loading && error && (
-        <div className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>
+        <div className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+          {error}
+        </div>
       )}
 
       {!loading && !error && (
@@ -409,6 +406,7 @@ function onEdit(p: Project) {
                 <th className="p-4">โปรเจกต์</th>
                 <th className="p-4">ฝ่าย</th>
                 <th className="p-4">สถานะ</th>
+                <th className="p-4">ผู้รับผิดชอบ</th>
                 <th className="p-4">วันที่สั่ง</th>
                 <th className="p-4">Deadline</th>
                 <th className="p-4 text-right">จัดการ</th>
@@ -418,54 +416,67 @@ function onEdit(p: Project) {
             <tbody>
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td className="p-6 text-white/40" colSpan={6}>
+                  <td className="p-6 text-white/40" colSpan={7}>
                     ไม่มีรายการตามเงื่อนไขนี้
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((p) => (
-                  <tr key={p.id} className="border-t border-white/10 hover:bg-white/[0.06]">
-                    <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        <Link className="font-semibold text-white underline underline-offset-4" href={`/projects/${p.id}`}>
-                          {p.title}
-                        </Link>
-                        {p.brand ? <Pill tone="neutral">{p.brand}</Pill> : null}
-                      </div>
+                filteredItems.map((p) => {
+                  const assigneeName = p.assignee_id ? assigneeMap.get(p.assignee_id) : null;
 
-                      {secondLine(p) ? <div className="mt-1 text-xs text-white/45">{secondLine(p)}</div> : null}
-                    </td>
+                  return (
+                    <tr key={p.id} className="border-t border-white/10 hover:bg-white/[0.06]">
+                      <td className="p-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* ✅ รหัสสินค้า (ก่อนชื่อโปรเจกต์) */}
+                          {p.product_code ? <Pill tone="neutral">{p.product_code}</Pill> : null}
 
-                    <td className="p-4">
-                      <Pill tone={p.type === "VIDEO" ? "blue" : "amber"}>{p.type}</Pill>
-                    </td>
+                          <Link className="font-semibold text-white underline underline-offset-4" href={`/projects/${p.id}`}>
+                            {p.title}
+                          </Link>
 
-                    <td className="p-4">
-                      <Pill tone={statusTone(p.status) as any}>{p.status}</Pill>
-                    </td>
+                          {p.brand ? <Pill tone="neutral">{p.brand}</Pill> : null}
+                          {p.product_group ? <Pill tone="amber">{p.product_group}</Pill> : null}
+                        </div>
 
-                    <td className="p-4 text-white/60">{formatDateTH(p.created_at)}</td>
-                    <td className="p-4 text-white/60">{formatDateTH(p.due_date)}</td>
+                        {secondLine(p) ? <div className="mt-1 text-xs text-white/45">{secondLine(p)}</div> : null}
+                      </td>
 
-                    <td className="p-4">
-                      <div className="flex justify-end gap-2">
-                        {isLeader ? (
-                          <>
-                          <IconBtn title="แก้ไข" variant="edit" onClick={() => onEdit(p)}>
-  ✏️
-</IconBtn>
+                      <td className="p-4">
+                        <Pill tone={p.type === "VIDEO" ? "blue" : "amber"}>{p.type}</Pill>
+                      </td>
 
-<IconBtn title="ลบ" variant="danger" onClick={() => onDelete(p)}>
-  🗑️
-</IconBtn>
-                          </>
-                        ) : (
-                          <span className="text-xs text-white/30">-</span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      <td className="p-4">
+                        <Pill tone={statusTone(p.status) as any}>{p.status}</Pill>
+                      </td>
+
+                      <td className="p-4 text-white/60">
+                        {assigneeName ? <span className="text-white/80">{assigneeName}</span> : <span className="text-white/35">-</span>}
+                      </td>
+
+                      <td className="p-4 text-white/60">{formatDateTH(p.created_at)}</td>
+                      <td className="p-4 text-white/60">{formatDateTH(p.due_date)}</td>
+
+                      <td className="p-4">
+                        <div className="flex justify-end gap-2">
+                          {isLeader ? (
+                            <>
+                              <IconBtn title="แก้ไข" variant="edit" onClick={() => onEdit(p)}>
+                                ✏️
+                              </IconBtn>
+
+                              <IconBtn title="ลบ" variant="danger" onClick={() => onDelete(p)}>
+                                🗑️
+                              </IconBtn>
+                            </>
+                          ) : (
+                            <span className="text-xs text-white/30">-</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -479,6 +490,7 @@ function onEdit(p: Project) {
         onCreated={async () => {
           setCreateOpen(false);
           await loadProjects();
+          await loadMembers();
         }}
       />
 
@@ -493,6 +505,7 @@ function onEdit(p: Project) {
             setEditOpen(false);
             setEditingProject(null);
             await loadProjects();
+            await loadMembers();
           }}
         />
       )}

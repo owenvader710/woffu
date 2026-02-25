@@ -1,6 +1,8 @@
+// app/(app)/projects/CreateProjectModal.tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { buildProjectDescription } from "@/utils/projectMeta";
 
 type Member = {
   id: string;
@@ -92,15 +94,21 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
   const [title, setTitle] = useState("");
   const [brand, setBrand] = useState<string>("IRONTEC");
 
+  const [productCode, setProductCode] = useState<string>("");
+  const [productGroup, setProductGroup] = useState<string>("");
+
   const [assigneeId, setAssigneeId] = useState<string>("");
   const [members, setMembers] = useState<Member[]>([]);
 
   const [startDate, setStartDate] = useState<string>("");
   const [dueDate, setDueDate] = useState<string>("");
 
-  const [videoPriority, setVideoPriority] = useState<(typeof VIDEO_PRIORITIES)[number]>("3ดาว");
-  const [videoPurpose, setVideoPurpose] = useState<(typeof VIDEO_PURPOSES)[number]>("สร้างความต้องการ");
-  const [graphicJobType, setGraphicJobType] = useState<(typeof GRAPHIC_JOB_TYPES)[number]>("ซัพพอร์ต MKT");
+  const [videoPriority, setVideoPriority] =
+    useState<(typeof VIDEO_PRIORITIES)[number]>("3ดาว");
+  const [videoPurpose, setVideoPurpose] =
+    useState<(typeof VIDEO_PURPOSES)[number]>("สร้างความต้องการ");
+  const [graphicJobType, setGraphicJobType] =
+    useState<(typeof GRAPHIC_JOB_TYPES)[number]>("ซัพพอร์ต MKT");
 
   const [description, setDescription] = useState("");
 
@@ -161,7 +169,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
   // เมื่อเปลี่ยน type (ฝ่าย) ให้ reset brand และ assignee
   useEffect(() => {
     setBrand(brands[0] ?? "IRONTEC");
-    setAssigneeId(""); // ล้างค่าผู้รับงานเดิมเมื่อเปลี่ยนฝ่าย
+    setAssigneeId("");
   }, [brands, type]);
 
   async function submit() {
@@ -173,15 +181,28 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
 
     setSubmitting(true);
     try {
+      const startISO = startDate ? new Date(startDate).toISOString() : null;
+      const dueISO = dueDate ? new Date(dueDate).toISOString() : null;
+
+      // ✅ buildProjectDescription(meta, description) — ปลอดภัย ไม่ต้องเพิ่มคอลัมน์ DB
+      const finalDescription =
+        buildProjectDescription(
+          {
+            productCode: productCode.trim() || undefined,
+            productGroup: productGroup.trim() || undefined,
+          },
+          description?.trim() || ""
+        ) || null;
+
       const payload: any = {
         title: t,
         type,
         department: type,
         brand,
         assignee_id: assigneeId || null,
-        start_date: startDate || null,
-        due_date: dueDate || null,
-        description: description?.trim() || null,
+        start_date: startISO,
+        due_date: dueISO,
+        description: finalDescription,
       };
 
       if (type === "VIDEO") {
@@ -212,6 +233,8 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
 
       // reset
       setTitle("");
+      setProductCode("");
+      setProductGroup("");
       setAssigneeId("");
       setStartDate("");
       setDueDate("");
@@ -291,20 +314,48 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
             </div>
           </div>
 
-          {/* Title */}
-          <div className="mb-5">
-            <div className="mb-2 text-sm font-semibold text-white/80">ชื่อโปรเจกต์</div>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
-              placeholder="เช่น ทำคลิปรีวิวลู่วิ่ง"
-            />
+          {/* Code + Title */}
+          <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <div className="mb-2 text-sm font-semibold text-white/80">รหัสสินค้า</div>
+              <input
+                value={productCode}
+                onChange={(e) => setProductCode(e.target.value)}
+                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
+                placeholder="เช่น IT-1234"
+              />
+            </div>
+            <div>
+              <div className="mb-2 text-sm font-semibold text-white/80">ชื่อโปรเจกต์</div>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
+                placeholder="เช่น ทำคลิปรีวิวลู่วิ่ง"
+              />
+            </div>
           </div>
 
-          {/* Brand */}
+          {/* Product Group + Brand */}
           <div className="mb-5">
-            <div className="mb-2 text-sm font-semibold text-white/80">แบรนด์ของสินค้า</div>
+            <div className="mb-2 text-sm font-semibold text-white/80">กลุ่มสินค้า</div>
+            <select
+              value={productGroup}
+              onChange={(e) => setProductGroup(e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+            >
+              <option value="">- เลือกกลุ่มสินค้า (A-H) -</option>
+              {Array.from({ length: 8 }).map((_, idx) => {
+                const v = String.fromCharCode("A".charCodeAt(0) + idx);
+                return (
+                  <option key={v} value={v} className="bg-black">
+                    {v}
+                  </option>
+                );
+              })}
+            </select>
+
+            <div className="mt-4 mb-2 text-sm font-semibold text-white/80">แบรนด์ของสินค้า</div>
             <select
               value={brand}
               onChange={(e) => setBrand(e.target.value)}
@@ -318,7 +369,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
             </select>
           </div>
 
-          {/* Assignee (ปรับปรุงให้กรองตามฝ่ายที่เลือก) */}
+          {/* Assignee */}
           <div className="mb-5">
             <div className="mb-2 text-sm font-semibold text-white/80">ผู้รับงาน (Assignee)</div>
             <select
@@ -328,7 +379,6 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
             >
               <option value="">- ไม่ระบุ -</option>
 
-              {/* แสดงกลุ่มคนตามฝ่ายที่เลือก */}
               {displayAssignees.primaryGroup.length ? (
                 <optgroup label={type}>
                   {displayAssignees.primaryGroup.map((m) => (
@@ -339,7 +389,6 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
                 </optgroup>
               ) : null}
 
-              {/* แสดงกลุ่ม ALL (เช่น คุณขวัญ) เสมอ */}
               {displayAssignees.allGroup.length ? (
                 <optgroup label="ADMIN / ALL">
                   {displayAssignees.allGroup.map((m) => (
@@ -352,9 +401,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
             </select>
 
             {!activeMembers.length ? (
-              <div className="mt-2 text-xs text-white/40">
-                * กำลังโหลดรายชื่อสมาชิก...
-              </div>
+              <div className="mt-2 text-xs text-white/40">* กำลังโหลดรายชื่อสมาชิก...</div>
             ) : null}
           </div>
 
@@ -417,20 +464,20 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
             <div>
               <div className="mb-2 text-sm font-semibold text-white/80">เริ่ม</div>
               <input
-                type="date"
+                type="datetime-local"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78] [color-scheme:dark]"
               />
             </div>
             <div>
               <div className="mb-2 text-sm font-semibold text-white/80">Deadline</div>
-<input
-  type="date"
-  value={startDate}
-  onChange={(e) => setStartDate(e.target.value)}
-  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78] [color-scheme:dark]" 
-/>
+              <input
+                type="datetime-local"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78] [color-scheme:dark]"
+              />
             </div>
           </div>
 

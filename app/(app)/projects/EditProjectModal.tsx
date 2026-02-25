@@ -101,9 +101,14 @@ export default function EditProjectModal({
     }
   }, [open, project]);
 
+  // ✅ UI guard
   if (!open || !project) return null;
 
   async function handleSave() {
+    // ✅ TS guard (สำคัญ) — ทำให้ในฟังก์ชันนี้ project เป็น non-null แน่นอน
+    const p = project;
+    if (!p) return;
+
     setErr("");
     setLoading(true);
 
@@ -125,14 +130,14 @@ export default function EditProjectModal({
         description: finalDescription,
       };
 
-      if (project.type === "VIDEO") {
+      if (p.type === "VIDEO") {
         payload.video_priority = videoPriority;
         payload.video_purpose = videoPurpose;
       } else {
         payload.graphic_job_type = graphicJobType;
       }
 
-      const res = await fetch(`/api/projects/${project.id}`, {
+      const res = await fetch(`/api/projects/${p.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -167,56 +172,106 @@ export default function EditProjectModal({
             </div>
           )}
 
+          {/* รหัส + ชื่อ */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div className="mb-2 text-sm font-semibold text-white/80">รหัสสินค้า</div>
+              <input
+                value={productCode}
+                onChange={(e) => setProductCode(e.target.value)}
+                placeholder="เช่น IT-1234"
+                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm focus:border-[#e5ff78] outline-none"
+              />
+            </div>
+            <div>
+              <div className="mb-2 text-sm font-semibold text-white/80">ชื่อโปรเจกต์</div>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="ชื่อโปรเจกต์"
+                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm focus:border-[#e5ff78] outline-none"
+              />
+            </div>
+          </div>
+
+          {/* กลุ่มสินค้า */}
+          <div>
+            <div className="mb-2 text-sm font-semibold text-white/80">กลุ่มสินค้า</div>
+            <select
+              value={productGroup}
+              onChange={(e) => setProductGroup(e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm focus:border-[#e5ff78] outline-none"
+            >
+              <option value="">- กลุ่มสินค้า -</option>
+              {Array.from({ length: 8 }).map((_, i) => {
+                const v = String.fromCharCode(65 + i);
+                return (
+                  <option key={v} value={v} className="bg-black">
+                    {v}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {/* แบรนด์ */}
+          <div>
+            <div className="mb-2 text-sm font-semibold text-white/80">แบรนด์ของสินค้า</div>
             <input
-              value={productCode}
-              onChange={(e) => setProductCode(e.target.value)}
-              placeholder="รหัสสินค้า"
-              className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm focus:border-[#e5ff78]"
-            />
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="ชื่อโปรเจกต์"
-              className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm focus:border-[#e5ff78]"
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+              placeholder="แบรนด์"
+              className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm focus:border-[#e5ff78] outline-none"
             />
           </div>
 
-          <select
-            value={productGroup}
-            onChange={(e) => setProductGroup(e.target.value)}
-            className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm focus:border-[#e5ff78]"
-          >
-            <option value="">- กลุ่มสินค้า -</option>
-            {Array.from({ length: 8 }).map((_, i) => {
-              const v = String.fromCharCode(65 + i);
-              return (
-                <option key={v} value={v} className="bg-black">
-                  {v}
+          {/* ผู้รับงาน */}
+          <div>
+            <div className="mb-2 text-sm font-semibold text-white/80">ผู้รับงาน (Assignee)</div>
+            <select
+              value={assigneeId}
+              onChange={(e) => setAssigneeId(e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm focus:border-[#e5ff78] outline-none"
+            >
+              <option value="">- ไม่ระบุ -</option>
+              {activeMembers.map((m) => (
+                <option key={m.id} value={m.id} className="bg-black">
+                  {m.display_name || m.id}
                 </option>
-              );
-            })}
-          </select>
+              ))}
+            </select>
+          </div>
 
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="รายละเอียด"
-            className="w-full h-24 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm focus:border-[#e5ff78]"
-          />
-
+          {/* วัน/เวลา */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input
-              type="datetime-local"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm focus:border-[#e5ff78] [color-scheme:dark]"
-            />
-            <input
-              type="datetime-local"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm focus:border-[#e5ff78] [color-scheme:dark]"
+            <div>
+              <div className="mb-2 text-sm font-semibold text-white/80">เริ่ม</div>
+              <input
+                type="datetime-local"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm focus:border-[#e5ff78] outline-none [color-scheme:dark]"
+              />
+            </div>
+            <div>
+              <div className="mb-2 text-sm font-semibold text-white/80">Deadline</div>
+              <input
+                type="datetime-local"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm focus:border-[#e5ff78] outline-none [color-scheme:dark]"
+              />
+            </div>
+          </div>
+
+          {/* รายละเอียด */}
+          <div>
+            <div className="mb-2 text-sm font-semibold text-white/80">รายละเอียด</div>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="รายละเอียด"
+              className="h-28 w-full resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm focus:border-[#e5ff78] outline-none"
             />
           </div>
         </div>

@@ -1,14 +1,17 @@
 // app/api/_supabase.ts
 import type { NextRequest } from "next/server";
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 export async function supabaseFromRequest(_req: NextRequest) {
-  const supabase = createSupabaseServer();
+  // ✅ ต้อง await เพื่อให้ได้ SupabaseClient จริง ๆ (ไม่ใช่ Promise)
+  const supabase = await createSupabaseServer();
   return { supabase };
 }
+
 export async function createSupabaseServer() {
-  const cookieStore = await cookies();
+  // ✅ cookies() เป็น synchronous แต่ใช้ await ได้ ไม่พัง
+  const cookieStore = cookies();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,9 +23,9 @@ export async function createSupabaseServer() {
         },
         setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
           } catch {
             // ป้องกัน error เมื่อเรียกจาก server component
           }

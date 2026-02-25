@@ -1,19 +1,20 @@
 // app/(app)/layout.tsx
 import React from "react";
-import Sidebar from "../components/Sidebar";
-import { ToastProvider } from "@/app/components/ToastStack";
+import { redirect } from "next/navigation";
+import { createSupabaseServerClient } from "@/utils/supabase/server";
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <ToastProvider>
-      <div className="min-h-screen w-full bg-black text-white">
-        <div className="flex min-h-screen w-full">
-          <Sidebar />
-          <main className="flex-1 min-h-screen w-full bg-black p-8">
-            {children}
-          </main>
-        </div>
-      </div>
-    </ToastProvider>
-  );
+export const dynamic = "force-dynamic";
+
+export default async function AppLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase.auth.getUser();
+
+  // ✅ ถ้าไม่ login ให้เด้งไป /login
+  if (!data?.user) redirect("/login");
+
+  return <>{children}</>;
 }

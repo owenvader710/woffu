@@ -12,29 +12,42 @@ function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-function NavLink({
+const LIME = "#e5ff78";
+
+function Item({
   href,
   label,
   active,
-  sub = false,
+  indent = false,
 }: {
   href: string;
   label: string;
   active: boolean;
-  sub?: boolean;
+  indent?: boolean;
 }) {
   return (
     <Link
       href={href}
       className={cn(
-        "block rounded-xl transition",
-        sub ? "px-3 py-2 text-[13px]" : "px-3 py-2.5 text-sm",
-        active
-          ? "bg-white/10 text-white border border-white/10"
-          : "text-white/70 hover:bg-white/8 hover:text-white"
+        "group relative block rounded-xl px-3 py-2 text-[12px] font-semibold tracking-[0.14em] uppercase transition",
+        indent ? "ml-2" : "",
+        active ? "text-black" : "text-white/70 hover:text-white"
       )}
+      style={
+        active
+          ? {
+              background: LIME,
+              boxShadow: "0 10px 28px rgba(229,255,120,0.18)",
+            }
+          : undefined
+      }
     >
-      {label}
+      {/* subtle hover bg */}
+      {!active ? (
+        <span className="pointer-events-none absolute inset-0 rounded-xl bg-white/0 transition group-hover:bg-white/[0.06]" />
+      ) : null}
+
+      <span className="relative z-[1]">{label}</span>
     </Link>
   );
 }
@@ -42,13 +55,12 @@ function NavLink({
 export default function Sidebar() {
   const pathname = usePathname();
   const sp = useSearchParams();
+  const status = sp?.get("status");
 
-  // เปิด/ปิด submenu "Projects"
   const [projectsOpen, setProjectsOpen] = useState(true);
 
-  const projectsSubs: SubItem[] = useMemo(
+  const projectSubs: SubItem[] = useMemo(
     () => [
-      { href: "/projects", label: "All Projects" },
       { href: "/projects?status=TODO", label: "TODO" },
       { href: "/projects?status=IN_PROGRESS", label: "IN_PROGRESS" },
       { href: "/projects?status=BLOCKED", label: "BLOCKED" },
@@ -58,64 +70,82 @@ export default function Sidebar() {
   );
 
   const isProjects = pathname?.startsWith("/projects");
-  const activeStatus = sp?.get("status");
 
   return (
-    <aside className="w-72 shrink-0 border-r border-white/10 bg-black/80 backdrop-blur">
-      <div className="flex h-screen flex-col p-4">
-        {/* Brand */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-          <div className="text-white font-semibold tracking-wide">WOFFU</div>
-          <div className="text-xs text-white/50">Work Tracking</div>
-        </div>
-
-        {/* Nav */}
-        <nav className="mt-4 flex flex-col gap-1">
-          <NavLink href="/dashboard" label="Dashboard" active={pathname === "/dashboard"} />
-
-          {/* Projects + submenu */}
-          <button
-            type="button"
-            onClick={() => setProjectsOpen((v) => !v)}
-            className={cn(
-              "flex items-center justify-between rounded-xl border px-3 py-2.5 text-sm transition",
-              isProjects ? "border-white/10 bg-white/10 text-white" : "border-transparent text-white/70 hover:bg-white/8 hover:text-white"
-            )}
-          >
-            <span>Projects</span>
-            <span className={cn("text-xs text-white/50 transition", projectsOpen ? "rotate-180" : "")}>
-              ▾
-            </span>
-          </button>
-
-          {projectsOpen ? (
-            <div className="ml-2 mt-1 flex flex-col gap-1 border-l border-white/10 pl-3">
-              {projectsSubs.map((s) => {
-                const isActive =
-                  s.href === "/projects"
-                    ? isProjects && !activeStatus
-                    : isProjects && s.href.includes(`status=${activeStatus ?? ""}`);
-
-                return <NavLink key={s.href} href={s.href} label={s.label} active={!!isActive} sub />;
-              })}
+    <aside className="w-[260px] shrink-0 p-4">
+      <div
+        className="h-[calc(100vh-32px)] rounded-[28px] border border-white/10 bg-black/70 backdrop-blur-xl"
+        style={{
+          boxShadow: "0 30px 80px rgba(0,0,0,0.55)",
+        }}
+      >
+        <div className="flex h-full flex-col p-5">
+          {/* Brand */}
+          <div className="mb-6">
+            <div
+              className="text-[18px] font-extrabold tracking-[0.22em]"
+              style={{ color: LIME }}
+            >
+              WOFFU
             </div>
-          ) : null}
+            <div className="mt-1 text-[11px] text-white/40">Work Tracking</div>
+          </div>
 
-          <NavLink href="/my-work" label="My Work" active={pathname === "/my-work"} />
-          <NavLink href="/members" label="Members" active={pathname === "/members"} />
-          <NavLink href="/approvals" label="Approvals" active={pathname === "/approvals"} />
-        </nav>
+          {/* Nav */}
+          <nav className="flex flex-col gap-2">
+            <Item href="/dashboard" label="Dashboard" active={pathname === "/dashboard"} />
 
-        {/* Bottom */}
-        <div className="mt-auto pt-4">
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-white/50">Account</span>
-              <span className="text-xs text-white/35">© {new Date().getFullYear()}</span>
-            </div>
+            {/* Projects (main) */}
+            <button
+              type="button"
+              onClick={() => setProjectsOpen((v) => !v)}
+              className={cn(
+                "text-left",
+                // ให้ปุ่มหลักหน้าตาเหมือน Item
+                "relative rounded-xl px-3 py-2 text-[12px] font-semibold tracking-[0.14em] uppercase transition",
+                isProjects ? "text-black" : "text-white/70 hover:text-white"
+              )}
+              style={
+                isProjects
+                  ? { background: LIME, boxShadow: "0 10px 28px rgba(229,255,120,0.18)" }
+                  : undefined
+              }
+            >
+              {!isProjects ? (
+                <span className="pointer-events-none absolute inset-0 rounded-xl bg-white/0 transition hover:bg-white/[0.06]" />
+              ) : null}
 
-            <div className="mt-3">
-              {/* ปุ่มออกจากระบบ "ล่างสุด" */}
+              <span className="relative z-[1] flex items-center justify-between">
+                <span>Project</span>
+                <span className={cn("text-[10px] opacity-70 transition", projectsOpen ? "rotate-180" : "")}>
+                  ▾
+                </span>
+              </span>
+            </button>
+
+            {/* Sub menu */}
+            {projectsOpen ? (
+              <div className="mt-1 flex flex-col gap-2">
+                <Item href="/projects" label="Projects" active={isProjects && !status} indent />
+
+                {projectSubs.map((s) => {
+                  const sStatus = s.href.split("status=")[1];
+                  const active = isProjects && status === sStatus;
+                  return <Item key={s.href} href={s.href} label={s.label} active={active} indent />;
+                })}
+              </div>
+            ) : null}
+
+            <Item href="/my-work" label="My Work" active={pathname === "/my-work"} />
+            <Item href="/members" label="Members" active={pathname === "/members"} />
+            <Item href="/approvals" label="Approvals" active={pathname === "/approvals"} />
+          </nav>
+
+          {/* Bottom */}
+          <div className="mt-auto pt-6">
+            <div className="h-px w-full bg-white/10" />
+            <div className="mt-4">
+              {/* ปุ่มออกจากระบบล่างสุด */}
               <LogoutButton />
             </div>
           </div>

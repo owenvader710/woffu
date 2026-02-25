@@ -9,7 +9,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { id } = await ctx.params;
   if (badId(id)) return NextResponse.json({ error: "Invalid approval id" }, { status: 400 });
 
-  // ✅ สำคัญ: ต้อง await ให้ได้ SupabaseClient ก่อน
   const { supabase } = await supabaseFromRequest(req);
 
   const { data: authData, error: authErr } = await supabase.auth.getUser();
@@ -27,23 +26,30 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // ✅ แก้ไข: เลือกคอลัมน์ request_status
   const { data: reqRow, error: reqErr } = await supabase
     .from("status_change_requests")
-    .select("id, project_id, from_status, to_status, status, requested_by")
+    .select("id, project_id, from_status, to_status, request_status, requested_by") 
     .eq("id", id)
     .single();
+
   if (reqErr) return NextResponse.json({ error: reqErr.message }, { status: 500 });
   if (!reqRow) return NextResponse.json({ error: "Request not found" }, { status: 404 });
-  if (String(reqRow.status).toUpperCase() !== "PENDING") {
-    return NextResponse.json({ error: "Request is not pending" }, { status: 400 });
+
+  // ✅ แก้ไข: เช็คแบบ Case-insensitive และรองรับค่า NULL
+  const currentStatus = String(reqRow.request_status || "PENDING").toUpperCase();
+  if (currentStatus !== "PENDING") {
+    return NextResponse.json({ error: `Request is not pending (Current: ${currentStatus})` }, { status: 400 });
   }
 
   const now = new Date().toISOString();
 
+  // ✅ แก้ไข: Update คอลัมน์ request_status
   const { error: updReqErr } = await supabase
     .from("status_change_requests")
-    .update({ status: "APPROVED", approved_by: user.id, approved_at: now })
+    .update({ request_status: "APPROVED", approved_by: user.id, approved_at: now })
     .eq("id", id);
+    
   if (updReqErr) return NextResponse.json({ error: updReqErr.message }, { status: 500 });
 
   const { error: updProjErr } = await supabase

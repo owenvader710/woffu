@@ -2,13 +2,15 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer } from "../_supabase";
 
+const SELECT_FIELDS =
+  "id,code,title,type,status,created_at,start_date,due_date,brand,video_priority,video_purpose,graphic_job_type,assignee_id,description,department,created_by";
+
 export async function GET() {
   const supabase = await createSupabaseServer();
 
-  // ✅ ดึงทุกคอลัมน์ (กันชื่อคอลัมน์รหัสไม่ตรงกับที่ UI คาด)
   const { data, error } = await supabase
     .from("projects")
-    .select("*")
+    .select(SELECT_FIELDS)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -30,13 +32,21 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
 
+  // ✅ กัน code เป็น string แปลกๆ
+  const cleanCode =
+    typeof body.code === "string" ? body.code.trim() : body.code ?? null;
+
   const insertRow = {
     ...body,
-    created_by: user.id, // ✅ กัน null created_by
+    code: cleanCode || null,
+    created_by: user.id,
   };
 
-  // ✅ คืนค่าทุกคอลัมน์ (รวมรหัส)
-  const { data, error } = await supabase.from("projects").insert(insertRow).select("*").single();
+  const { data, error } = await supabase
+    .from("projects")
+    .insert(insertRow)
+    .select(SELECT_FIELDS)
+    .single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

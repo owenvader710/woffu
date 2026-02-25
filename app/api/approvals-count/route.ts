@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServer } from "@/app/api/_supabase";
 
 export async function GET(_req: NextRequest) {
-  const supabase = createSupabaseServer();
+  const supabase = await createSupabaseServer();
 
   // ต้อง login
   const { data: authData, error: authErr } = await supabase.auth.getUser();

@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     // Admin invite
     const admin = supabaseAdmin();
     const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/login`,
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/login`,
       data: {
         display_name,
         department,

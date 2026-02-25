@@ -11,6 +11,15 @@ function normalizeSameSite(v: unknown): SameSite | undefined {
 }
 
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // ✅ บังคับ root ให้ไป /login เสมอ (กันหน้า template โผล่)
+  if (pathname === "/") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
   let response = NextResponse.next({ request: { headers: request.headers } });
 
   const supabase = createServerClient(
@@ -39,23 +48,21 @@ export async function middleware(request: NextRequest) {
   const { data } = await supabase.auth.getUser();
   const user = data?.user;
 
-  const { pathname } = request.nextUrl;
-
-  // ปล่อยให้ผ่าน: login + api + ไฟล์ static
+  // public routes
   const isPublic =
     pathname.startsWith("/login") ||
     pathname.startsWith("/api") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico";
 
-  // login แล้วเข้า /login → ไป dashboard
+  // ✅ login แล้วเข้า /login → เด้งไป /dashboard
   if (user && pathname.startsWith("/login")) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 
-  // ยังไม่ login แล้วพยายามเข้าหน้าระบบ → ไป login
+  // ✅ ยังไม่ login แล้วพยายามเข้าหน้าในระบบ → เด้งไป /login
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";

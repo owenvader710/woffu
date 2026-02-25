@@ -1,21 +1,17 @@
+// app/(app)/dashboard/layout.tsx
 import Link from "next/link";
 import LogoutButton from "../../components/LogoutButton";
+import { createSupabaseServerClient } from "@/utils/supabase/server";
 
-async function getMe() {
-  // ✅ ห้ามใช้ http://localhost:3000 บน Vercel
-  // ใช้ relative URL แทน (Next จะเรียก route handler ภายในให้เอง)
-  const res = await fetch("/api/me", { cache: "no-store" });
-
-  if (!res.ok) return null;
-  return res.json();
-}
+export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const data = await getMe();
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase.auth.getUser();
   const user = data?.user;
 
   return (

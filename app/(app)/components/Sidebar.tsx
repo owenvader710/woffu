@@ -82,7 +82,7 @@ export default function Sidebar() {
         <div className="flex h-full flex-col p-5">
           {/* Brand */}
           <div className="mb-6">
-            <div className="text-[25px] font-extrabold tracking-[0.22em]" style={{ color: LIME }}>
+            <div className="text-[20px] font-extrabold tracking-[0.22em]" style={{ color: LIME }}>
               WOFFU OS
             </div>
             <div className="mt-1 text-[15px] text-white/40">Production Workflow</div>

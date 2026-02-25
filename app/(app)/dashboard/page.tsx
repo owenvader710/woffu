@@ -169,8 +169,7 @@ export default function DashboardPage() {
   }, [isLeader]);
 
   return (
-    <div className="min-w-0 w-full bg-black text-white">
-{/* ✅ เต็มหน้าจอ: ตัด mx-auto + max-w ออก */}
+    <div className="min-h-screen w-full bg-black text-white">
     <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
         {/* Header */}
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">

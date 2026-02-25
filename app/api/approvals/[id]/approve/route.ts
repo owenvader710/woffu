@@ -10,7 +10,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (badId(id)) return NextResponse.json({ error: "Invalid approval id" }, { status: 400 });
 
   // ✅ สำคัญ: ต้อง await ให้ได้ SupabaseClient ก่อน
-  const supabase = await supabaseFromRequest(req);
+  const { supabase } = await supabaseFromRequest(req);
 
   const { data: authData, error: authErr } = await supabase.auth.getUser();
   if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });

@@ -1,84 +1,66 @@
+// app/login/page.tsx
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabaseBrowser } from "@/utils/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string>("");
-  const [msg, setMsg] = useState<string>("");
+  const [err, setErr] = useState<string | null>(null);
 
-  async function onLogin(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setErr("");
-    setMsg("");
-
-    const e2 = email.trim();
-    if (!e2) return setErr("กรุณาใส่อีเมล");
-    if (!password) return setErr("กรุณาใส่รหัสผ่าน");
-
+    setErr(null);
     setLoading(true);
+
     try {
-      const { error } = await supabaseBrowser.auth.signInWithPassword({
-        email: e2,
-        password,
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
 
-      if (error) {
-        setErr(error.message);
-        return;
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error || "Login failed");
       }
 
-      setMsg("เข้าสู่ระบบสำเร็จ");
-      router.replace("/dashboard");
+      router.push("/dashboard");
       router.refresh();
-    } catch (ex: any) {
-      setErr(ex?.message || "Login failed");
+    } catch (e: any) {
+      setErr(e?.message || "Login failed");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen p-10">
-      <div className="mx-auto w-full max-w-md rounded-2xl border p-6">
-        <h1 className="text-2xl font-bold">เข้าสู่ระบบ</h1>
-        <p className="mt-1 text-sm text-gray-600">WOFFU</p>
+    <div className="min-h-screen bg-black text-white flex items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg">
+        <div className="mb-5">
+          <div className="text-2xl font-semibold">WOFFU</div>
+          <div className="text-sm text-white/60">Sign in to continue</div>
+        </div>
 
-        {msg && (
-          <div className="mt-4 rounded-xl border border-green-300 bg-green-50 p-3 text-sm text-green-800">
-            {msg}
-          </div>
-        )}
-
-        {err && (
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-            {err}
-          </div>
-        )}
-
-        <form className="mt-5 space-y-3" onSubmit={onLogin}>
-          <div>
-            <label className="text-sm font-medium">อีเมล</label>
+        <form onSubmit={onSubmit} className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs text-white/60">Email</label>
             <input
-              className="mt-1 w-full rounded-xl border px-4 py-2 text-sm"
+              className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 outline-none focus:border-white/30"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="email@example.com"
+              placeholder="name@email.com"
               autoComplete="email"
             />
           </div>
 
-          <div>
-            <label className="text-sm font-medium">รหัสผ่าน</label>
+          <div className="space-y-1">
+            <label className="text-xs text-white/60">Password</label>
             <input
-              className="mt-1 w-full rounded-xl border px-4 py-2 text-sm"
+              className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 outline-none focus:border-white/30"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
@@ -87,14 +69,23 @@ export default function LoginPage() {
             />
           </div>
 
+          {err ? (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+              {err}
+            </div>
+          ) : null}
+
           <button
-            type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-black px-4 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
+            className="w-full rounded-xl bg-white text-black py-2 font-semibold disabled:opacity-60"
           >
-            {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
+            {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
+
+        <div className="mt-4 text-xs text-white/40">
+          ถ้าเข้าระบบไม่ได้ ให้ติดต่อแอดมินเพื่อ invite
+        </div>
       </div>
     </div>
   );

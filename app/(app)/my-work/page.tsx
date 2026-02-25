@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRealtimeMyWork } from "./useRealtimeMyWork";
+import StatusButtons from "./StatusButtons";
 
 type Status = "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
 
@@ -136,6 +137,7 @@ export default function MyWorkPage() {
                       href={`/projects/${item.id}`}
                       className="font-semibold text-white underline underline-offset-4"
                     >
+                    
                       {item.title}
                     </Link>
                   </td>

@@ -1,20 +1,22 @@
 // app/(app)/layout.tsx
 import React from "react";
-import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "@/utils/supabase/server";
+import Sidebar from "./components/Sidebar";
 
 export const dynamic = "force-dynamic";
 
-export default async function AppLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.auth.getUser();
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-black text-white">
+      <div className="flex">
+        <Sidebar />
 
-  // ✅ ถ้าไม่ login ให้เด้งไป /login
-  if (!data?.user) redirect("/login");
-
-  return <>{children}</>;
+        <div className="flex-1">
+          {/* top spacing + container */}
+          <div className="mx-auto w-full max-w-7xl px-4 py-6 md:px-8">
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

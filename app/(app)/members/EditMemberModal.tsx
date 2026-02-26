@@ -33,6 +33,7 @@ function toDateInputValue(iso?: string | null) {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
+
   return `${yyyy}-${mm}-${dd}`;
 }
 
@@ -45,7 +46,7 @@ export default function EditMemberModal({
   open: boolean;
   member: Member | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: () => Promise<void> | void; // ✅ รองรับ async
 }) {
   const [displayName, setDisplayName] = useState("");
   const [department, setDepartment] = useState<"VIDEO" | "GRAPHIC" | "ALL">("ALL");
@@ -106,7 +107,8 @@ export default function EditMemberModal({
       const json = await safeJson(res);
       if (!res.ok) throw new Error((json && (json.error || json.message)) || `Save failed (${res.status})`);
 
-      onSaved();
+      await onSaved(); // ✅ รองรับ async
+      onClose();       // ✅ บันทึกแล้วปิดโมดัล (พฤติกรรมเดิมที่ควรเป็น)
     } catch (e: any) {
       setErr(e?.message || "Save failed");
     } finally {
@@ -182,7 +184,7 @@ export default function EditMemberModal({
               <input
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full rounded-2xl border border-white/10 bgblack/30 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none focus:border-[#e5ff78]"
+                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none focus:border-[#e5ff78]"
                 placeholder="เบอร์โทร"
               />
             </div>
@@ -210,7 +212,12 @@ export default function EditMemberModal({
 
             <div className="md:col-span-2">
               <label className="inline-flex items-center gap-2 text-sm text-white/80">
-                <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                  className="h-4 w-4 accent-[#e5ff78]" // ✅ ให้เข้าธีม
+                />
                 ACTIVE
               </label>
             </div>

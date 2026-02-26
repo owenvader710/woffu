@@ -1,169 +1,359 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { createPortal } from "react-dom";
+import { ChevronDown } from "lucide-react";
 import { useRealtimeMyWork } from "./useRealtimeMyWork";
-import StatusDropdown, { Status } from "./StatusDropdown";
+
+type Status = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "BLOCKED";
+type StatusFilter = "ALL" | Status;
 
 type WorkItem = {
   id: string;
   title: string;
-  type: "VIDEO" | "GRAPHIC";
-  department: "VIDEO" | "GRAPHIC" | "ALL";
+  department: "VIDEO" | "GRAPHIC";
   status: Status;
-  created_at: string;
-  due_date: string | null;
-
-  brand: string | null;
-  video_priority: "2" | "3" | "5" | "SPECIAL" | null;
-  video_purpose: string | null;
-  graphic_job_type: string | null;
+  deadline?: string | null;
+  created_at?: string;
+  requester_name?: string | null;
+  assignee_name?: string | null;
 };
 
-function formatDateTH(iso?: string | null) {
-  if (!iso) return "-";
-  return new Date(iso).toLocaleDateString("th-TH", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-  });
+function cn(...xs: Array<string | false | null | undefined>) {
+  return xs.filter(Boolean).join(" ");
 }
 
-function Pill({
-  children,
-  tone = "neutral",
+function formatThaiDate(d?: string | null) {
+  if (!d) return "-";
+  try {
+    const dt = new Date(d);
+    return dt.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric" });
+  } catch {
+    return d;
+  }
+}
+
+/** ✅ Dropdown แบบ “ลอย” ไม่โดน overflow ตัด (ใช้ portal) */
+function StatusDropdown({
+  value,
+  onChange,
+  disabled,
 }: {
-  children: React.ReactNode;
-  tone?: "neutral" | "green" | "amber" | "red" | "blue";
+  value: Status;
+  onChange: (next: Status) => Promise<void> | void;
+  disabled?: boolean;
 }) {
-  const cls =
-    tone === "green"
-      ? "border-green-500/30 bg-green-500/10 text-green-200"
-      : tone === "amber"
-      ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
-      : tone === "red"
-      ? "border-red-500/30 bg-red-500/10 text-red-200"
-      : tone === "blue"
-      ? "border-sky-500/30 bg-sky-500/10 text-sky-200"
-      : "border-white/10 bg-white/5 text-white/70";
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  const items: Array<{ key: Status; label: string }> = [
+    { key: "PENDING", label: "PENDING" },
+    { key: "IN_PROGRESS", label: "IN_PROGRESS" },
+    { key: "COMPLETED", label: "COMPLETED" },
+    { key: "BLOCKED", label: "BLOCKED" },
+  ];
+
+  function calcPos() {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({
+      top: r.bottom + 8,
+      left: r.right, // anchor right
+      width: r.width,
+    });
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    calcPos();
+
+    const onScrollOrResize = () => calcPos();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    window.addEventListener("keydown", onKey);
+
+    return () => {
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const badgeCls =
+    value === "IN_PROGRESS"
+      ? "border-blue-500/30 bg-blue-500/15 text-blue-100"
+      : value === "COMPLETED"
+      ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-100"
+      : value === "BLOCKED"
+      ? "border-red-500/30 bg-red-500/15 text-red-100"
+      : "border-white/10 bg-white/5 text-white/80";
 
   return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] ${cls}`}>
-      {children}
-    </span>
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "inline-flex items-center justify-between gap-2 rounded-2xl border px-4 py-2 text-xs font-extrabold shadow-[0_20px_60px_rgba(0,0,0,0.35)]",
+          badgeCls,
+          disabled ? "opacity-60 pointer-events-none" : "hover:opacity-95"
+        )}
+      >
+        <span>{value}</span>
+        <ChevronDown size={14} className={cn(open ? "rotate-180 transition" : "transition")} />
+      </button>
+
+      {open && pos
+        ? createPortal(
+            <>
+              {/* backdrop (คลิกนอกเพื่อปิด) */}
+              <div
+                className="fixed inset-0 z-[90]"
+                onClick={() => setOpen(false)}
+                aria-hidden="true"
+              />
+
+              {/* menu */}
+              <div
+                className="fixed z-[100] w-[260px] overflow-hidden rounded-2xl border border-white/10 bg-[#0b0b0b] shadow-[0_30px_120px_rgba(0,0,0,0.75)]"
+                style={{
+                  top: pos.top,
+                  left: pos.left,
+                  transform: "translateX(-100%)",
+                }}
+              >
+                <div className="px-4 py-3 text-xs font-semibold tracking-widest text-white/45">
+                  Change status
+                </div>
+
+                <div className="border-t border-white/10" />
+
+                <div className="py-2">
+                  {items.map((it) => {
+                    const active = it.key === value;
+                    return (
+                      <button
+                        key={it.key}
+                        type="button"
+                        className={cn(
+                          "w-full px-4 py-2.5 text-left text-sm",
+                          active ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/5"
+                        )}
+                        onClick={async () => {
+                          setOpen(false);
+                          await onChange(it.key);
+                        }}
+                      >
+                        {it.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>,
+            document.body
+          )
+        : null}
+    </>
   );
 }
 
-function statusTone(s: Status) {
-  if (s === "TODO") return "neutral";
-  if (s === "IN_PROGRESS") return "blue";
-  if (s === "BLOCKED") return "red";
-  return "green";
-}
-
 export default function MyWorkPage() {
-  const { items, loading, error, refresh } = useRealtimeMyWork();
+  const { items, loading, error, refresh } = useRealtimeMyWork() as {
+    items: WorkItem[];
+    loading: boolean;
+    error: string | null;
+    refresh: () => void;
+  };
+
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  async function changeStatus(id: string, status: Status) {
-    try {
-      setUpdatingId(id);
+  const counts = useMemo(() => {
+    const c: Record<StatusFilter, number> = {
+      ALL: 0,
+      PENDING: 0,
+      IN_PROGRESS: 0,
+      COMPLETED: 0,
+      BLOCKED: 0,
+    };
+    for (const it of items || []) {
+      c.ALL += 1;
+      c[it.status] += 1;
+    }
+    return c;
+  }, [items]);
 
-      await fetch(`/api/projects/${id}`, {
+  const filtered = useMemo(() => {
+    const arr = items || [];
+    if (statusFilter === "ALL") return arr;
+    return arr.filter((x) => x.status === statusFilter);
+  }, [items, statusFilter]);
+
+  async function changeStatus(id: string, next: Status) {
+    setUpdatingId(id);
+    try {
+      const res = await fetch(`/api/my-work/${encodeURIComponent(id)}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status: next }),
       });
-
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error || "Update failed");
+      }
       refresh();
+    } catch (e: any) {
+      alert(e?.message || "Update failed");
     } finally {
       setUpdatingId(null);
     }
   }
 
+  const StatusTab = ({
+    label,
+    value,
+  }: {
+    label: string;
+    value: StatusFilter;
+  }) => {
+    const active = statusFilter === value;
+    return (
+      <button
+        type="button"
+        onClick={() => setStatusFilter(value)}
+        className={cn(
+          "rounded-2xl border px-4 py-2 text-xs font-extrabold transition",
+          active
+            ? "border-white/10 bg-white text-black"
+            : "border-white/10 bg-transparent text-white/70 hover:bg-white/10 hover:text-white"
+        )}
+      >
+        {label} <span className={cn(active ? "text-black/70" : "text-white/40")}>({counts[value] || 0})</span>
+      </button>
+    );
+  };
+
   return (
-    <div>
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
-          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-white">งานของฉัน</h1>
-          <div className="mt-2 text-sm text-white/60">รายการทั้งหมด: {(items as any[]).length}</div>
+    <div className="w-full bg-black text-white">
+      <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
+            <h1 className="mt-2 text-4xl font-extrabold tracking-tight text-white">งานของฉัน</h1>
+            <div className="mt-2 text-sm text-white/50">รายการทั้งหมด: {filtered.length}</div>
+          </div>
+
+          <button
+            onClick={refresh}
+            disabled={loading}
+            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50"
+          >
+            รีเฟรช
+          </button>
         </div>
 
-        <button
-          onClick={refresh}
-          className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
-        >
-          รีเฟรช
-        </button>
-      </div>
+        {/* ✅ Status filter แบบเดียวกับหน้า Projects */}
+        <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusTab label="ALL" value="ALL" />
+            <StatusTab label="PENDING" value="PENDING" />
+            <StatusTab label="IN_PROGRESS" value="IN_PROGRESS" />
+            <StatusTab label="COMPLETED" value="COMPLETED" />
+            <StatusTab label="BLOCKED" value="BLOCKED" />
+          </div>
+        </div>
 
-      {/* Table */}
-      <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 overflow-x-auto">
-        <table className="w-full text-sm text-white/80">
-          <thead className="bg-white/5 text-xs text-white/50">
-            <tr className="text-left">
-              <th className="p-4">งาน</th>
-              <th className="p-4">ฝ่าย</th>
-              <th className="p-4">สถานะ</th>
-              <th className="p-4">Deadline</th>
-              <th className="p-4 text-right">จัดการ</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={5} className="p-6 text-white/40">
-                  กำลังโหลด...
-                </td>
-              </tr>
-            )}
-
-            {!loading &&
-              !error &&
-              (items as WorkItem[]).map((item) => (
-                <tr key={item.id} className="border-t border-white/10 hover:bg-white/[0.06]">
-                  <td className="p-4">
-                    <Link
-                      href={`/projects/${item.id}`}
-                      className="font-semibold text-white underline underline-offset-4"
-                    >
-                      {item.title}
-                    </Link>
-                  </td>
-
-                  <td className="p-4">
-                    <Pill tone={item.type === "VIDEO" ? "blue" : "amber"}>{item.type}</Pill>
-                  </td>
-
-                  <td className="p-4">
-                    <Pill tone={statusTone(item.status)}>{item.status}</Pill>
-                  </td>
-
-                  <td className="p-4 text-white/60">{formatDateTH(item.due_date)}</td>
-
-                  {/* ✅ Dropdown เปลี่ยนสถานะ (มีสี) */}
-                  <td className="p-4 text-right">
-                    <StatusDropdown
-                      value={item.status}
-                      disabled={updatingId === item.id}
-                      onChange={(next) => changeStatus(item.id, next)}
-                    />
-                  </td>
+        {loading ? (
+          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">
+            กำลังโหลด...
+          </div>
+        ) : error ? (
+          <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
+            {error}
+          </div>
+        ) : (
+          <div className="mt-6 overflow-x-auto rounded-[28px] border border-white/10 bg-white/5">
+            <table className="min-w-[980px] w-full text-sm">
+              <thead className="text-white/60">
+                <tr className="border-b border-white/10">
+                  <th className="px-6 py-4 text-left font-semibold">งาน</th>
+                  <th className="px-6 py-4 text-left font-semibold">ฝ่าย</th>
+                  <th className="px-6 py-4 text-left font-semibold">สถานะ</th>
+                  <th className="px-6 py-4 text-left font-semibold">Deadline</th>
+                  <th className="px-6 py-4 text-right font-semibold">จัดการ</th>
                 </tr>
-              ))}
+              </thead>
 
-            {!loading && !error && (items as any[]).length === 0 && (
-              <tr>
-                <td colSpan={5} className="p-6 text-white/40">
-                  ยังไม่มีงาน
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td className="px-6 py-6 text-white/50" colSpan={5}>
+                      ไม่พบรายการ
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((it) => (
+                    <tr key={it.id} className="border-b border-white/5 last:border-b-0">
+                      <td className="px-6 py-5">
+                        <Link
+                          href={`/projects/${it.id}`}
+                          className="font-extrabold text-white hover:underline"
+                        >
+                          {it.title}
+                        </Link>
+                        <div className="mt-1 text-xs text-white/35">
+                          {it.requester_name ? `ผู้ขอ: ${it.requester_name}` : null}
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-5">
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-full border px-3 py-1 text-xs font-extrabold",
+                            it.department === "VIDEO"
+                              ? "border-blue-500/30 bg-blue-500/10 text-blue-100"
+                              : "border-amber-500/30 bg-amber-500/10 text-amber-100"
+                          )}
+                        >
+                          {it.department}
+                        </span>
+                      </td>
+
+                      <td className="px-6 py-5">
+                        <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-extrabold text-white/85">
+                          {it.status}
+                        </span>
+                      </td>
+
+                      <td className="px-6 py-5 text-white/85">
+                        {formatThaiDate(it.deadline || null)}
+                      </td>
+
+                      <td className="px-6 py-5 text-right">
+                        {/* ✅ Dropdown แบบรูปที่ 3 */}
+                        <StatusDropdown
+                          value={it.status}
+                          disabled={updatingId === it.id}
+                          onChange={(next) => changeStatus(it.id, next)}
+                        />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

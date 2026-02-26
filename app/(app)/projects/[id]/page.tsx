@@ -1,10 +1,23 @@
 // app/(app)/projects/[id]/page.tsx
-import React from "react";
 import ProjectDetailClient from "./ProjectDetailClient";
 
 export const dynamic = "force-dynamic";
 
-// ✅ ใช้หน้ารายละเอียดแบบ client ที่มีครบ: ข้อมูล, ประวัติ, ขอเปลี่ยนสถานะ, แก้ไข ฯลฯ
-export default function ProjectDetailPage({ params }: { params: { id: string } }) {
-  return <ProjectDetailClient projectId={params.id} />;
+export default function ProjectDetailPage({
+  params,
+}: {
+  params: { id?: string };
+}) {
+  const projectId = params?.id;
+
+  // กันเคสแปลก ๆ ที่ param หาย
+  if (!projectId) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
+        Missing project id (route)
+      </div>
+    );
+  }
+
+  return <ProjectDetailClient projectId={projectId} />;
 }

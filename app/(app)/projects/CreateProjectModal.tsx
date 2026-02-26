@@ -50,7 +50,7 @@ const GRAPHIC_BRANDS = [
 
 const PRODUCT_GROUPS = ["A", "B", "C", "D", "E", "F", "G", "H"] as const;
 
-const VIDEO_PRIORITIES = ["5ดาว", "4ดาว", "3ดาว", "2ดาว", "1ดาว", "SPECIAL"] as const;
+const VIDEO_PRIORITIES = ["5ดาว", "3ดาว", "2ดาว", "SPECIAL"] as const;
 
 const VIDEO_PURPOSES = [
   "สร้างความต้องการ",

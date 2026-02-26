@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
       .from("projects")
       .select(`
         id,
-        code,  -- ✅ เพิ่มบรรทัดนี้ (ถ้าคอลัมน์จริงชื่ออื่น บอกผม เดี๋ยวแก้ให้)
+        code,
         title, type, department, status, created_at, start_date, due_date,
         assignee_id, created_by,
         brand, video_priority, video_purpose, graphic_job_type

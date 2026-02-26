@@ -25,8 +25,11 @@ function cn(...xs: Array<string | false | null | undefined>) {
 
 export default function Sidebar() {
   const pathname = usePathname();
-
   const [me, setMe] = useState<MeProfile | null>(null);
+  
+  // ข้อ 2: เปลี่ยนมาใช้ State เพื่อให้กดเปิด-ปิด Dropdown ได้
+  const [isProjectOpen, setIsProjectOpen] = useState(false);
+
   const isLeader = useMemo(() => me?.role === "LEADER" && me?.is_active !== false, [me]);
 
   useEffect(() => {
@@ -42,97 +45,103 @@ export default function Sidebar() {
     })();
   }, []);
 
-  const projectOpen = useMemo(() => {
-    return (
+  // ให้ Project Open อัตโนมัติถ้าอยู่ที่หน้าลูกข่าย
+  useEffect(() => {
+    if (
       pathname?.startsWith("/projects") ||
       pathname === "/completed" ||
-      pathname === "/blocked" ||
-      pathname?.startsWith("/completed") ||
-      pathname?.startsWith("/blocked")
-    );
+      pathname === "/blocked"
+    ) {
+      setIsProjectOpen(true);
+    }
   }, [pathname]);
 
+  // ข้อ 1: ปรับ px-4 py-3 และ text-base เพื่อให้เมนูใหญ่และดูง่ายขึ้น
   const linkCls = (active: boolean) =>
     cn(
-      "flex items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition",
-      active ? "bg-[#e5ff78] text-black" : "text-white/75 hover:bg-white/10 hover:text-white"
+      "flex items-center justify-between rounded-2xl px-4 py-3 text-base font-bold tracking-wide transition-all duration-200",
+      active ? "bg-[#e5ff78] text-black shadow-lg shadow-[#e5ff78]/20" : "text-white/70 hover:bg-white/10 hover:text-white"
     );
 
   const subLinkCls = (active: boolean) =>
     cn(
-      "ml-3 flex items-center rounded-xl px-3 py-2 text-xs font-semibold tracking-widest transition",
-      active ? "bg-white text-black" : "text-white/55 hover:bg-white/10 hover:text-white"
+      "ml-4 flex items-center rounded-xl px-4 py-2.5 text-xs font-black tracking-[0.15em] transition-all",
+      active ? "bg-white/15 text-[#e5ff78]" : "text-white/40 hover:text-white/80"
     );
 
   return (
-    <aside className={cn("sticky top-0 h-screen shrink-0", "w-[300px] xl:w-[320px]", "p-5")}>
-      <div className="flex h-full flex-col rounded-[34px] border border-white/10 bg-gradient-to-b from-white/5 to-white/[0.02] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+    // ข้อ 4: sticky top-0 h-screen ทำให้ Sidebar ล็อกอยู่กับที่เวลาเลื่อนหน้าจอ
+    <aside className="sticky top-0 h-screen w-[320px] shrink-0 p-5">
+      <div className="flex h-full flex-col rounded-[40px] border border-white/10 bg-[#0a0a0a] bg-gradient-to-b from-white/5 to-transparent shadow-2xl">
+        
         {/* Brand */}
-        <div className="px-8 pt-8">
-          <div className="text-2xl font-extrabold tracking-widest text-[#e5ff78]">WOFFU OS</div>
-          <div className="mt-1 text-xs text-white/45">Production Workflow</div>
+        <div className="px-10 pt-12">
+          <div className="text-3xl font-black tracking-tighter text-[#e5ff78]">WOFFU OS</div>
+          <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.3em] text-white/30">
+            Production Workflow
+          </div>
         </div>
 
         {/* Nav */}
-        <nav className="mt-13flex-1 px-4">
+        {/* ข้อ 1 & 3: mt-12 ขยับเมนูลงมา และ flex-1 เพื่อดันปุ่มออกจากระบบลงล่าง */}
+        <nav className="mt-12 flex-1 space-y-2 px-6 overflow-y-auto">
+          <Link href="/dashboard" className={linkCls(pathname === "/dashboard")}>
+            <span>DASHBOARD</span>
+          </Link>
+
+          {/* PROJECT Dropdown */}
           <div className="space-y-1">
-            <Link href="/dashboard" className={linkCls(pathname === "/dashboard")}>
-              <span>DASHBOARD</span>
-            </Link>
+            <button
+              onClick={() => setIsProjectOpen(!isProjectOpen)}
+              className={cn(
+                linkCls(pathname?.startsWith("/projects") || pathname === "/completed" || pathname === "/blocked"),
+                "w-full text-left"
+              )}
+            >
+              <span>PROJECT</span>
+              <span className="text-[10px] opacity-50">{isProjectOpen ? "▲" : "▼"}</span>
+            </button>
 
-            {/* PROJECT */}
-            <div className="pt-2">
-              <div
-                className={cn(
-                  "flex items-center justify-between rounded-xl px-3 py-2",
-                  projectOpen ? "bg-[#e5ff78] text-black" : "text-white/75"
-                )}
-              >
-                <Link href="/projects" className="text-sm font-semibold">
-                  PROJECT
+            {isProjectOpen && (
+              <div className="mt-1 space-y-1 py-1">
+                <Link href="/projects" className={subLinkCls(pathname === "/projects")}>
+                  ALL PROJECT
                 </Link>
-                <span className={cn("text-xs", projectOpen ? "text-black/60" : "text-white/45")}>
-                  {projectOpen ? "▲" : "▼"}
-                </span>
+                <Link href="/completed" className={subLinkCls(pathname === "/completed")}>
+                  COMPLETED
+                </Link>
+                <Link href="/blocked" className={subLinkCls(pathname === "/blocked")}>
+                  BLOCKED
+                </Link>
               </div>
-
-              {projectOpen ? (
-                <div className="mt-2 space-y-1">
-                  <Link href="/projects" className={subLinkCls(pathname === "/projects")}>
-                    ALL PROJECT
-                  </Link>
-                  <Link href="/completed" className={subLinkCls(pathname === "/completed")}>
-                    COMPLETED
-                  </Link>
-                  <Link href="/blocked" className={subLinkCls(pathname === "/blocked")}>
-                    BLOCKED
-                  </Link>
-                </div>
-              ) : null}
-            </div>
-
-            <Link href="/my-work" className={linkCls(pathname === "/my-work")}>
-              <span>MY WORK</span>
-            </Link>
-
-            <Link href="/members" className={linkCls(pathname === "/members")}>
-              <span>MEMBERS</span>
-            </Link>
-
-            {/* ✅ เฉพาะหัวหน้าเท่านั้น */}
-            {isLeader ? (
-              <Link href="/approvals" className={linkCls(pathname === "/approvals")}>
-                <span>APPROVALS</span>
-              </Link>
-            ) : null}
+            )}
           </div>
+
+          <Link href="/my-work" className={linkCls(pathname === "/my-work")}>
+            <span>MY WORK</span>
+          </Link>
+
+          <Link href="/members" className={linkCls(pathname === "/members")}>
+            <span>MEMBERS</span>
+          </Link>
+
+          {isLeader && (
+            <Link href="/approvals" className={linkCls(pathname === "/approvals")}>
+              <span>APPROVALS</span>
+            </Link>
+          )}
         </nav>
 
         {/* Footer */}
-        <div className="px-5 pb-5">
-          <div className="mb-4 h-px bg-white/10" />
-          <LogoutButton />
-          <div className="mt-4 text-center text-xs text-white/35">© 2026</div>
+        {/* ข้อ 3: ส่วนนี้จะอยู่ล่างสุดเสมอเพราะ flex-1 ของ nav ด้านบน */}
+        <div className="px-8 pb-10">
+          <div className="mb-6 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+          <div className="transform transition-transform hover:scale-105 active:scale-95">
+            <LogoutButton />
+          </div>
+          <div className="mt-6 text-center text-[10px] font-bold tracking-widest text-white/20 uppercase">
+            © 2026 woffu system
+          </div>
         </div>
       </div>
     </aside>

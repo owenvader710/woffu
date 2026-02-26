@@ -16,8 +16,8 @@ type MeProfile = {
   email: string | null;
   is_active: boolean;
   avatar_url?: string | null;
-  phone?: string | null; // ✅ เพิ่ม (ไว้โชว์/แก้ไข)
-  birth_date?: string | null; // ✅ เพิ่ม (ไว้โชว์/แก้ไข)
+  phone?: string | null;
+  birth_date?: string | null;
 };
 
 type Member = {
@@ -53,26 +53,13 @@ function initials(name?: string | null) {
 function formatBirth(d?: string | null) {
   if (!d) return "-";
   try {
+    // รองรับทั้ง YYYY-MM-DD และ ISO
     const dt = new Date(d);
-    return dt.toLocaleDateString("th-TH", {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-    });
+    if (Number.isNaN(dt.getTime())) return d;
+    return dt.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
   } catch {
     return d;
   }
-}
-
-function toDateInputValue(iso?: string | null) {
-  if (!iso) return "";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
 }
 
 function DeptPill({ dept }: { dept: Dept }) {
@@ -82,59 +69,38 @@ function DeptPill({ dept }: { dept: Dept }) {
       : dept === "GRAPHIC"
       ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
       : "border-white/10 bg-white/5 text-white/70";
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold",
-        cls
-      )}
-    >
-      {dept}
-    </span>
-  );
+
+  return <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", cls)}>{dept}</span>;
 }
 
 function RolePill({ role }: { role: Role }) {
   const cls =
-    role === "LEADER"
-      ? "border-green-500/30 bg-green-500/10 text-green-200"
-      : "border-white/10 bg-white/5 text-white/70";
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold",
-        cls
-      )}
-    >
-      {role}
-    </span>
-  );
+    role === "LEADER" ? "border-green-500/30 bg-green-500/10 text-green-200" : "border-white/10 bg-white/5 text-white/70";
+  return <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", cls)}>{role}</span>;
 }
 
 function Avatar({
   url,
   name,
-  size = 56,
+  size = 84,
+  rounded = "rounded-[26px]",
 }: {
   url?: string | null;
   name?: string | null;
   size?: number;
+  rounded?: string;
 }) {
   const has = !!url;
   return (
     <div
-      className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/40"
+      className={cn("relative overflow-hidden border border-white/10 bg-black/40", rounded)}
       style={{ width: size, height: size }}
     >
       {has ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={url!}
-          alt={name || "avatar"}
-          className="h-full w-full object-cover"
-        />
+        <img src={url!} alt={name || "avatar"} className="h-full w-full object-cover" />
       ) : (
-        <div className="flex h-full w-full items-center justify-center text-sm font-extrabold text-[#e5ff78]">
+        <div className="flex h-full w-full items-center justify-center text-xl font-extrabold text-[#e5ff78]">
           {initials(name)}
         </div>
       )}
@@ -142,166 +108,11 @@ function Avatar({
   );
 }
 
-function EditMyProfileModal({
-  open,
-  onClose,
-  me,
-  onSaved,
-}: {
-  open: boolean;
-  onClose: () => void;
-  me: MeProfile | null;
-  onSaved: () => Promise<void> | void;
-}) {
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
-
-  const [displayName, setDisplayName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [birthDate, setBirthDate] = useState("");
-
-  useEffect(() => {
-    if (!open || !me) return;
-    setErr("");
-    setDisplayName(me.display_name ?? "");
-    setPhone(me.phone ?? "");
-    setBirthDate(toDateInputValue(me.birth_date ?? null));
-  }, [open, me]);
-
-  if (!open || !me?.id) return null;
-
-  async function save() {
-    // ✅ FIX: guard ให้ TS แน่ใจว่า me ไม่เป็น null ใน closure นี้
-    if (!me?.id) {
-      setErr("ไม่พบผู้ใช้งาน (me) กรุณารีเฟรช");
-      return;
-    }
-
-    setSaving(true);
-    setErr("");
-    try {
-      const payload = {
-        display_name: displayName.trim() ? displayName.trim() : null,
-        phone: phone.trim() ? phone.trim() : null,
-        birth_date: birthDate ? birthDate : null,
-      };
-
-      const res = await fetch(`/api/members/${me.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const json = await safeJson(res);
-      if (!res.ok) {
-        setErr(
-          (json && (json.error || json.message)) ||
-            `Save failed (${res.status})`
-        );
-        return;
-      }
-
-      await onSaved();
-      onClose();
-    } catch (e: any) {
-      setErr(e?.message || "Save failed");
-    } finally {
-      setSaving(false);
-    }
-  }
-
+function ProfileField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-xl rounded-3xl border border-white/10 bg-black text-white shadow-[0_25px_80px_rgba(0,0,0,0.6)]">
-        <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
-          <div>
-            <div className="text-sm font-semibold tracking-widest text-white/50">
-              MY PROFILE
-            </div>
-            <div className="mt-1 text-xl font-extrabold">แก้ไขโปรไฟล์</div>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10"
-            disabled={saving}
-          >
-            ปิด
-          </button>
-        </div>
-
-        <div className="space-y-4 px-6 py-5">
-          {err ? (
-            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-              {err}
-            </div>
-          ) : null}
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <div className="mb-2 text-xs font-semibold text-white/60">
-                ชื่อที่แสดง
-              </div>
-              <input
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-[#e5ff78]"
-                placeholder="ชื่อ"
-              />
-            </div>
-
-            <div>
-              <div className="mb-2 text-xs font-semibold text-white/60">
-                เบอร์โทร
-              </div>
-              <input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-[#e5ff78]"
-                placeholder="เช่น 08x-xxx-xxxx"
-              />
-            </div>
-
-            <div>
-              <div className="mb-2 text-xs font-semibold text-white/60">
-                วันเดือนปีเกิด
-              </div>
-              <input
-                type="date"
-                value={birthDate}
-                onChange={(e) => setBirthDate(e.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-[#e5ff78]"
-              />
-            </div>
-
-            <div>
-              <div className="mb-2 text-xs font-semibold text-white/60">
-                อีเมล (อ่านอย่างเดียว)
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white/80">
-                {me.email || "-"}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-2 border-t border-white/10 px-6 py-5">
-          <button
-            onClick={onClose}
-            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
-            disabled={saving}
-          >
-            ยกเลิก
-          </button>
-          <button
-            onClick={save}
-            className="rounded-2xl bg-[#e5ff78] px-5 py-2 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-60"
-            disabled={saving}
-          >
-            {saving ? "กำลังบันทึก..." : "บันทึก"}
-          </button>
-        </div>
-      </div>
+    <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+      <div className="text-xs font-semibold tracking-widest text-white/45">{label}</div>
+      <div className="mt-1 text-white/85">{value}</div>
     </div>
   );
 }
@@ -314,36 +125,12 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
 
-  const filtered = useMemo(() => {
-    return items
-      .filter((m) => m.is_active !== false)
-      .sort((a, b) => {
-        if (a.role !== b.role) return a.role === "LEADER" ? -1 : 1;
-        return String(a.display_name ?? "").localeCompare(
-          String(b.display_name ?? ""),
-          "th"
-        );
-      });
-  }, [items]);
-
-  const group = useMemo(() => {
-    const g = { VIDEO: [] as Member[], GRAPHIC: [] as Member[], ALL: [] as Member[] };
-    for (const m of filtered) {
-      if (m.department === "VIDEO") g.VIDEO.push(m);
-      else if (m.department === "GRAPHIC") g.GRAPHIC.push(m);
-      else g.ALL.push(m);
-    }
-    return g;
-  }, [filtered]);
-
   // modals
   const [cropOpen, setCropOpen] = useState(false);
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
-  const [myEditOpen, setMyEditOpen] = useState(false);
 
-  // avatar saving
   const [savingAvatar, setSavingAvatar] = useState(false);
 
   async function loadMe() {
@@ -366,9 +153,7 @@ export default function MembersPage() {
 
       if (!r.ok) {
         setItems([]);
-        setError(
-          (j && (j.error || j.message)) || `Load members failed (${r.status})`
-        );
+        setError((j && (j.error || j.message)) || `Load members failed (${r.status})`);
         return;
       }
 
@@ -391,6 +176,15 @@ export default function MembersPage() {
     }
   }
 
+  useEffect(() => {
+    (async () => {
+      await loadMe();
+      await loadMembers();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ✅ เซฟรูปโปรไฟล์ของ “me”
   async function applyCroppedAvatar(blob: Blob) {
     setError("");
 
@@ -402,9 +196,7 @@ export default function MembersPage() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!url || !anon) {
-      setError(
-        "Missing Supabase env (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)"
-      );
+      setError("Missing Supabase env (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)");
       return;
     }
 
@@ -431,10 +223,7 @@ export default function MembersPage() {
         return;
       }
 
-      const upd = await supabase
-        .from("profiles")
-        .update({ avatar_url: publicUrl })
-        .eq("id", me.id);
+      const upd = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", me.id);
       if (upd.error) {
         setError(upd.error.message);
         return;
@@ -446,13 +235,24 @@ export default function MembersPage() {
     }
   }
 
-  useEffect(() => {
-    (async () => {
-      await loadMe();
-      await loadMembers();
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const filtered = useMemo(() => {
+    return items
+      .filter((m) => m.is_active !== false)
+      .sort((a, b) => {
+        if (a.role !== b.role) return a.role === "LEADER" ? -1 : 1;
+        return String(a.display_name ?? "").localeCompare(String(b.display_name ?? ""), "th");
+      });
+  }, [items]);
+
+  const group = useMemo(() => {
+    const g = { VIDEO: [] as Member[], GRAPHIC: [] as Member[], ALL: [] as Member[] };
+    for (const m of filtered) {
+      if (m.department === "VIDEO") g.VIDEO.push(m);
+      else if (m.department === "GRAPHIC") g.GRAPHIC.push(m);
+      else g.ALL.push(m);
+    }
+    return g;
+  }, [filtered]);
 
   function openEdit(m: Member) {
     if (!isLeader) return;
@@ -464,11 +264,9 @@ export default function MembersPage() {
     <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-4">
-          <Avatar url={m.avatar_url} name={m.display_name} />
+          <Avatar url={m.avatar_url} name={m.display_name} size={56} rounded="rounded-2xl" />
           <div className="min-w-0">
-            <div className="truncate text-lg font-extrabold text-white">
-              {m.display_name || "-"}
-            </div>
+            <div className="truncate text-lg font-extrabold text-white">{m.display_name || "-"}</div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <DeptPill dept={m.department} />
               <RolePill role={m.role} />
@@ -489,21 +287,15 @@ export default function MembersPage() {
 
       <div className="mt-5 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
         <div>
-          <div className="text-xs font-semibold tracking-widest text-white/45">
-            EMAIL
-          </div>
+          <div className="text-xs font-semibold tracking-widest text-white/45">EMAIL</div>
           <div className="mt-1 break-all text-white/85">{m.email || "-"}</div>
         </div>
         <div>
-          <div className="text-xs font-semibold tracking-widest text-white/45">
-            เบอร์
-          </div>
+          <div className="text-xs font-semibold tracking-widest text-white/45">เบอร์</div>
           <div className="mt-1 text-white/85">{m.phone || "-"}</div>
         </div>
         <div>
-          <div className="text-xs font-semibold tracking-widest text-white/45">
-            วันเกิด
-          </div>
+          <div className="text-xs font-semibold tracking-widest text-white/45">วันเกิด</div>
           <div className="mt-1 text-white/85">{formatBirth(m.birth_date)}</div>
         </div>
       </div>
@@ -515,9 +307,7 @@ export default function MembersPage() {
     return (
       <div className="mt-8">
         <div className="mb-3 flex items-end justify-between">
-          <div className="text-sm font-semibold tracking-widest text-white/50">
-            {title}
-          </div>
+          <div className="text-sm font-semibold tracking-widest text-white/50">{title}</div>
           <div className="text-xs text-white/35">จำนวน: {list.length}</div>
         </div>
 
@@ -533,50 +323,24 @@ export default function MembersPage() {
   return (
     <div className="w-full bg-black text-white">
       <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
-        {/* ✅ MY PROFILE */}
+        {/* ✅ โปรไฟล์บนสุด: รูปซ้าย / ข้อมูลขวา (คล้ายเรฟ) */}
         <div className="rounded-[34px] border border-white/10 bg-gradient-to-b from-white/5 to-white/[0.03] p-6 shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
-          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-4">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_1fr]">
+            {/* LEFT: Avatar + Upload under avatar */}
+            <div className="flex flex-col items-start gap-3">
+              <div className="text-xs font-semibold tracking-widest text-white/50">MY PROFILE</div>
+
               <Avatar
                 url={me?.avatar_url ?? null}
                 name={me?.display_name ?? me?.email ?? null}
-                size={84}
+                size={180}
+                rounded="rounded-[28px]"
               />
-              <div className="min-w-0">
-                <div className="text-xs font-semibold tracking-widest text-white/50">
-                  MY PROFILE
-                </div>
-                <div className="mt-1 truncate text-2xl font-extrabold">
-                  {me?.display_name || me?.email || "ผู้ใช้งาน"}
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <DeptPill dept={me?.department ?? "ALL"} />
-                  <RolePill role={me?.role ?? "MEMBER"} />
-                  {me?.is_active === false ? (
-                    <span className="inline-flex items-center rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs font-semibold text-red-200">
-                      INACTIVE
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2 md:justify-end">
-              <button
-                onClick={() => {
-                  loadMe();
-                  loadMembers();
-                }}
-                disabled={loading}
-                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50"
-              >
-                รีเฟรช
-              </button>
 
               <label
                 className={cn(
-                  "inline-flex cursor-pointer rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10",
-                  savingAvatar ? "opacity-60 pointer-events-none" : ""
+                  "mt-1 inline-flex w-full cursor-pointer items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10",
+                  savingAvatar ? "pointer-events-none opacity-60" : ""
                 )}
                 title={savingAvatar ? "กำลังอัปโหลด..." : "อัปโหลดรูปโปรไฟล์"}
               >
@@ -596,48 +360,76 @@ export default function MembersPage() {
               </label>
 
               <button
-                onClick={() => setMyEditOpen(true)}
-                className="rounded-2xl bg-[#e5ff78] px-4 py-2 text-sm font-semibold text-black hover:opacity-90"
+                onClick={() => {
+                  loadMe();
+                  loadMembers();
+                }}
+                disabled={loading}
+                className="inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-black/30 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50"
               >
-                แก้ไขโปรไฟล์
+                รีเฟรช
               </button>
             </div>
-          </div>
 
-          <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-              <div className="text-xs font-semibold tracking-widest text-white/45">
-                EMAIL
-              </div>
-              <div className="mt-1 break-all text-white/85">{me?.email || "-"}</div>
-            </div>
+            {/* RIGHT: Name + pills + fields + edit */}
+            <div className="min-w-0">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-3xl font-extrabold tracking-tight">
+                      {me?.display_name || me?.email || "ผู้ใช้งาน"}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <DeptPill dept={me?.department ?? "ALL"} />
+                      <RolePill role={me?.role ?? "MEMBER"} />
+                      {me?.is_active === false ? (
+                        <span className="inline-flex items-center rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs font-semibold text-red-200">
+                          INACTIVE
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
 
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-              <div className="text-xs font-semibold tracking-widest text-white/45">
-                เบอร์
-              </div>
-              <div className="mt-1 text-white/85">{me?.phone || "-"}</div>
-            </div>
+                  {/* ✅ ใช้ปุ่มเดิม (เปิด EditMemberModal แต่ส่งเป็น member ของตัวเอง) */}
+                  <button
+                    onClick={() => {
+                      if (!me?.id) return;
+                      // เปิด modal เดิมของสมาชิก แต่ใช้กับ me ได้เลย (เพราะ PATCH endpoint เดียวกัน)
+                      const asMember: Member = {
+                        id: me.id,
+                        display_name: me.display_name ?? null,
+                        department: me.department ?? "ALL",
+                        role: me.role ?? "MEMBER",
+                        is_active: me.is_active ?? true,
+                        email: me.email ?? null,
+                        phone: me.phone ?? null,
+                        avatar_url: me.avatar_url ?? null,
+                        birth_date: me.birth_date ?? null,
+                      };
+                      setEditing(asMember);
+                      setEditOpen(true);
+                    }}
+                    className="rounded-2xl bg-[#e5ff78] px-4 py-2 text-sm font-semibold text-black hover:opacity-90"
+                  >
+                    แก้ไขโปรไฟล์
+                  </button>
+                </div>
 
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-              <div className="text-xs font-semibold tracking-widest text-white/45">
-                วันเกิด
-              </div>
-              <div className="mt-1 text-white/85">
-                {formatBirth(me?.birth_date || null)}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <ProfileField label="EMAIL" value={<span className="break-all">{me?.email || "-"}</span>} />
+                  <ProfileField label="เบอร์" value={me?.phone || "-"} />
+                  <ProfileField label="วันเกิด" value={formatBirth(me?.birth_date ?? null)} />
+                </div>
               </div>
             </div>
           </div>
         </div>
 
+        {/* Members list (คงเดิม) */}
         {loading ? (
-          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">
-            กำลังโหลด...
-          </div>
+          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">กำลังโหลด...</div>
         ) : error ? (
-          <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
-            {error}
-          </div>
+          <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">{error}</div>
         ) : (
           <>
             <Section title="VIDEO" list={group.VIDEO} />
@@ -663,24 +455,18 @@ export default function MembersPage() {
           }}
         />
 
-        <EditMyProfileModal
-          open={myEditOpen}
-          onClose={() => setMyEditOpen(false)}
-          me={me}
-          onSaved={async () => {
-            await loadMe();
-            await loadMembers();
-          }}
-        />
-
-        {isLeader && editing ? (
+        {editing ? (
           <EditMemberModal
             open={editOpen}
-            onClose={() => setEditOpen(false)}
+            onClose={() => {
+              setEditOpen(false);
+              setEditing(null);
+            }}
             member={editing as any}
             onSaved={async () => {
               setEditOpen(false);
               setEditing(null);
+              await loadMe();
               await loadMembers();
             }}
           />

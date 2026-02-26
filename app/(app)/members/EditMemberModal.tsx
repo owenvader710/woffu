@@ -11,7 +11,7 @@ type Member = {
   is_active: boolean;
   phone?: string | null;
   email?: string | null;
-  birth_date?: string | null; // ✅ เพิ่ม
+  birth_date?: string | null;
 };
 
 async function safeJson(res: Response) {
@@ -25,7 +25,6 @@ function badId(id?: string | null) {
 
 function toDateInputValue(iso?: string | null) {
   if (!iso) return "";
-  // รองรับทั้ง "YYYY-MM-DD" และ ISO string
   if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
 
   const d = new Date(iso);
@@ -33,7 +32,6 @@ function toDateInputValue(iso?: string | null) {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
-
   return `${yyyy}-${mm}-${dd}`;
 }
 
@@ -46,7 +44,7 @@ export default function EditMemberModal({
   open: boolean;
   member: Member | null;
   onClose: () => void;
-  onSaved: () => Promise<void> | void; // ✅ รองรับ async
+  onSaved: () => void | Promise<void>;
 }) {
   const [displayName, setDisplayName] = useState("");
   const [department, setDepartment] = useState<"VIDEO" | "GRAPHIC" | "ALL">("ALL");
@@ -55,7 +53,7 @@ export default function EditMemberModal({
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
 
-  const [birthDate, setBirthDate] = useState(""); // ✅ เพิ่ม (YYYY-MM-DD)
+  const [birthDate, setBirthDate] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState("");
@@ -72,8 +70,7 @@ export default function EditMemberModal({
     setIsActive(member?.is_active !== false);
     setPhone(member?.phone ?? "");
     setEmail(member?.email ?? "");
-
-    setBirthDate(toDateInputValue(member?.birth_date ?? null)); // ✅ เพิ่ม
+    setBirthDate(toDateInputValue(member?.birth_date ?? null));
   }, [open, member]);
 
   const canSave = useMemo(() => !submitting, [submitting]);
@@ -95,7 +92,7 @@ export default function EditMemberModal({
         is_active: isActive,
         phone: phone.trim() || null,
         email: email.trim() || null,
-        birth_date: birthDate ? birthDate : null, // ✅ เพิ่ม
+        birth_date: birthDate ? birthDate : null,
       };
 
       const res = await fetch(`/api/members/${encodeURIComponent(memberId)}`, {
@@ -107,8 +104,8 @@ export default function EditMemberModal({
       const json = await safeJson(res);
       if (!res.ok) throw new Error((json && (json.error || json.message)) || `Save failed (${res.status})`);
 
-      await onSaved(); // ✅ รองรับ async
-      onClose();       // ✅ บันทึกแล้วปิดโมดัล (พฤติกรรมเดิมที่ควรเป็น)
+      await onSaved();
+      onClose();
     } catch (e: any) {
       setErr(e?.message || "Save failed");
     } finally {
@@ -123,7 +120,7 @@ export default function EditMemberModal({
       <div className="w-full max-w-xl overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0b0b] text-white shadow-[0_30px_120px_rgba(0,0,0,0.75)]">
         <div className="flex items-start justify-between border-b border-white/10 px-6 py-5">
           <div>
-            <div className="text-lg font-extrabold tracking-tight">แก้ไขสมาชิก</div>
+            <div className="text-lg font-extrabold tracking-tight">แก้ไขโปรไฟล์</div>
             <div className="mt-1 text-sm text-white/45">{member?.display_name || memberId}</div>
           </div>
           <button
@@ -138,9 +135,7 @@ export default function EditMemberModal({
 
         <div className="px-6 py-5">
           {err ? (
-            <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-              {err}
-            </div>
+            <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{err}</div>
           ) : null}
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -199,7 +194,6 @@ export default function EditMemberModal({
               />
             </div>
 
-            {/* ✅ เพิ่มวันเกิด (ใส่แบบเดิม ไม่แตะสไตล์อื่น) */}
             <div className="md:col-span-2">
               <div className="mb-2 text-xs font-bold tracking-widest text-white/45 uppercase">Birth date</div>
               <input
@@ -212,12 +206,7 @@ export default function EditMemberModal({
 
             <div className="md:col-span-2">
               <label className="inline-flex items-center gap-2 text-sm text-white/80">
-                <input
-                  type="checkbox"
-                  checked={isActive}
-                  onChange={(e) => setIsActive(e.target.checked)}
-                  className="h-4 w-4 accent-[#e5ff78]" // ✅ ให้เข้าธีม
-                />
+                <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
                 ACTIVE
               </label>
             </div>

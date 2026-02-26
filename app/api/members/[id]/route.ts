@@ -1,22 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/utils/supabase/server";
+import { supabaseFromRequest } from "@/utils/supabase/api";
 
 type Ctx = {
   params: Promise<{ id: string }>;
 };
 
-function badId(id?: string | null) {
-  return !id || id === "undefined" || id === "null";
-}
-
 export async function PATCH(req: NextRequest, ctx: Ctx) {
-  const supabase = await createSupabaseServerClient();
+  const { supabase, applyCookies } = supabaseFromRequest(req);
 
+  // ✅ Next.js 16 ต้อง await params
   const { id } = await ctx.params;
-  if (badId(id)) return NextResponse.json({ error: "Invalid member id" }, { status: 400 });
+
+  if (!id) {
+    return applyCookies(NextResponse.json({ error: "Missing id" }, { status: 400 }));
+  }
+
+  // auth
+  const { data: authData, error: authErr } = await supabase.auth.getUser();
+  if (authErr) return applyCookies(NextResponse.json({ error: authErr.message }, { status: 401 }));
+
+  const user = authData?.user;
+  if (!user) return applyCookies(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
 
   const body = await req.json().catch(() => null);
-  if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  if (!body) return applyCookies(NextResponse.json({ error: "Invalid JSON" }, { status: 400 }));
 
   const patch: any = {
     display_name: body.display_name ?? undefined,
@@ -26,10 +33,13 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     phone: body.phone ?? undefined,
     email: body.email ?? undefined,
     avatar_url: body.avatar_url ?? undefined,
-    birth_date: body.birth_date ?? undefined, // ✅ เพิ่ม
+    birth_date: body.birth_date ?? undefined,
   };
 
+  // normalize empty string -> null (สำคัญสำหรับ date)
   if (patch.birth_date === "") patch.birth_date = null;
+
+  // clean undefined
   Object.keys(patch).forEach((k) => patch[k] === undefined && delete patch[k]);
 
   const { data, error } = await supabase
@@ -39,7 +49,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     .select("id, display_name, department, role, is_active, avatar_url, phone, email, birth_date")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
+  }
 
-  return NextResponse.json({ data });
+  return applyCookies(NextResponse.json({ data }));
 }

@@ -68,21 +68,13 @@ export default function Sidebar() {
     <aside className={cn("sticky top-0 h-screen shrink-0", "w-[300px] xl:w-[320px]", "p-5")}>
       <div className="flex h-full flex-col rounded-[34px] border border-white/10 bg-gradient-to-b from-white/5 to-white/[0.02] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
         {/* Brand */}
-        <div className="px-6 pt-6">
+        <div className="px-8 pt-8">
           <div className="text-2xl font-extrabold tracking-widest text-[#e5ff78]">WOFFU OS</div>
           <div className="mt-1 text-xs text-white/45">Production Workflow</div>
-
-          {me ? (
-            <div className="mt-3 text-xs text-white/55">
-              <span className="font-semibold text-white">{me.display_name || me.email || "ผู้ใช้งาน"}</span>{" "}
-              <span className="text-white/25">·</span> <span>{me.role}</span>{" "}
-              <span className="text-white/25">·</span> <span>{me.department}</span>
-            </div>
-          ) : null}
         </div>
 
         {/* Nav */}
-        <nav className="mt-6 flex-1 px-4">
+        <nav className="mt-13flex-1 px-4">
           <div className="space-y-1">
             <Link href="/dashboard" className={linkCls(pathname === "/dashboard")}>
               <span>DASHBOARD</span>

@@ -1,91 +1,88 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 
-export type Status = "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
-
-const STATUS_ORDER: Status[] = ["TODO", "IN_PROGRESS", "BLOCKED", "COMPLETED"];
+export type Status = "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE" | "CANCELLED";
 
 function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-function statusStyle(s: Status) {
-  // pill look + color
-  if (s === "TODO")
-    return "border-white/15 bg-white/5 text-white/80 hover:bg-white/10";
-  if (s === "IN_PROGRESS")
-    return "border-sky-500/30 bg-sky-500/10 text-sky-200 hover:bg-sky-500/15";
-  if (s === "BLOCKED")
-    return "border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/15";
-  return "border-green-500/30 bg-green-500/10 text-green-200 hover:bg-green-500/15";
-}
+const STATUS_LABEL: Record<Status, string> = {
+  TODO: "TODO",
+  IN_PROGRESS: "IN_PROGRESS",
+  REVIEW: "REVIEW",
+  DONE: "DONE",
+  CANCELLED: "CANCELLED",
+};
 
 export default function StatusDropdown({
   value,
-  disabled,
   onChange,
+  disabled,
 }: {
   value: Status;
+  onChange: (s: Status) => void | Promise<void>;
   disabled?: boolean;
-  onChange: (next: Status) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  const ref = useRef<HTMLDivElement | null>(null);
 
-  const options = useMemo(() => STATUS_ORDER, []);
+  const options = useMemo(() => Object.keys(STATUS_LABEL) as Status[], []);
 
   useEffect(() => {
-    function onDown(e: MouseEvent) {
-      const el = rootRef.current;
-      if (!el) return;
-      if (!el.contains(e.target as Node)) setOpen(false);
+    function onDoc(e: MouseEvent) {
+      if (!ref.current) return;
+      if (!ref.current.contains(e.target as Node)) setOpen(false);
     }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
   return (
-    <div ref={rootRef} className="relative inline-flex justify-end">
+    <div ref={ref} className="relative inline-flex">
       <button
         type="button"
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold",
-          "transition outline-none",
-          disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer",
-          statusStyle(value)
+          "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-extrabold",
+          "border-blue-500/25 bg-blue-500/10 text-blue-100 hover:bg-blue-500/15",
+          disabled ? "opacity-60 cursor-not-allowed" : ""
         )}
       >
-        <span>{value}</span>
-        <span className={cn("text-[10px] opacity-80 transition", open ? "rotate-180" : "")}>
-          ▾
-        </span>
+        {STATUS_LABEL[value]}
+        <ChevronDown size={16} className={cn("opacity-80 transition", open ? "rotate-180" : "")} />
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-black/90 backdrop-blur-xl shadow-2xl">
+        <div className="absolute right-0 top-[calc(100%+8px)] z-50 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-[#0b0b0b] shadow-[0_25px_80px_rgba(0,0,0,0.75)]">
+          <div className="px-3 py-2 text-[11px] font-semibold tracking-widest text-white/45">
+            CHANGE STATUS
+          </div>
+          <div className="h-px bg-white/10" />
+
           <div className="p-2">
-            {options.map((s) => (
-              <button
-                key={s}
-                type="button"
-                disabled={disabled}
-                onClick={() => {
-                  setOpen(false);
-                  if (s !== value) onChange(s);
-                }}
-                className={cn(
-                  "mb-2 last:mb-0 w-full rounded-xl border px-3 py-2 text-left text-xs font-semibold",
-                  "transition",
-                  statusStyle(s),
-                  s === value ? "ring-1 ring-white/15" : ""
-                )}
-              >
-                {s}
-              </button>
-            ))}
+            {options.map((s) => {
+              const active = s === value;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={async () => {
+                    setOpen(false);
+                    await onChange(s);
+                  }}
+                  className={cn(
+                    "w-full rounded-xl px-3 py-2 text-left text-sm",
+                    active ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/5"
+                  )}
+                >
+                  {STATUS_LABEL[s]}
+                </button>
+              );
+            })}
           </div>
         </div>
       ) : null}

@@ -91,7 +91,7 @@ function RolePill({ role }: { role: Role }) {
 function Avatar({
   url,
   name,
-  size = 56,
+  size =100,
 }: {
   url?: string | null;
   name?: string | null;
@@ -477,7 +477,7 @@ export default function MembersPage() {
         <div className="rounded-[34px] border border-white/10 bg-gradient-to-b from-white/5 to-white/[0.03] p-6 shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-[260px_1fr]">
             {/* left */}
-            <div className="flex flex-col items-center lg:items-start">
+            <div className="flex flex-col items-center gap-3">
               <div className="w-full">
                 <div className="text-xs font-semibold tracking-widest text-white/50">MY PROFILE</div>
               </div>

@@ -327,7 +327,7 @@ export default function MembersPage() {
         <div className="rounded-[34px] border border-white/10 bg-gradient-to-b from-white/5 to-white/[0.03] p-6 shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
             {/* LEFT: Avatar + Upload under avatar */}
-            <div className="flex flex-col items-start gap-3">
+            <div className="flex flex-col items-center gap-3">
               <div className="text-xs font-semibold tracking-widest text-white/50">MY PROFILE</div>
 
               <Avatar

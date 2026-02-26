@@ -1,21 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseFromRequest } from "@/utils/supabase/api";
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+type Ctx = {
+  params: Promise<{ id: string }>;
+};
+
+export async function PATCH(req: NextRequest, ctx: Ctx) {
   const { supabase, applyCookies } = supabaseFromRequest(req);
 
-  const id = params?.id;
-  if (!id) return applyCookies(NextResponse.json({ error: "Missing id" }, { status: 400 }));
+  // ✅ Next.js 16 ต้อง await params
+  const { id } = await ctx.params;
+
+  if (!id)
+    return applyCookies(
+      NextResponse.json({ error: "Missing id" }, { status: 400 })
+    );
 
   // auth
   const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) return applyCookies(NextResponse.json({ error: authErr.message }, { status: 401 }));
+  if (authErr)
+    return applyCookies(
+      NextResponse.json({ error: authErr.message }, { status: 401 })
+    );
 
   const user = authData?.user;
-  if (!user) return applyCookies(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
+  if (!user)
+    return applyCookies(
+      NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    );
 
   const body = await req.json().catch(() => null);
-  if (!body) return applyCookies(NextResponse.json({ error: "Invalid JSON" }, { status: 400 }));
+  if (!body)
+    return applyCookies(
+      NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+    );
 
   // only allow patch fields we expect
   const patch: any = {
@@ -25,7 +43,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     is_active: body.is_active ?? undefined,
     phone: body.phone ?? undefined,
     avatar_url: body.avatar_url ?? undefined,
-    birth_date: body.birth_date ?? undefined, // ✅ เพิ่ม
+    birth_date: body.birth_date ?? undefined,
   };
 
   // normalize empty string -> null (สำคัญสำหรับ date)
@@ -38,11 +56,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .from("profiles")
     .update(patch)
     .eq("id", id)
-    .select("id, display_name, department, role, is_active, avatar_url, phone, email, birth_date")
+    .select(
+      "id, display_name, department, role, is_active, avatar_url, phone, email, birth_date"
+    )
     .single();
 
   if (error) {
-    return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
+    return applyCookies(
+      NextResponse.json({ error: error.message }, { status: 500 })
+    );
   }
 
   return applyCookies(NextResponse.json({ data }));

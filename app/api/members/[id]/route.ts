@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServer } from "@/utils/supabase/server";
+import { createSupabaseServerClient } from "@/utils/supabase/server";
 
 type Ctx = {
   params: Promise<{ id: string }>;
@@ -10,7 +10,7 @@ function badId(id?: string | null) {
 }
 
 export async function PATCH(req: NextRequest, ctx: Ctx) {
-  const supabase = createSupabaseServer();
+  const supabase = createSupabaseServerClient();
 
   const { id } = await ctx.params;
   if (badId(id)) return NextResponse.json({ error: "Invalid member id" }, { status: 400 });
@@ -29,10 +29,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     birth_date: body.birth_date ?? undefined, // ✅ เพิ่ม
   };
 
-  // normalize empty string -> null (สำคัญสำหรับ date)
   if (patch.birth_date === "") patch.birth_date = null;
-
-  // clean undefined
   Object.keys(patch).forEach((k) => patch[k] === undefined && delete patch[k]);
 
   const { data, error } = await supabase

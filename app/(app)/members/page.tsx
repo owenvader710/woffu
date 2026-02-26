@@ -154,11 +154,14 @@ function EditMyProfileModal({
         birth_date: birthDate ? birthDate : null,
       };
 
-      const res = await fetch(`/api/members/${encodeURIComponent(me.id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+const res = await fetch(
+  `/api/members/${encodeURIComponent(me!.id)}`,
+  {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }
+);
 
       const json = await safeJson(res);
       if (!res.ok) {

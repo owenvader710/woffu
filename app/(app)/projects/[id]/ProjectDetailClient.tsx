@@ -24,6 +24,18 @@ type Project = {
   id: string;
   title: string;
 
+  // ✅ รหัสโปรเจกต์ (ตามที่นายท่านบอกชื่อฟิลด์คือ code)
+  code?: string | null;
+
+  // (กันพัง เผื่อบางทีมีชื่อคอลัมน์อื่น)
+  project_code?: string | null;
+  projectCode?: string | null;
+  product_code?: string | null;
+  productCode?: string | null;
+  project_no?: string | null;
+  projectNo?: string | null;
+  ref?: string | null;
+
   type: "VIDEO" | "GRAPHIC";
   department: "VIDEO" | "GRAPHIC" | "ALL";
   status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
@@ -58,6 +70,7 @@ type Project = {
     | "Special Job"
     | null;
 
+  // บาง endpoint อาจ join มาให้
   assignee?: ProfileMini | null;
   creator?: ProfileMini | null;
 };
@@ -124,7 +137,6 @@ async function safeJson(res: Response) {
   return text ? JSON.parse(text) : null;
 }
 
-// ✅ ธีม badge ให้เข้าหน้าอื่น
 function pillToneStatus(status: Project["status"]) {
   if (status === "COMPLETED") return "green";
   if (status === "BLOCKED") return "red";
@@ -156,7 +168,6 @@ function Pill({
 }
 
 function badgeClass(status: StatusRequest["request_status"]) {
-  // ใช้โทนเดียวกับ pills
   if (status === "APPROVED") return "border-green-500/30 bg-green-500/10 text-green-200";
   if (status === "REJECTED") return "border-red-500/30 bg-red-500/10 text-red-200";
   return "border-amber-500/30 bg-amber-500/10 text-amber-200";
@@ -168,15 +179,42 @@ function priorityLabel(p?: Project["video_priority"] | null) {
   return `${p} ดาว`;
 }
 
+// ✅ ดึงรหัสโปรเจกต์ รองรับหลายชื่อ
+function getProjectCode(p: Project | null) {
+  if (!p) return null;
+  return (
+    p.code ??
+    p.project_code ??
+    p.projectCode ??
+    p.product_code ??
+    p.productCode ??
+    p.project_no ??
+    p.projectNo ??
+    p.ref ??
+    null
+  );
+}
+
+function CodeBadge({ code }: { code?: string | null }) {
+  if (!code) return null;
+  return (
+    <span className="inline-flex items-center rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs font-semibold text-white/80">
+      {code}
+    </span>
+  );
+}
+
 export default function ProjectDetailClient({ projectId }: { projectId: string }) {
   const router = useRouter();
 
-  // ✅ me / leader
   const [me, setMe] = useState<MeProfile | null>(null);
 
-  // ✅ edit modal
+  // ✅ สำหรับ edit modal (โหลดเฉพาะ leader ตามเดิม)
   const [editOpen, setEditOpen] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
+
+  // ✅ สำหรับแสดงชื่อ assignee/creator ให้ขึ้นเสมอ (โหลดทุกคน)
+  const [people, setPeople] = useState<Member[]>([]);
 
   const [project, setProject] = useState<Project | null>(null);
   const [requests, setRequests] = useState<StatusRequest[]>([]);
@@ -193,10 +231,15 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
 
-  // ✅ delete
   const [deleting, setDeleting] = useState(false);
 
   const isLeader = useMemo(() => me?.role === "LEADER" && me?.is_active === true, [me]);
+
+  const peopleMap = useMemo(() => {
+    const m = new Map<string, Member>();
+    for (const it of people) m.set(it.id, it);
+    return m;
+  }, [people]);
 
   const sortedRequests = useMemo(() => {
     return [...requests].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -231,6 +274,19 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
     }
   }
 
+  // ✅ โหลดรายชื่อไว้ใช้โชว์ assignee/creator (ทุกคน)
+  async function loadPeople() {
+    try {
+      const r = await fetch("/api/members", { cache: "no-store" });
+      const j = await safeJson(r);
+      if (!r.ok) return setPeople([]);
+      const data = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
+      setPeople(data.filter((m: Member) => m.is_active !== false));
+    } catch {
+      setPeople([]);
+    }
+  }
+
   async function loadAll() {
     if (!projectId) return;
 
@@ -239,6 +295,9 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
     setMsg("");
 
     try {
+      // ✅ โหลด people ไปพร้อมกัน (เพื่อชื่อ assignee/creator)
+      await loadPeople();
+
       // 0) me first
       const rMe = await fetch("/api/me-profile", { cache: "no-store" });
       const jMe = await safeJson(rMe);
@@ -318,7 +377,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
     }
   }
 
-  // ✅ Delete project (leader only)
   async function deleteProject() {
     setErr("");
     setMsg("");
@@ -351,7 +409,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
     }
   }
 
-  // ===== UI States =====
   const Card = ({ children }: { children: React.ReactNode }) => (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-6">{children}</div>
   );
@@ -402,7 +459,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
   if (!projectId) {
     return (
-      <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
+      <div className="mx-auto w-full max-w-[1600px] px-6 py-8 md:px-10 md:py-10">
         <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-yellow-200">
           Missing project id (client)
         </div>
@@ -412,7 +469,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
   if (loading) {
     return (
-      <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
+      <div className="mx-auto w-full max-w-[1600px] px-6 py-8 md:px-10 md:py-10">
         <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">กำลังโหลด...</div>
       </div>
     );
@@ -420,7 +477,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
   if (err) {
     return (
-      <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
+      <div className="mx-auto w-full max-w-[1600px] px-6 py-8 md:px-10 md:py-10">
         <div className="mb-4">
           <Link href="/projects" className="text-sm text-white/70 underline underline-offset-4 hover:text-white">
             ← กลับไปหน้าโปรเจกต์
@@ -433,7 +490,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
   if (!project) {
     return (
-      <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
+      <div className="mx-auto w-full max-w-[1600px] px-6 py-8 md:px-10 md:py-10">
         <div className="mb-4">
           <Link href="/projects" className="text-sm text-white/70 underline underline-offset-4 hover:text-white">
             ← กลับไปหน้าโปรเจกต์
@@ -447,8 +504,19 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
   const isVideo = project.type === "VIDEO";
   const isGraphic = project.type === "GRAPHIC";
 
+  // ✅ ชื่อผู้รับผิดชอบ/ผู้สร้างงาน (fallback จาก peopleMap)
+  const assigneeName =
+    project.assignee?.display_name ||
+    (project.assignee_id ? peopleMap.get(project.assignee_id)?.display_name : null) ||
+    "-";
+
+  const creatorName =
+    project.creator?.display_name || (project.created_by ? peopleMap.get(project.created_by)?.display_name : null) || "-";
+
+  const code = getProjectCode(project);
+
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-[1600px] px-6 py-8 md:px-10 md:py-10">
       {/* Top Bar */}
       <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <Link href="/projects" className="text-sm text-white/70 underline underline-offset-4 hover:text-white">
@@ -479,9 +547,13 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
           <div className="min-w-0">
             <div className="text-xs font-semibold tracking-widest text-white/50">PROJECT DETAIL</div>
 
-            <h1 className="mt-2 break-words text-2xl font-extrabold tracking-tight text-white md:text-3xl">
-              {project.title}
-            </h1>
+            {/* ✅ ชื่อ + รหัสโปรเจกต์ */}
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <CodeBadge code={code} />
+              <h1 className="break-words text-2xl font-extrabold tracking-tight text-white md:text-3xl">
+                {project.title}
+              </h1>
+            </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
               <Pill tone={project.type === "VIDEO" ? "blue" : "amber"}>{project.type}</Pill>
@@ -508,11 +580,11 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
             <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-white/70 md:grid-cols-2">
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="text-xs text-white/40">ผู้รับผิดชอบ</div>
-                <div className="mt-1 text-white/85">{project.assignee?.display_name || "-"}</div>
+                <div className="mt-1 text-white/85">{assigneeName}</div>
               </div>
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="text-xs text-white/40">ผู้สร้างงาน</div>
-                <div className="mt-1 text-white/85">{project.creator?.display_name || "-"}</div>
+                <div className="mt-1 text-white/85">{creatorName}</div>
               </div>
             </div>
 
@@ -550,7 +622,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
               </div>
             </div>
 
-            {/* Msg / Err */}
             {msg && (
               <div className="mt-4 rounded-2xl border border-green-500/30 bg-green-500/10 p-4 text-sm text-green-200">
                 {msg}
@@ -562,7 +633,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
               </div>
             )}
 
-            {/* Pending Banner */}
             {pending && (
               <div className="mt-4 rounded-2xl border border-[#e5ff78]/25 bg-[#e5ff78]/10 p-4 text-sm text-[#e5ff78]">
                 มีคำขอรออนุมัติ: <b className="text-white">{pending.from_status}</b> →{" "}
@@ -581,7 +651,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
           </div>
 
           {/* Right */}
-          <div className="w-full md:w-[360px]">
+          <div className="w-full md:w-[380px]">
             <div className="rounded-2xl border border-white/10 bg-black/20 p-5">
               <div className="text-sm font-semibold text-white">เปลี่ยนสถานะ</div>
               <div className="mt-3 flex gap-2">
@@ -714,7 +784,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
         </Card>
       </div>
 
-      {/* ✅ Render modal เฉพาะหัวหน้าเท่านั้น */}
       {isLeader && (
         <EditProjectModal
           open={editOpen}

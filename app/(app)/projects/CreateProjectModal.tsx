@@ -20,6 +20,8 @@ type Props = {
 
 const BRANDS = ["IRONTEC", "IVADE", "AMURO", "THE GYM CO.", "OVCM"] as const;
 
+const PRODUCT_GROUPS = ["A", "B", "C", "D", "E", "F", "G", "H"] as const;
+
 const VIDEO_PRIORITIES = ["5ดาว", "4ดาว", "3ดาว", "2ดาว", "1ดาว", "SPECIAL"] as const;
 
 const VIDEO_PURPOSES = [
@@ -52,6 +54,10 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
 
   const [code, setCode] = useState("");
   const [title, setTitle] = useState("");
+
+  // ✅ เพิ่ม "กลุ่มสินค้า" กลับมา (A-H)
+  const [productGroup, setProductGroup] = useState<(typeof PRODUCT_GROUPS)[number] | "">("");
+
   const [brand, setBrand] = useState<string>("");
   const [assigneeId, setAssigneeId] = useState<string>("");
 
@@ -83,6 +89,7 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
     setType("VIDEO");
     setCode("");
     setTitle("");
+    setProductGroup("");
     setBrand("");
     setAssigneeId("");
     setStartDate("");
@@ -113,6 +120,11 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
         status: "TODO",
         title: title.trim(),
         code: code.trim() || null,
+
+        // ✅ ส่งกลุ่มสินค้าไปด้วย (ชื่อฟิลด์: product_group)
+        // ถ้าตารางคุณใช้ชื่ออื่น เปลี่ยน key นี้เป็นชื่อคอลัมน์จริงได้เลย
+        product_group: productGroup || null,
+
         brand: brand || null,
         assignee_id: assigneeId || null,
         start_date: startDate ? new Date(startDate).toISOString() : null,
@@ -125,7 +137,7 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
         payload.video_purpose = videoPurpose;
         payload.graphic_job_type = null;
       } else {
-        payload.graphic_job_type = graphicJobType; // ✅ เอา dropdown ประเภทงานกราฟิกกลับมา
+        payload.graphic_job_type = graphicJobType;
         payload.video_priority = null;
         payload.video_purpose = null;
       }
@@ -228,8 +240,24 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
             />
           </div>
 
-          {/* Row 3: brand + assignee */}
+          {/* Row 3: product_group + brand */}
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-xs font-semibold text-white/60">กลุ่มสินค้า</label>
+              <select
+                value={productGroup}
+                onChange={(e) => setProductGroup(e.target.value as any)}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+              >
+                <option value="">-</option>
+                {PRODUCT_GROUPS.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <label className="text-xs font-semibold text-white/60">แบรนด์</label>
               <select
@@ -245,25 +273,26 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
                 ))}
               </select>
             </div>
-
-            <div>
-              <label className="text-xs font-semibold text-white/60">ผู้รับผิดชอบ</label>
-              <select
-                value={assigneeId}
-                onChange={(e) => setAssigneeId(e.target.value)}
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
-              >
-                <option value="">-</option>
-                {assigneeOptions.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.display_name || m.id}
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
 
-          {/* Row 4: dates */}
+          {/* Row 4: assignee */}
+          <div className="mt-4">
+            <label className="text-xs font-semibold text-white/60">ผู้รับผิดชอบ</label>
+            <select
+              value={assigneeId}
+              onChange={(e) => setAssigneeId(e.target.value)}
+              className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+            >
+              <option value="">-</option>
+              {assigneeOptions.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.display_name || m.id}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Row 5: dates */}
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <label className="text-xs font-semibold text-white/60">วันสั่งงาน</label>
@@ -286,7 +315,7 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
             </div>
           </div>
 
-          {/* Row 5: type-specific fields */}
+          {/* Row 6: type-specific fields */}
           {type === "VIDEO" ? (
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>

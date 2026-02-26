@@ -10,7 +10,7 @@ function badId(id?: string | null) {
 }
 
 export async function PATCH(req: NextRequest, ctx: Ctx) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   const { id } = await ctx.params;
   if (badId(id)) return NextResponse.json({ error: "Invalid member id" }, { status: 400 });

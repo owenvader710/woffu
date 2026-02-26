@@ -10,11 +10,12 @@ export async function GET(req: NextRequest) {
     const user = authData?.user;
     if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
-    // ✅ เห็นเฉพาะงานที่ assign ให้ตัวเอง
     const { data, error } = await supabase
       .from("projects")
       .select(`
-        id, title, type, department, status, created_at, start_date, due_date,
+        id,
+        code,  -- ✅ เพิ่มบรรทัดนี้ (ถ้าคอลัมน์จริงชื่ออื่น บอกผม เดี๋ยวแก้ให้)
+        title, type, department, status, created_at, start_date, due_date,
         assignee_id, created_by,
         brand, video_priority, video_purpose, graphic_job_type
       `)

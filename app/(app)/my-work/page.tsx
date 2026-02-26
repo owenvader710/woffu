@@ -6,6 +6,10 @@ import StatusDropdown, { Status } from "./StatusDropdown";
 
 type WorkItem = {
   id: string;
+
+  // ✅ เพิ่ม code เพื่อใช้รหัสจริงจาก DB
+  code?: string | null;
+
   title: string | null;
   type?: string | null;
 
@@ -61,21 +65,22 @@ function fmtDeadline(iso?: string | null) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
 
-  // ✅ th-TH + มีเวลา
   const date = d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
   const time = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false });
   return `${date} ${time}`;
 }
 
-// ✅ “รหัส” ถ้าไม่มี field จริง ให้ fallback เป็น ID สั้น
+// ✅ ใช้ “รหัสจริง” จาก DB ก่อน (w.code) ไม่ใช่เดาจาก id
 function makeCode(w: WorkItem) {
-  // ถ้าใน DB มี field อื่นในอนาคต เช่น w.code / w.ref_code ก็ใส่เพิ่มได้
+  const real = (w.code ?? "").toString().trim();
+  if (real) return real;
+
+  // fallback (กันเคสยังไม่มี code ใน DB)
   const t = (w.type || "").toUpperCase().trim();
   const short = (w.id || "").replace(/-/g, "").slice(0, 6).toUpperCase();
   return t ? `${t}-${short}` : short;
 }
 
-// ✅ บรรทัดรอง: ใช้ข้อมูลที่มีอยู่จริงจาก API
 function secondLine(w: WorkItem) {
   const parts = [
     w.brand ? String(w.brand).toUpperCase() : null,
@@ -92,7 +97,6 @@ export default function MyWorkPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  // ✅ filter สถานะด้านบนแบบ projects
   const [statusFilter, setStatusFilter] = useState<"ALL" | Status>("ALL");
 
   async function load() {
@@ -117,7 +121,6 @@ export default function MyWorkPage() {
   }
 
   async function changeStatus(id: string, next: Status) {
-    // optimistic
     const prev = items;
     setItems((xs) => xs.map((x) => (x.id === id ? { ...x, status: next } : x)));
 
@@ -130,7 +133,6 @@ export default function MyWorkPage() {
       const j = await safeJson(res);
       if (!res.ok) throw new Error((j && (j.error || j.message)) || "Update failed");
     } catch {
-      // rollback
       setItems(prev);
       alert("Update failed");
     }
@@ -195,8 +197,9 @@ export default function MyWorkPage() {
         ) : err ? (
           <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">{err}</div>
         ) : (
-          <div className="mt-6 overflow-hidden rounded-[30px] border border-white/10 bg-white/5">
-            <div className="w-full overflow-x-auto">
+          // ✅ FIX dropdown จม: เอา overflow-hidden ออก + ทำให้ overflow-visible
+          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 overflow-visible">
+            <div className="w-full overflow-x-auto overflow-y-visible">
               <table className="min-w-[980px] w-full">
                 <thead>
                   <tr className="text-left text-xs font-semibold tracking-widest text-white/45">
@@ -211,7 +214,6 @@ export default function MyWorkPage() {
                 <tbody className="divide-y divide-white/10">
                   {filtered.map((w) => (
                     <tr key={w.id} className="hover:bg-white/[0.03]">
-                      {/* Title + code + second line */}
                       <td className="px-6 py-5">
                         <div className="flex items-start gap-3">
                           <span className="mt-[2px] inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
@@ -240,15 +242,10 @@ export default function MyWorkPage() {
                         <StatusPill s={w.status} />
                       </td>
 
-                      <td className="px-6 py-5 text-center text-sm text-white/80">
-                        {fmtDeadline(w.due_date)}
-                      </td>
+                      <td className="px-6 py-5 text-center text-sm text-white/80">{fmtDeadline(w.due_date)}</td>
 
                       <td className="px-6 py-5 text-right">
-                        <StatusDropdown
-                          value={w.status}
-                          onChange={(s) => changeStatus(w.id, s)}
-                        />
+                        <StatusDropdown value={w.status} onChange={(s) => changeStatus(w.id, s)} />
                       </td>
                     </tr>
                   ))}

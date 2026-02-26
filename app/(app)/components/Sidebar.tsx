@@ -1,20 +1,26 @@
-// app/(app)/components/Sidebar.tsx
 "use client";
 
-import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import LogoutButton from "@/app/components/LogoutButton";
+import React, { useEffect, useMemo, useState } from "react";
+import LogoutButton from "./LogoutButton";
 
-type SubItem = { href: string; label: string };
+type MeProfile = {
+  id: string;
+  role: "LEADER" | "MEMBER";
+  is_active: boolean;
+};
 
-function cn(...xs: Array<string | false | null | undefined>) {
+async function safeJson(res: Response) {
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+function clsx(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-const LIME = "#e5ff78";
-
-function Item({
+function NavItem({
   href,
   label,
   active,
@@ -28,118 +34,86 @@ function Item({
   return (
     <Link
       href={href}
-      className={cn(
-        "group relative block rounded-xl px-3 py-2 text-[12px] font-semibold tracking-[0.14em] uppercase transition",
-        indent ? "ml-2" : "",
-        active ? "text-black" : "text-white/70 hover:text-white"
-      )}
-      style={
+      className={clsx(
+        "block rounded-xl px-3 py-2 text-sm transition",
+        indent ? "pl-8" : "",
         active
-          ? {
-              background: LIME,
-              boxShadow: "0 10px 28px rgba(229,255,120,0.18)",
-            }
-          : undefined
-      }
+          ? "bg-[#e5ff78] text-black font-semibold"
+          : "text-white/70 hover:bg-white/10 hover:text-white"
+      )}
     >
-      {!active ? (
-        <span className="pointer-events-none absolute inset-0 rounded-xl bg-white/0 transition group-hover:bg-white/[0.06]" />
-      ) : null}
-
-      <span className="relative z-[1]">{label}</span>
+      {label}
     </Link>
   );
 }
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const [openProject, setOpenProject] = useState(true);
+  const [isLeader, setIsLeader] = useState(false);
 
-  const [projectsOpen, setProjectsOpen] = useState(true);
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch("/api/me-profile", { cache: "no-store" });
+        const j = await safeJson(r);
+        const me = (j?.data ?? j) as MeProfile | null;
+        setIsLeader(!!(r.ok && me?.role === "LEADER" && me?.is_active === true));
+      } catch {
+        setIsLeader(false);
+      }
+    })();
+  }, []);
 
-  // ✅ ตามที่นายท่านต้องการ: ALL PROJECT -> /projects, COMPLETED -> /completed, BLOCKED -> /blocked
-  const projectSubs: SubItem[] = useMemo(
-    () => [
-      { href: "/projects", label: "All Project" },
-      { href: "/completed", label: "Completed" },
-      { href: "/blocked", label: "Blocked" },
-    ],
-    []
-  );
+  const active = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
-  // ให้ "Project" active เมื่ออยู่ในกลุ่มหน้านี้
-  const isProjectGroup =
-    pathname === "/projects" ||
-    pathname?.startsWith("/projects/") ||
-    pathname === "/completed" ||
-    pathname === "/blocked";
+  const projectActive = useMemo(() => {
+    return active("/projects") || active("/completed") || active("/blocked");
+  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <aside className="w-[260px] shrink-0 p-4">
-      <div
-        className="h-[calc(100vh-32px)] rounded-[28px] border border-white/10 bg-black/70 backdrop-blur-xl"
-        style={{ boxShadow: "0 30px 80px rgba(0,0,0,0.55)" }}
-      >
-        <div className="flex h-full flex-col p-5">
-          {/* Brand */}
-          <div className="mb-6">
-            <div className="text-[20px] font-extrabold tracking-[0.22em]" style={{ color: LIME }}>
-              WOFFU OS
+      <div className="rounded-[28px] border border-white/10 bg-black/60 p-4 backdrop-blur">
+        <div className="px-2 py-2">
+          <div className="text-[22px] font-extrabold tracking-widest text-[#e5ff78]">WOFFU OS</div>
+          <div className="text-xs text-white/50">Production Workflow</div>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-1">
+          <NavItem href="/dashboard" label="DASHBOARD" active={active("/dashboard")} />
+
+          <button
+            type="button"
+            onClick={() => setOpenProject((v) => !v)}
+            className={clsx(
+              "mt-1 flex items-center justify-between rounded-xl px-3 py-2 text-sm transition",
+              projectActive ? "bg-[#e5ff78] text-black font-semibold" : "text-white/70 hover:bg-white/10 hover:text-white"
+            )}
+            aria-expanded={openProject}
+          >
+            <span>PROJECT</span>
+            <span className="text-xs">{openProject ? "▲" : "▼"}</span>
+          </button>
+
+          {openProject && (
+            <div className="flex flex-col gap-1">
+              <NavItem href="/projects" label="ALL PROJECT" active={active("/projects")} indent />
+              <NavItem href="/completed" label="COMPLETED" active={active("/completed")} indent />
+              <NavItem href="/blocked" label="BLOCKED" active={active("/blocked")} indent />
             </div>
-            <div className="mt-1 text-[15px] text-white/40">Production Workflow</div>
+          )}
+
+          <div className="mt-1">
+            <NavItem href="/my-work" label="MY WORK" active={active("/my-work")} />
+            <NavItem href="/members" label="MEMBERS" active={active("/members")} />
+            {isLeader ? <NavItem href="/approvals" label="APPROVALS" active={active("/approvals")} /> : null}
           </div>
 
-          {/* Nav */}
-          <nav className="flex flex-col gap-2">
-            <Item href="/dashboard" label="Dashboard" active={pathname === "/dashboard"} />
-
-            {/* PROJECT (main) */}
-            <button
-              type="button"
-              onClick={() => setProjectsOpen((v) => !v)}
-              className={cn(
-                "text-left",
-                "relative rounded-xl px-3 py-2 text-[12px] font-semibold tracking-[0.14em] uppercase transition",
-                isProjectGroup ? "text-black" : "text-white/70 hover:text-white"
-              )}
-              style={
-                isProjectGroup
-                  ? { background: LIME, boxShadow: "0 10px 28px rgba(229,255,120,0.18)" }
-                  : undefined
-              }
-            >
-              {!isProjectGroup ? (
-                <span className="pointer-events-none absolute inset-0 rounded-xl bg-white/0 transition hover:bg-white/[0.06]" />
-              ) : null}
-
-              <span className="relative z-[1] flex items-center justify-between">
-                <span>Project</span>
-                <span className={cn("text-[10px] opacity-70 transition", projectsOpen ? "rotate-180" : "")}>
-                  ▾
-                </span>
-              </span>
-            </button>
-
-            {/* Sub menu: ตามภาพ */}
-            {projectsOpen ? (
-              <div className="mt-1 flex flex-col gap-2">
-                {projectSubs.map((s) => (
-                  <Item key={s.href} href={s.href} label={s.label} active={pathname === s.href} indent />
-                ))}
-              </div>
-            ) : null}
-
-            <Item href="/my-work" label="My Work" active={pathname === "/my-work"} />
-            <Item href="/members" label="Members" active={pathname === "/members"} />
-            <Item href="/approvals" label="Approvals" active={pathname === "/approvals"} />
-          </nav>
-
-          {/* Bottom */}
-          <div className="mt-auto pt-6">
-            <div className="h-px w-full bg-white/10" />
-            <div className="mt-4">
-              <LogoutButton />
-            </div>
+          <div className="mt-6 border-t border-white/10 pt-4">
+            <LogoutButton />
           </div>
+
+          <div className="mt-3 px-2 text-xs text-white/30">© {new Date().getFullYear()}</div>
         </div>
       </div>
     </aside>

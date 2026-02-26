@@ -1,8 +1,36 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import type { Project, ProjectStatus } from "./useProjects";
+
+type Project = {
+  id: string;
+  title: string;
+  type: "VIDEO" | "GRAPHIC";
+  status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
+  created_at: string;
+  start_date: string | null;
+  due_date: string | null;
+  brand?: string | null;
+  assignee_id?: string | null;
+  description?: string | null;
+  video_priority?: string | null;
+  video_purpose?: string | null;
+  graphic_job_type?: string | null;
+};
+
+type Member = {
+  id: string;
+  display_name: string | null;
+  department: "VIDEO" | "GRAPHIC" | "ALL";
+  role: "LEADER" | "MEMBER";
+  is_active: boolean;
+};
+
+async function safeJson(res: Response) {
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
 
 function formatDateTH(iso?: string | null) {
   if (!iso) return "-";
@@ -10,13 +38,20 @@ function formatDateTH(iso?: string | null) {
   return d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
 }
 
-function matchQuery(p: Project, q: string) {
-  const needle = q.trim().toLowerCase();
-  if (!needle) return true;
-  const hay = `${p.title ?? ""} ${p.brand ?? ""} ${p.video_priority ?? ""} ${p.video_purpose ?? ""} ${
-    p.graphic_job_type ?? ""
-  }`.toLowerCase();
-  return hay.includes(needle);
+function formatDateTimeTH(iso?: string | null) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  const date = d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
+  const time = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+  return `${date} ${time}`;
+}
+
+function statusTone(status: Project["status"]) {
+  if (status === "TODO") return "neutral";
+  if (status === "IN_PROGRESS") return "blue";
+  if (status === "BLOCKED") return "red";
+  if (status === "COMPLETED") return "green";
+  return "neutral";
 }
 
 function Pill({
@@ -34,97 +69,119 @@ function Pill({
       : tone === "red"
       ? "border-red-500/30 bg-red-500/10 text-red-200"
       : tone === "blue"
-      ? "border-sky-500/30 bg-sky-500/10 text-sky-200"
+      ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
       : "border-white/10 bg-white/5 text-white/70";
 
-  return <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] ${cls}`}>{children}</span>;
+  return <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs ${cls}`}>{children}</span>;
 }
 
-function statusTone(s: ProjectStatus) {
-  if (s === "TODO") return "neutral";
-  if (s === "IN_PROGRESS") return "blue";
-  if (s === "BLOCKED") return "red";
-  return "green";
-}
-
-type Mode = "ACTIVE" | "COMPLETED" | "BLOCKED";
+export type ProjectListMode = "ACTIVE" | "COMPLETED" | "BLOCKED";
 
 export default function ProjectListView({
   title,
-  mode,
-  items,
-  loading,
-  error,
-  isLeader,
-  onRefresh,
-  onEdit,
-  onDelete,
+  mode = "ACTIVE",
 }: {
   title: string;
-  mode: Mode;
-  items: Project[];
-  loading: boolean;
-  error: string;
-  isLeader: boolean;
-  onRefresh: () => void;
-  onEdit?: (p: Project) => void;
-  onDelete?: (p: Project) => void;
+  mode?: ProjectListMode;
 }) {
-  // filters
-  const [typeFilter, setTypeFilter] = useState<"ALL" | "VIDEO" | "GRAPHIC">("ALL");
+  const [items, setItems] = useState<Project[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [q, setQ] = useState("");
 
-  const list = useMemo(() => {
-    let x = items;
+  const memberMap = useMemo(() => {
+    const m = new Map<string, Member>();
+    for (const it of members) m.set(it.id, it);
+    return m;
+  }, [members]);
 
-    // ✅ โหมดกำหนดว่าเอาสถานะไหน
-    if (mode === "ACTIVE") x = x.filter((p) => p.status !== "COMPLETED" && p.status !== "BLOCKED");
-    if (mode === "COMPLETED") x = x.filter((p) => p.status === "COMPLETED");
-    if (mode === "BLOCKED") x = x.filter((p) => p.status === "BLOCKED");
+  async function loadProjects() {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/projects", { cache: "no-store" });
+      const json = await safeJson(res);
 
-    if (typeFilter !== "ALL") x = x.filter((p) => p.type === typeFilter);
-    if (q.trim()) x = x.filter((p) => matchQuery(p, q));
-    return x;
-  }, [items, mode, typeFilter, q]);
+      if (!res.ok) {
+        setItems([]);
+        setError((json && (json.error || json.message)) || `Load projects failed (${res.status})`);
+        return;
+      }
 
-  const IconBtn = ({
-    title,
-    onClick,
-    children,
-    danger,
-  }: {
-    title: string;
-    onClick: () => void;
-    children: React.ReactNode;
-    danger?: boolean;
-  }) => (
-    <button
-      type="button"
-      title={title}
-      onClick={onClick}
-      className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition ${
-        danger
-          ? "border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/15"
-          : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
-      }`}
-    >
-      {children}
-    </button>
-  );
+      const raw = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+      const normalized = raw
+        .map((p: any) => ({
+          ...p,
+          id: p?.id ?? p?.project_id ?? p?.projectId ?? p?.uuid ?? null,
+        }))
+        .filter((p: any) => !!p.id);
+
+      setItems(normalized);
+    } catch (e: any) {
+      setItems([]);
+      setError(e?.message || "Load projects failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadMembers() {
+    try {
+      const res = await fetch("/api/members", { cache: "no-store" });
+      const json = await safeJson(res);
+      if (!res.ok) return setMembers([]);
+      const data = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+      setMembers(data.filter((m: Member) => m.is_active !== false));
+    } catch {
+      setMembers([]);
+    }
+  }
+
+  useEffect(() => {
+    (async () => {
+      await Promise.all([loadProjects(), loadMembers()]);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const filteredItems = useMemo(() => {
+    let list = items;
+
+    if (mode === "ACTIVE") list = list.filter((p) => p.status !== "COMPLETED" && p.status !== "BLOCKED");
+    if (mode === "COMPLETED") list = list.filter((p) => p.status === "COMPLETED");
+    if (mode === "BLOCKED") list = list.filter((p) => p.status === "BLOCKED");
+
+    if (q.trim()) {
+      const needle = q.trim().toLowerCase();
+      list = list.filter((p) => {
+        const assigneeName = p.assignee_id ? memberMap.get(p.assignee_id)?.display_name ?? "" : "";
+        const hay = `${p.title ?? ""} ${p.brand ?? ""} ${p.video_priority ?? ""} ${p.video_purpose ?? ""} ${
+          p.graphic_job_type ?? ""
+        } ${assigneeName}`.toLowerCase();
+        return hay.includes(needle);
+      });
+    }
+
+    return list;
+  }, [items, q, memberMap, mode]);
 
   return (
-    <div className="w-full">
+    <div>
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
           <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-white">{title}</h1>
-          <div className="mt-2 text-sm text-white/60">ทั้งหมด: {list.length}</div>
+          <div className="mt-2 text-sm text-white/60">ทั้งหมด: {filteredItems.length}</div>
         </div>
 
         <div className="flex gap-2">
           <button
-            onClick={onRefresh}
+            onClick={() => {
+              loadProjects();
+              loadMembers();
+            }}
             className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
           >
             รีเฟรช
@@ -132,38 +189,16 @@ export default function ProjectListView({
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Search */}
       <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-wrap gap-2">
-            {(["ALL", "VIDEO", "GRAPHIC"] as const).map((t) => {
-              const active = typeFilter === t;
-              return (
-                <button
-                  key={t}
-                  onClick={() => setTypeFilter(t)}
-                  className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
-                    active
-                      ? "border-white/10 bg-white text-black"
-                      : "border-white/10 bg-transparent text-white/70 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  {t === "ALL" ? "ทุกฝ่าย" : t}
-                </button>
-              );
-            })}
-          </div>
-
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="ค้นหา: ชื่อโปรเจกต์ / แบรนด์ / รูปแบบงาน / ประเภทงาน"
-            className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78] md:w-[420px]"
-          />
-        </div>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="ค้นหา: ชื่อโปรเจกต์ / ผู้รับผิดชอบ / แบรนด์ / รูปแบบงาน / ประเภทงาน"
+          className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78] md:w-[520px]"
+        />
       </div>
 
-      {/* Content */}
       {loading && (
         <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">กำลังโหลด...</div>
       )}
@@ -173,67 +208,57 @@ export default function ProjectListView({
       )}
 
       {!loading && !error && (
-        <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5">
           <table className="w-full text-sm text-white/80">
             <thead className="bg-white/5 text-xs text-white/50">
               <tr className="text-left">
                 <th className="p-4">โปรเจกต์</th>
                 <th className="p-4">ฝ่าย</th>
+                <th className="p-4">ผู้รับผิดชอบ</th>
                 <th className="p-4">สถานะ</th>
                 <th className="p-4">วันที่สั่ง</th>
                 <th className="p-4">Deadline</th>
-                <th className="p-4 text-right">จัดการ</th>
               </tr>
             </thead>
 
             <tbody>
-              {list.length === 0 ? (
+              {filteredItems.length === 0 ? (
                 <tr>
                   <td className="p-6 text-white/40" colSpan={6}>
                     ไม่มีรายการตามเงื่อนไขนี้
                   </td>
                 </tr>
               ) : (
-                list.map((p) => (
-                  <tr key={p.id} className="border-t border-white/10 hover:bg-white/[0.06]">
-                    <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        <Link className="font-semibold text-white underline underline-offset-4" href={`/projects/${p.id}`}>
-                          {p.title}
-                        </Link>
-                        {p.brand ? <Pill tone="neutral">{p.brand}</Pill> : null}
-                      </div>
-                    </td>
+                filteredItems.map((p) => {
+                  const assigneeName = p.assignee_id ? memberMap.get(p.assignee_id)?.display_name ?? "-" : "-";
+                  return (
+                    <tr key={p.id} className="border-t border-white/10 hover:bg-white/[0.06]">
+                      <td className="p-4">
+                        <div className="flex items-center gap-2">
+                          <Link className="font-semibold text-white underline underline-offset-4" href={`/projects/${p.id}`}>
+                            {p.title}
+                          </Link>
+                          {p.brand ? <Pill tone="neutral">{p.brand}</Pill> : null}
+                        </div>
+                      </td>
 
-                    <td className="p-4">
-                      <Pill tone={p.type === "VIDEO" ? "blue" : "amber"}>{p.type}</Pill>
-                    </td>
+                      <td className="p-4">
+                        <Pill tone={p.type === "VIDEO" ? "blue" : "amber"}>{p.type}</Pill>
+                      </td>
 
-                    <td className="p-4">
-                      <Pill tone={statusTone(p.status)}>{p.status}</Pill>
-                    </td>
+                      <td className="p-4">
+                        <span className="text-white/80">{assigneeName || "-"}</span>
+                      </td>
 
-                    <td className="p-4 text-white/60">{formatDateTH(p.created_at)}</td>
-                    <td className="p-4 text-white/60">{formatDateTH(p.due_date)}</td>
+                      <td className="p-4">
+                        <Pill tone={statusTone(p.status) as any}>{p.status}</Pill>
+                      </td>
 
-                    <td className="p-4">
-                      <div className="flex justify-end gap-2">
-                        {isLeader && onEdit && onDelete ? (
-                          <>
-                            <IconBtn title="แก้ไข" onClick={() => onEdit(p)}>
-                              ✏️
-                            </IconBtn>
-                            <IconBtn title="ลบ" danger onClick={() => onDelete(p)}>
-                              🗑️
-                            </IconBtn>
-                          </>
-                        ) : (
-                          <span className="text-xs text-white/30">-</span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      <td className="p-4 text-white/60">{formatDateTH(p.created_at)}</td>
+                      <td className="p-4 text-white/60">{formatDateTimeTH(p.due_date)}</td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

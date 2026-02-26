@@ -1,4 +1,3 @@
-// app/dashboard/page.tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -50,6 +49,7 @@ function StatCard({
         clickable ? "hover:bg-white/10" : "",
         highlight ? "bg-gradient-to-b from-white/10 to-white/[0.03]" : "",
       ].join(" ")}
+      disabled={!clickable}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -68,27 +68,46 @@ function StatCard({
 function ActionBtn({
   label,
   sub,
+  badge,
   onClick,
   primary,
 }: {
   label: string;
   sub?: string;
+  badge?: number;
   onClick: () => void;
   primary?: boolean;
 }) {
+  const base =
+    "w-full rounded-2xl border px-4 py-3 text-left transition flex items-center justify-between gap-3";
+  const normal = "border-white/10 bg-black/20 hover:bg-white/5";
+  const pri = "border-[#e5ff78]/25 bg-[#e5ff78] text-black hover:opacity-90";
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={[
-        "w-full rounded-2xl border px-4 py-3 text-left transition",
-        primary
-          ? "border-[#e5ff78]/20 bg-[#e5ff78] text-black hover:opacity-90"
-          : "border-white/10 bg-white/5 text-white/85 hover:bg-white/10",
-      ].join(" ")}
-    >
-      <div className="text-sm font-semibold">{label}</div>
-      {sub ? <div className="mt-0.5 text-xs opacity-70">{sub}</div> : null}
+    <button type="button" onClick={onClick} className={`${base} ${primary ? pri : normal}`}>
+      <div className="min-w-0">
+        <div className={`flex items-center gap-2 ${primary ? "text-black" : "text-white"}`}>
+          <div className="text-sm font-semibold truncate">{label}</div>
+
+          {typeof badge === "number" && badge > 0 ? (
+            <span
+              className={
+                primary
+                  ? "inline-flex items-center rounded-full border border-black/20 bg-black/10 px-2 py-0.5 text-[11px] font-extrabold text-black"
+                  : "inline-flex items-center rounded-full border border-[#e5ff78]/25 bg-[#e5ff78]/10 px-2 py-0.5 text-[11px] font-semibold text-[#e5ff78]"
+              }
+            >
+              {badge}
+            </span>
+          ) : null}
+        </div>
+
+        {sub ? (
+          <div className={`mt-0.5 text-xs ${primary ? "text-black/70" : "text-white/50"}`}>{sub}</div>
+        ) : null}
+      </div>
+
+      <div className={`text-xs ${primary ? "text-black/80" : "text-white/50"}`}>›</div>
     </button>
   );
 }
@@ -130,6 +149,7 @@ export default function DashboardPage() {
       }
 
       setData(json);
+
       const initialPending = Number(json?.pendingApprovals || 0);
       approvalsRef.current = initialPending;
       setPendingNow(initialPending);
@@ -141,6 +161,7 @@ export default function DashboardPage() {
     }
   }
 
+  // ✅ poll “pending approvals” ให้หัวหน้า (นับเฉพาะ PENDING)
   async function pollApprovals() {
     try {
       const res = await fetch("/api/approvals", { cache: "no-store" });
@@ -148,7 +169,8 @@ export default function DashboardPage() {
       if (!res.ok) return;
 
       const arr = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [];
-      const nextCount = Array.isArray(arr) ? arr.length : 0;
+      const pendingOnly = Array.isArray(arr) ? arr.filter((x: any) => x?.request_status === "PENDING") : [];
+      const nextCount = pendingOnly.length;
 
       approvalsRef.current = nextCount;
       setPendingNow(nextCount);
@@ -170,7 +192,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen w-full bg-black text-white">
-    <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
+      <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
         {/* Header */}
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
@@ -200,11 +222,15 @@ export default function DashboardPage() {
         </div>
 
         {loading && (
-          <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-5 text-sm text-white/60">กำลังโหลด...</div>
+          <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-5 text-sm text-white/60">
+            กำลังโหลด...
+          </div>
         )}
 
         {!loading && error && (
-          <div className="mt-6 rounded-3xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">{error}</div>
+          <div className="mt-6 rounded-3xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
+            {error}
+          </div>
         )}
 
         {!loading && !error && data && (
@@ -268,8 +294,22 @@ export default function DashboardPage() {
                 <div className="mt-4 space-y-3">
                   <ActionBtn label="อัปเดตงาน" sub="ไปหน้า Projects" onClick={() => router.push("/projects")} />
                   <ActionBtn label="ไปที่งานของฉัน" sub="My Work" onClick={() => router.push("/my-work")} />
+
                   {isLeader ? (
-                    <ActionBtn label="สั่งงานใหม่" sub="Create Project" primary onClick={() => router.push("/projects")} />
+                    <>
+                      <ActionBtn
+                        label="ไปหน้า Approvals"
+                        sub="รออนุมัติ"
+                        badge={pendingNow}
+                        onClick={() => router.push("/approvals")}
+                      />
+                      <ActionBtn
+                        label="สั่งงานใหม่"
+                        sub="Create Project"
+                        primary
+                        onClick={() => router.push("/projects")}
+                      />
+                    </>
                   ) : null}
                 </div>
               </div>

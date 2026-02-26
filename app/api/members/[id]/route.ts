@@ -1,76 +1,49 @@
-import { NextResponse } from "next/server";
-import { createSupabaseServer } from "../../_supabase";
+import { NextRequest, NextResponse } from "next/server";
+import { supabaseFromRequest } from "@/utils/supabase/api";
 
-function badId(id?: string) {
-  return !id || id === "undefined" || id === "null";
-}
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const { supabase, applyCookies } = supabaseFromRequest(req);
 
-function pickDefined<T extends Record<string, any>>(obj: T) {
-  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
-}
+  const id = params?.id;
+  if (!id) return applyCookies(NextResponse.json({ error: "Missing id" }, { status: 400 }));
 
-// ✅ Next.js v15+: params เป็น Promise ต้อง await ก่อน
-export async function PATCH(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> }
-) {
-  const { id } = await ctx.params;
-
-  if (badId(id)) {
-    return NextResponse.json({ error: "Invalid member id" }, { status: 400 });
-  }
-
-  // ✅ แก้ไข: เพิ่ม await และเช็ค undefined เพื่อกัน Error
-  const supabase = await createSupabaseServer();
-  
-  if (!supabase) {
-    return NextResponse.json({ error: "Supabase client not initialized" }, { status: 500 });
-  }
-
-  // ✅ บรรทัดนี้จะไม่พังแล้ว เพราะเราตรวจสอบตัวแปร supabase ก่อนเรียกใช้
+  // auth
   const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
-  if (!authData?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (authErr) return applyCookies(NextResponse.json({ error: authErr.message }, { status: 401 }));
 
-  // ✅ เช็คสิทธิ์: ให้ LEADER เท่านั้นที่แก้สมาชิกได้
-  const { data: meProfile, error: meErr } = await supabase
-    .from("profiles")
-    .select("role, is_active")
-    .eq("id", authData.user.id)
-    .maybeSingle();
-
-  if (meErr) return NextResponse.json({ error: meErr.message }, { status: 500 });
-
-  const isLeader =
-    String(meProfile?.role || "").toUpperCase() === "LEADER" &&
-    meProfile?.is_active !== false;
-
-  if (!isLeader) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const user = authData?.user;
+  if (!user) return applyCookies(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
 
   const body = await req.json().catch(() => null);
-  if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  if (!body) return applyCookies(NextResponse.json({ error: "Invalid JSON" }, { status: 400 }));
 
-  // ✅ ทำความสะอาด payload: กันส่ง "" / undefined
-  const patch = pickDefined({
+  // only allow patch fields we expect
+  const patch: any = {
     display_name: body.display_name ?? undefined,
     department: body.department ?? undefined,
     role: body.role ?? undefined,
-    is_active: typeof body.is_active === "boolean" ? body.is_active : undefined,
-    phone: body.phone === "" ? null : body.phone ?? undefined,
-    email: body.email === "" ? null : body.email ?? undefined,
-  });
+    is_active: body.is_active ?? undefined,
+    phone: body.phone ?? undefined,
+    avatar_url: body.avatar_url ?? undefined,
+    birth_date: body.birth_date ?? undefined, // ✅ เพิ่ม
+  };
+
+  // normalize empty string -> null (สำคัญสำหรับ date)
+  if (patch.birth_date === "") patch.birth_date = null;
+
+  // clean undefined
+  Object.keys(patch).forEach((k) => patch[k] === undefined && delete patch[k]);
 
   const { data, error } = await supabase
     .from("profiles")
     .update(patch)
     .eq("id", id)
-    .select("id, display_name, department, role, is_active, avatar_url, phone, email")
-    .maybeSingle();
+    .select("id, display_name, department, role, is_active, avatar_url, phone, email, birth_date")
+    .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!data) return NextResponse.json({ error: "Member not found" }, { status: 404 });
+  if (error) {
+    return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
+  }
 
-  return NextResponse.json({ data });
+  return applyCookies(NextResponse.json({ data }));
 }

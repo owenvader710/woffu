@@ -100,7 +100,7 @@ export default function MyWorkPage() {
       </div>
 
       {/* Table */}
-      <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+      <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 overflow-x-auto">
         <table className="w-full text-sm text-white/80">
           <thead className="bg-white/5 text-xs text-white/50">
             <tr className="text-left">

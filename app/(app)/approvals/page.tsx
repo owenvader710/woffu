@@ -1,89 +1,109 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { RefreshCw, Check, X } from "lucide-react";
+import Link from "next/link";
 
-type ApprovalRow = {
+type MeProfile = {
+  id: string;
+  role: "LEADER" | "MEMBER";
+  is_active: boolean;
+  display_name?: string | null;
+};
+
+type ProfileMini = {
+  id: string;
+  display_name: string | null;
+  department?: "VIDEO" | "GRAPHIC" | "ALL" | null;
+  role?: "LEADER" | "MEMBER" | null;
+  avatar_url?: string | null;
+};
+
+type StatusRequest = {
   id: string;
   project_id: string;
   from_status: string;
   to_status: string;
-  request_status: string; // คอลัมน์จริงใน DB คือ request_status
+  request_status: "PENDING" | "APPROVED" | "REJECTED";
   created_at: string;
-  requested_by: string | null;
-  note: string | null;
+  requested_by: string;
+  approved_by: string | null;
+  approved_at: string | null;
+
   project?: {
     id: string;
-    title: string | null;
-    brand?: string | null;
-    department?: string | null;
+    title: string;
+    type: "VIDEO" | "GRAPHIC";
+    status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
+    brand: string | null;
   } | null;
-  requester?: { id: string; display_name: string | null } | null;
+
+  requester?: ProfileMini | null;
+  approver?: ProfileMini | null;
 };
 
 async function safeJson(res: Response) {
-  const t = await res.text();
-  try {
-    return t ? JSON.parse(t) : null;
-  } catch {
-    return { error: t };
-  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
-function fmtDate(iso: string) {
-  try {
-    return new Date(iso).toLocaleString("th-TH", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
+function formatDateTimeTH(iso?: string | null) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  return d.toLocaleString("th-TH", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-function Badge({
-  children,
-  tone = "neutral",
-}: {
-  children: React.ReactNode;
-  tone?: "neutral" | "lime";
-}) {
-  const cls =
-    tone === "lime"
-      ? "border-[#e5ff78]/30 bg-[#e5ff78]/15 text-[#e5ff78]"
-      : "border-white/10 bg-white/5 text-white/75";
-
-  return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-tight ${cls}`}>
-      {children}
-    </span>
-  );
+function badgeClass(status: StatusRequest["request_status"]) {
+  if (status === "APPROVED") return "border-green-200 bg-green-50 text-green-700";
+  if (status === "REJECTED") return "border-red-200 bg-red-50 text-red-700";
+  return "border-amber-200 bg-amber-50 text-amber-800";
 }
-
-type Tab = "ALL" | "VIDEO" | "GRAPHIC";
 
 export default function ApprovalsPage() {
-  const [items, setItems] = useState<ApprovalRow[]>([]);
+  const [me, setMe] = useState<MeProfile | null>(null);
+  const isLeader = useMemo(() => me?.role === "LEADER" && me?.is_active === true, [me]);
+
+  const [items, setItems] = useState<StatusRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-  const [tab, setTab] = useState<Tab>("ALL");
 
   async function loadAll() {
     setLoading(true);
-    setErr(""); // ล้าง Error เก่าเมื่อโหลดใหม่
+    setErr("");
+
     try {
+      const rMe = await fetch("/api/me-profile", { cache: "no-store" });
+      const jMe = await safeJson(rMe);
+      const m = (jMe?.data ?? jMe) as MeProfile | null;
+      const meObj = rMe.ok && m?.id ? m : null;
+      setMe(meObj);
+
+      const leaderNow = meObj?.role === "LEADER" && meObj?.is_active === true;
+      if (!leaderNow) {
+        setItems([]);
+        setErr("หน้านี้สำหรับหัวหน้าเท่านั้น");
+        return;
+      }
+
       const res = await fetch("/api/approvals", { cache: "no-store" });
       const json = await safeJson(res);
-      if (!res.ok) throw new Error(json?.error || "Failed to fetch");
 
-      // ดึงข้อมูลจาก json.data.pending ตามโครงสร้าง API เดิม
-      const pending = json?.data?.pending;
-      setItems(Array.isArray(pending) ? pending : []);
+      if (!res.ok) {
+        setItems([]);
+        setErr((json && (json.error || json.message)) || `Load approvals failed (${res.status})`);
+        return;
+      }
+
+      const data = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+      setItems(data);
     } catch (e: any) {
-      setErr(e?.message || "Failed to fetch");
+      setItems([]);
+      setErr(e?.message || "Load approvals failed");
     } finally {
       setLoading(false);
     }
@@ -91,167 +111,147 @@ export default function ApprovalsPage() {
 
   useEffect(() => {
     loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const video = useMemo(
-    () => items.filter((x) => String(x.project?.department || "").toUpperCase() === "VIDEO"),
-    [items]
-  );
+  const pending = useMemo(() => items.filter((x) => x.request_status === "PENDING"), [items]);
+  const history = useMemo(() => items.filter((x) => x.request_status !== "PENDING"), [items]);
 
-  const graphic = useMemo(
-    () => items.filter((x) => String(x.project?.department || "").toUpperCase() === "GRAPHIC"),
-    [items]
-  );
-
-  const shown = tab === "ALL" ? items : tab === "VIDEO" ? video : graphic;
-
-  async function act(item: ApprovalRow, action: "approve" | "reject") {
-    // 🛡️ แก้ปัญหา "Request is not pending": เช็คสถานะก่อนส่ง (Case-insensitive)
-    if (String(item.request_status).toUpperCase() !== "PENDING") {
-      setErr(`คำขอนี้ถูกจัดการไปแล้ว (สถานะปัจจุบัน: ${item.request_status})`);
-      return;
-    }
-
-    setErr(""); // ล้าง Error ก่อนเริ่มทำงาน
+  async function act(id: string, action: "approve" | "reject") {
+    setErr("");
     try {
-      const res = await fetch(`/api/approvals/${item.id}/${action}`, {
+      const res = await fetch(`/api/approvals/${id}`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
       });
       const json = await safeJson(res);
-      
       if (!res.ok) {
-        throw new Error(json?.error || "การจัดการคำขอล้มเหลว");
+        setErr((json && (json.error || json.message)) || `Action failed (${res.status})`);
+        return;
       }
-      
-      // เมื่อสำเร็จ ให้โหลดข้อมูลใหม่
       await loadAll();
     } catch (e: any) {
-      setErr(e?.message || "เกิดข้อผิดพลาดในการส่งข้อมูล");
+      setErr(e?.message || "Action failed");
     }
   }
 
-  const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: "ALL", label: "ALL", count: items.length },
-    { key: "VIDEO", label: "VIDEO", count: video.length },
-    { key: "GRAPHIC", label: "GRAPHIC", count: graphic.length },
-  ];
-
   return (
-    <div className="min-h-screen bg-black text-white p-6 md:p-12">
-      <div className="max-w-6xl mx-auto w-full">
+    <div>
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
+          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-white">Approvals</h1>
+          <div className="mt-2 text-sm text-white/60">Pending: {pending.length}</div>
+        </div>
 
-        <header className="flex justify-between items-end mb-10">
-          <div>
-            <p className="text-[10px] font-black tracking-[0.3em] text-white/30 uppercase">WOFFU</p>
-            <h1 className="text-4xl font-black mt-1">
-              Approvals <span className="text-sm font-normal text-white/20 ml-2">({items.length})</span>
-            </h1>
-          </div>
-          <button onClick={loadAll} className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all">
-            <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
+        <div className="flex gap-2">
+          <button
+            onClick={loadAll}
+            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
+          >
+            รีเฟรช
           </button>
-        </header>
+        </div>
+      </div>
 
-        {err && (
-          <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200 animate-in fade-in slide-in-from-top-1">
-            {err}
-          </div>
-        )}
+      {loading && (
+        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">กำลังโหลด...</div>
+      )}
 
-        <div className="rounded-[32px] border border-white/10 bg-white/5 p-6 shadow-2xl">
-          <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-            {tabs.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
-                className={
-                  tab === t.key
-                    ? "rounded-full border border-white/20 bg-white px-4 py-2 text-[12px] font-black text-black whitespace-nowrap"
-                    : "rounded-full border border-white/10 bg-black/20 px-4 py-2 text-[12px] font-black text-white/80 hover:bg-white/10 whitespace-nowrap"
-                }
-              >
-                {t.label} ({t.count})
-              </button>
-            ))}
-          </div>
+      {!loading && err && (
+        <div className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{err}</div>
+      )}
 
-          <div className="overflow-hidden rounded-[28px] border border-white/10">
-            <table className="w-full text-left">
-              <thead className="bg-white/5 text-[11px] text-white/35 uppercase tracking-wider">
-                <tr>
-                  <th className="px-5 py-4">โปรเจกต์</th>
-                  <th className="px-5 py-4">ผู้ขอ</th>
-                  <th className="px-5 py-4">การเปลี่ยนแปลง</th>
-                  <th className="px-5 py-4">เวลาที่ขอ</th>
-                  <th className="px-5 py-4 text-right">จัดการ</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/10">
-                {loading ? (
-                  <tr>
-                    <td colSpan={5} className="px-5 py-20 text-center text-white/40">
-                      <div className="flex flex-col items-center gap-3">
-                        <RefreshCw className="animate-spin text-white/20" size={32} />
-                        <span className="text-xs font-bold tracking-widest">LOADING...</span>
+      {!loading && !err && (
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="text-sm font-semibold text-white">Pending</div>
+              <div className="text-xs text-white/50">ทั้งหมด: {pending.length}</div>
+            </div>
+
+            {pending.length === 0 ? (
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/50">ไม่มีคำขอรออนุมัติ</div>
+            ) : (
+              <div className="space-y-3">
+                {pending.map((r) => (
+                  <div key={r.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-white">
+                          <Link className="underline underline-offset-4" href={`/projects/${r.project_id}`}>
+                            {r.project?.title || "Project"}
+                          </Link>
+                        </div>
+                        <div className="mt-1 text-xs text-white/60">
+                          {r.from_status} → {r.to_status} · โดย {r.requester?.display_name || "-"} · {formatDateTimeTH(r.created_at)}
+                        </div>
                       </div>
-                    </td>
-                  </tr>
-                ) : shown.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-5 py-20 text-center text-white/20 font-medium">
-                      ไม่มีคำขอที่รอดำเนินการ
-                    </td>
-                  </tr>
-                ) : (
-                  shown.map((r) => (
-                    <tr key={r.id} className="hover:bg-white/[0.02] transition-colors group">
-                      <td className="px-5 py-5">
-                        <div className="font-extrabold text-white group-hover:text-[#e5ff78] transition-colors">
-                          {r.project?.title || "Unknown Project"}
+
+                      <span className={`shrink-0 rounded-lg border px-2 py-0.5 text-xs ${badgeClass(r.request_status)}`}>
+                        {r.request_status}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => act(r.id, "approve")}
+                        className="rounded-xl bg-[#e5ff78] px-4 py-2 text-sm font-semibold text-black hover:opacity-90"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => act(r.id, "reject")}
+                        className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-200 hover:bg-red-500/15"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="text-sm font-semibold text-white">History</div>
+              <div className="text-xs text-white/50">ทั้งหมด: {history.length}</div>
+            </div>
+
+            {history.length === 0 ? (
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/50">ยังไม่มีประวัติ</div>
+            ) : (
+              <div className="space-y-3">
+                {history.slice(0, 20).map((r) => (
+                  <div key={r.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-white">
+                          <Link className="underline underline-offset-4" href={`/projects/${r.project_id}`}>
+                            {r.project?.title || "Project"}
+                          </Link>
                         </div>
-                        <div className="mt-1.5 flex gap-2">
-                          {r.project?.department && <Badge>{r.project.department}</Badge>}
-                          {r.project?.brand && <Badge>{r.project.brand}</Badge>}
+                        <div className="mt-1 text-xs text-white/60">
+                          {r.from_status} → {r.to_status} · โดย {r.requester?.display_name || "-"} · {formatDateTimeTH(r.created_at)}
                         </div>
-                      </td>
-                      <td className="px-5 py-5 text-sm font-medium text-white/70">
-                        {r.requester?.display_name || r.requested_by || "-"}
-                      </td>
-                      <td className="px-5 py-5">
-                        <div className="flex items-center gap-2">
-                          <Badge>{r.from_status}</Badge>
-                          <span className="text-white/20">→</span>
-                          <Badge tone="lime">{r.to_status}</Badge>
+                        <div className="mt-1 text-xs text-white/50">
+                          อนุมัติโดย {r.approver?.display_name || "-"} · {formatDateTimeTH(r.approved_at)}
                         </div>
-                      </td>
-                      <td className="px-5 py-5 text-[11px] font-bold text-white/30">
-                        {fmtDate(r.created_at)}
-                      </td>
-                      <td className="px-5 py-5">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => act(r, "approve")}
-                            className="flex items-center gap-2 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-2 text-[12px] font-black text-green-400 hover:bg-green-500/20 active:scale-95 transition-all"
-                          >
-                            <Check size={14} /> APPROVE
-                          </button>
-                          <button
-                            onClick={() => act(r, "reject")}
-                            className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-[12px] font-black text-red-400 hover:bg-red-500/20 active:scale-95 transition-all"
-                          >
-                            <X size={14} /> REJECT
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                      </div>
+
+                      <span className={`shrink-0 rounded-lg border px-2 py-0.5 text-xs ${badgeClass(r.request_status)}`}>
+                        {r.request_status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
-        <div className="h-20" />
-      </div>
+      )}
     </div>
   );
 }

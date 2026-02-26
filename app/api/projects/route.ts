@@ -2,8 +2,24 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer } from "../_supabase";
 
-const SELECT_FIELDS =
-  "id,code,title,type,status,created_at,start_date,due_date,brand,video_priority,video_purpose,graphic_job_type,assignee_id,description,department,created_by";
+const SELECT_FIELDS = [
+  "id",
+  "code", // ✅ เพิ่ม code
+  "title",
+  "type",
+  "status",
+  "created_at",
+  "start_date",
+  "due_date",
+  "brand",
+  "video_priority",
+  "video_purpose",
+  "graphic_job_type",
+  "assignee_id",
+  "description",
+  "department",
+  "created_by",
+].join(",");
 
 export async function GET() {
   const supabase = await createSupabaseServer();
@@ -32,21 +48,23 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
 
-  // ✅ กัน code เป็น string แปลกๆ
-  const cleanCode =
-    typeof body.code === "string" ? body.code.trim() : body.code ?? null;
-
-  const insertRow = {
+  // ✅ กัน undefined/empty บาง field แล้วค่อยส่งเข้า DB
+  const insertRow: Record<string, any> = {
     ...body,
-    code: cleanCode || null,
     created_by: user.id,
   };
 
-  const { data, error } = await supabase
-    .from("projects")
-    .insert(insertRow)
-    .select(SELECT_FIELDS)
-    .single();
+  // ล้างค่า empty string บางตัวเพื่อไม่ให้ DB งอแง
+  for (const k of Object.keys(insertRow)) {
+    if (insertRow[k] === "") insertRow[k] = null;
+  }
+
+  // ✅ ถ้า frontend ส่ง type มา แต่ไม่ส่ง department ให้ default = type
+  if (!insertRow.department && (insertRow.type === "VIDEO" || insertRow.type === "GRAPHIC")) {
+    insertRow.department = insertRow.type;
+  }
+
+  const { data, error } = await supabase.from("projects").insert(insertRow).select(SELECT_FIELDS).single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -16,8 +16,8 @@ type MeProfile = {
   email: string | null;
   is_active: boolean;
   avatar_url?: string | null;
-  phone?: string | null;       // ✅ เพิ่ม (ไว้โชว์/แก้ไข)
-  birth_date?: string | null;  // ✅ เพิ่ม (ไว้โชว์/แก้ไข)
+  phone?: string | null; // ✅ เพิ่ม (ไว้โชว์/แก้ไข)
+  birth_date?: string | null; // ✅ เพิ่ม (ไว้โชว์/แก้ไข)
 };
 
 type Member = {
@@ -54,7 +54,11 @@ function formatBirth(d?: string | null) {
   if (!d) return "-";
   try {
     const dt = new Date(d);
-    return dt.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
+    return dt.toLocaleDateString("th-TH", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    });
   } catch {
     return d;
   }
@@ -78,16 +82,44 @@ function DeptPill({ dept }: { dept: Dept }) {
       : dept === "GRAPHIC"
       ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
       : "border-white/10 bg-white/5 text-white/70";
-  return <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", cls)}>{dept}</span>;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold",
+        cls
+      )}
+    >
+      {dept}
+    </span>
+  );
 }
 
 function RolePill({ role }: { role: Role }) {
   const cls =
-    role === "LEADER" ? "border-green-500/30 bg-green-500/10 text-green-200" : "border-white/10 bg-white/5 text-white/70";
-  return <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", cls)}>{role}</span>;
+    role === "LEADER"
+      ? "border-green-500/30 bg-green-500/10 text-green-200"
+      : "border-white/10 bg-white/5 text-white/70";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold",
+        cls
+      )}
+    >
+      {role}
+    </span>
+  );
 }
 
-function Avatar({ url, name, size = 56 }: { url?: string | null; name?: string | null; size?: number }) {
+function Avatar({
+  url,
+  name,
+  size = 56,
+}: {
+  url?: string | null;
+  name?: string | null;
+  size?: number;
+}) {
   const has = !!url;
   return (
     <div
@@ -96,7 +128,11 @@ function Avatar({ url, name, size = 56 }: { url?: string | null; name?: string |
     >
       {has ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={url!} alt={name || "avatar"} className="h-full w-full object-cover" />
+        <img
+          src={url!}
+          alt={name || "avatar"}
+          className="h-full w-full object-cover"
+        />
       ) : (
         <div className="flex h-full w-full items-center justify-center text-sm font-extrabold text-[#e5ff78]">
           {initials(name)}
@@ -135,6 +171,12 @@ function EditMyProfileModal({
   if (!open || !me?.id) return null;
 
   async function save() {
+    // ✅ FIX: guard ให้ TS แน่ใจว่า me ไม่เป็น null ใน closure นี้
+    if (!me?.id) {
+      setErr("ไม่พบผู้ใช้งาน (me) กรุณารีเฟรช");
+      return;
+    }
+
     setSaving(true);
     setErr("");
     try {
@@ -152,7 +194,10 @@ function EditMyProfileModal({
 
       const json = await safeJson(res);
       if (!res.ok) {
-        setErr((json && (json.error || json.message)) || `Save failed (${res.status})`);
+        setErr(
+          (json && (json.error || json.message)) ||
+            `Save failed (${res.status})`
+        );
         return;
       }
 
@@ -170,7 +215,9 @@ function EditMyProfileModal({
       <div className="w-full max-w-xl rounded-3xl border border-white/10 bg-black text-white shadow-[0_25px_80px_rgba(0,0,0,0.6)]">
         <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
           <div>
-            <div className="text-sm font-semibold tracking-widest text-white/50">MY PROFILE</div>
+            <div className="text-sm font-semibold tracking-widest text-white/50">
+              MY PROFILE
+            </div>
             <div className="mt-1 text-xl font-extrabold">แก้ไขโปรไฟล์</div>
           </div>
 
@@ -185,12 +232,16 @@ function EditMyProfileModal({
 
         <div className="space-y-4 px-6 py-5">
           {err ? (
-            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{err}</div>
+            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+              {err}
+            </div>
           ) : null}
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <div className="mb-2 text-xs font-semibold text-white/60">ชื่อที่แสดง</div>
+              <div className="mb-2 text-xs font-semibold text-white/60">
+                ชื่อที่แสดง
+              </div>
               <input
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
@@ -200,7 +251,9 @@ function EditMyProfileModal({
             </div>
 
             <div>
-              <div className="mb-2 text-xs font-semibold text-white/60">เบอร์โทร</div>
+              <div className="mb-2 text-xs font-semibold text-white/60">
+                เบอร์โทร
+              </div>
               <input
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
@@ -210,7 +263,9 @@ function EditMyProfileModal({
             </div>
 
             <div>
-              <div className="mb-2 text-xs font-semibold text-white/60">วันเดือนปีเกิด</div>
+              <div className="mb-2 text-xs font-semibold text-white/60">
+                วันเดือนปีเกิด
+              </div>
               <input
                 type="date"
                 value={birthDate}
@@ -220,7 +275,9 @@ function EditMyProfileModal({
             </div>
 
             <div>
-              <div className="mb-2 text-xs font-semibold text-white/60">อีเมล (อ่านอย่างเดียว)</div>
+              <div className="mb-2 text-xs font-semibold text-white/60">
+                อีเมล (อ่านอย่างเดียว)
+              </div>
               <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white/80">
                 {me.email || "-"}
               </div>
@@ -257,15 +314,15 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
 
-  // ✅ เอา filter/search bar เดิมออก แต่ยังคง “แยกฝ่าย” แบบเดิมด้วย group (ไม่ต้องมีปุ่มด้านบน)
-  // ถ้านายท่านอยาก “เหมือนเดิมเป๊ะ” เรื่องการแยกฝ่าย: ส่วน Section ยังอยู่เหมือนเดิม
-  // เราจะโชว์ 3 section เสมอ: VIDEO / GRAPHIC / ALL
   const filtered = useMemo(() => {
     return items
       .filter((m) => m.is_active !== false)
       .sort((a, b) => {
         if (a.role !== b.role) return a.role === "LEADER" ? -1 : 1;
-        return String(a.display_name ?? "").localeCompare(String(b.display_name ?? ""), "th");
+        return String(a.display_name ?? "").localeCompare(
+          String(b.display_name ?? ""),
+          "th"
+        );
       });
   }, [items]);
 
@@ -309,7 +366,9 @@ export default function MembersPage() {
 
       if (!r.ok) {
         setItems([]);
-        setError((j && (j.error || j.message)) || `Load members failed (${r.status})`);
+        setError(
+          (j && (j.error || j.message)) || `Load members failed (${r.status})`
+        );
         return;
       }
 
@@ -332,7 +391,6 @@ export default function MembersPage() {
     }
   }
 
-  // ✅ เซฟรูปโปรไฟล์ของ “me”
   async function applyCroppedAvatar(blob: Blob) {
     setError("");
 
@@ -344,7 +402,9 @@ export default function MembersPage() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!url || !anon) {
-      setError("Missing Supabase env (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)");
+      setError(
+        "Missing Supabase env (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)"
+      );
       return;
     }
 
@@ -371,7 +431,10 @@ export default function MembersPage() {
         return;
       }
 
-      const upd = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", me.id);
+      const upd = await supabase
+        .from("profiles")
+        .update({ avatar_url: publicUrl })
+        .eq("id", me.id);
       if (upd.error) {
         setError(upd.error.message);
         return;
@@ -392,7 +455,7 @@ export default function MembersPage() {
   }, []);
 
   function openEdit(m: Member) {
-    if (!isLeader) return; // ✅ คนอื่นแก้เฉพาะหัวหน้าเหมือนเดิม
+    if (!isLeader) return;
     setEditing(m);
     setEditOpen(true);
   }
@@ -403,7 +466,9 @@ export default function MembersPage() {
         <div className="flex min-w-0 items-start gap-4">
           <Avatar url={m.avatar_url} name={m.display_name} />
           <div className="min-w-0">
-            <div className="truncate text-lg font-extrabold text-white">{m.display_name || "-"}</div>
+            <div className="truncate text-lg font-extrabold text-white">
+              {m.display_name || "-"}
+            </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <DeptPill dept={m.department} />
               <RolePill role={m.role} />
@@ -424,15 +489,21 @@ export default function MembersPage() {
 
       <div className="mt-5 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
         <div>
-          <div className="text-xs font-semibold tracking-widest text-white/45">EMAIL</div>
+          <div className="text-xs font-semibold tracking-widest text-white/45">
+            EMAIL
+          </div>
           <div className="mt-1 break-all text-white/85">{m.email || "-"}</div>
         </div>
         <div>
-          <div className="text-xs font-semibold tracking-widest text-white/45">เบอร์</div>
+          <div className="text-xs font-semibold tracking-widest text-white/45">
+            เบอร์
+          </div>
           <div className="mt-1 text-white/85">{m.phone || "-"}</div>
         </div>
         <div>
-          <div className="text-xs font-semibold tracking-widest text-white/45">วันเกิด</div>
+          <div className="text-xs font-semibold tracking-widest text-white/45">
+            วันเกิด
+          </div>
           <div className="mt-1 text-white/85">{formatBirth(m.birth_date)}</div>
         </div>
       </div>
@@ -444,7 +515,9 @@ export default function MembersPage() {
     return (
       <div className="mt-8">
         <div className="mb-3 flex items-end justify-between">
-          <div className="text-sm font-semibold tracking-widest text-white/50">{title}</div>
+          <div className="text-sm font-semibold tracking-widest text-white/50">
+            {title}
+          </div>
           <div className="text-xs text-white/35">จำนวน: {list.length}</div>
         </div>
 
@@ -460,13 +533,19 @@ export default function MembersPage() {
   return (
     <div className="w-full bg-black text-white">
       <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
-        {/* ✅ MY PROFILE (แทนแถบ filter/search เดิม) */}
+        {/* ✅ MY PROFILE */}
         <div className="rounded-[34px] border border-white/10 bg-gradient-to-b from-white/5 to-white/[0.03] p-6 shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-4">
-              <Avatar url={me?.avatar_url ?? null} name={me?.display_name ?? me?.email ?? null} size={84} />
+              <Avatar
+                url={me?.avatar_url ?? null}
+                name={me?.display_name ?? me?.email ?? null}
+                size={84}
+              />
               <div className="min-w-0">
-                <div className="text-xs font-semibold tracking-widest text-white/50">MY PROFILE</div>
+                <div className="text-xs font-semibold tracking-widest text-white/50">
+                  MY PROFILE
+                </div>
                 <div className="mt-1 truncate text-2xl font-extrabold">
                   {me?.display_name || me?.email || "ผู้ใช้งาน"}
                 </div>
@@ -527,29 +606,40 @@ export default function MembersPage() {
 
           <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
             <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-              <div className="text-xs font-semibold tracking-widest text-white/45">EMAIL</div>
+              <div className="text-xs font-semibold tracking-widest text-white/45">
+                EMAIL
+              </div>
               <div className="mt-1 break-all text-white/85">{me?.email || "-"}</div>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-              <div className="text-xs font-semibold tracking-widest text-white/45">เบอร์</div>
+              <div className="text-xs font-semibold tracking-widest text-white/45">
+                เบอร์
+              </div>
               <div className="mt-1 text-white/85">{me?.phone || "-"}</div>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-              <div className="text-xs font-semibold tracking-widest text-white/45">วันเกิด</div>
-              <div className="mt-1 text-white/85">{formatBirth(me?.birth_date || null)}</div>
+              <div className="text-xs font-semibold tracking-widest text-white/45">
+                วันเกิด
+              </div>
+              <div className="mt-1 text-white/85">
+                {formatBirth(me?.birth_date || null)}
+              </div>
             </div>
           </div>
         </div>
 
         {loading ? (
-          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">กำลังโหลด...</div>
+          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">
+            กำลังโหลด...
+          </div>
         ) : error ? (
-          <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">{error}</div>
+          <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
+            {error}
+          </div>
         ) : (
           <>
-            {/* ✅ แยกฝ่ายเหมือนเดิม (ไม่มี filter bar แล้ว) */}
             <Section title="VIDEO" list={group.VIDEO} />
             <Section title="GRAPHIC" list={group.GRAPHIC} />
             <Section title="ALL" list={group.ALL} />

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createBrowserClient } from "@supabase/ssr";
 import AvatarCropModal from "./AvatarCropModal";
 import EditMemberModal from "./EditMemberModal";
 
@@ -66,13 +67,17 @@ function DeptPill({ dept }: { dept: Dept }) {
       ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
       : "border-white/10 bg-white/5 text-white/70";
 
-  return <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", cls)}>{dept}</span>;
+  return (
+    <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", cls)}>{dept}</span>
+  );
 }
 
 function RolePill({ role }: { role: Role }) {
   const cls =
     role === "LEADER" ? "border-green-500/30 bg-green-500/10 text-green-200" : "border-white/10 bg-white/5 text-white/70";
-  return <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", cls)}>{role}</span>;
+  return (
+    <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", cls)}>{role}</span>
+  );
 }
 
 function Avatar({ url, name }: { url?: string | null; name?: string | null }) {
@@ -110,6 +115,9 @@ export default function MembersPage() {
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
+
+  // avatar saving
+  const [savingAvatar, setSavingAvatar] = useState(false);
 
   async function loadMe() {
     try {
@@ -151,6 +159,58 @@ export default function MembersPage() {
       setError(e?.message || "Load members failed");
     } finally {
       setLoading(false);
+    }
+  }
+
+  // ✅ ตัวเดิมสำหรับเซฟรูป (แก้ build error: applyCroppedAvatar หาย)
+  async function applyCroppedAvatar(blob: Blob) {
+    setError("");
+
+    if (!me?.id) {
+      setError("ไม่พบผู้ใช้งาน (me) กรุณารีเฟรช");
+      return;
+    }
+
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !anon) {
+      setError("Missing Supabase env (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)");
+      return;
+    }
+
+    setSavingAvatar(true);
+    try {
+      const supabase = createBrowserClient(url, anon);
+
+      const fileName = `avatar-${me.id}-${Date.now()}.png`;
+
+      const up = await supabase.storage
+        .from("avatars")
+        .upload(fileName, blob, { contentType: "image/png", upsert: true });
+
+      if (up.error) {
+        setError(up.error.message);
+        return;
+      }
+
+      const pub = supabase.storage.from("avatars").getPublicUrl(fileName);
+      const publicUrl = pub?.data?.publicUrl || null;
+
+      if (!publicUrl) {
+        setError("ไม่สามารถสร้าง public url ได้");
+        return;
+      }
+
+      // update profiles avatar_url
+      const upd = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", me.id);
+      if (upd.error) {
+        setError(upd.error.message);
+        return;
+      }
+    } catch (e: any) {
+      setError(e?.message || "อัปโหลดรูปไม่สำเร็จ");
+    } finally {
+      setSavingAvatar(false);
     }
   }
 
@@ -294,8 +354,14 @@ export default function MembersPage() {
             </button>
 
             {/* อัปโหลดรูป */}
-            <label className="inline-flex cursor-pointer rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10">
-              อัปโหลดรูป
+            <label
+              className={cn(
+                "inline-flex cursor-pointer rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10",
+                savingAvatar ? "opacity-60 pointer-events-none" : ""
+              )}
+              title={savingAvatar ? "กำลังอัปโหลด..." : "อัปโหลดรูปโปรไฟล์"}
+            >
+              {savingAvatar ? "กำลังอัปโหลด..." : "อัปโหลดรูป"}
               <input
                 type="file"
                 accept="image/*"
@@ -367,18 +433,20 @@ export default function MembersPage() {
 
         {/* Modals */}
         <AvatarCropModal
-  open={cropOpen}
-  imageFile={cropFile}
-  onClose={() => {
-    setCropOpen(false);
-    setCropFile(null);
-  }}
-  onConfirm={async (blob) => {
-    setCropOpen(false);
-    setCropFile(null);
-    await applyCroppedAvatar(blob); // ✅ ให้เรียกตัวเดิมที่ใช้เซฟรูป
-  }}
-/>
+          open={cropOpen}
+          imageFile={cropFile}
+          onClose={() => {
+            setCropOpen(false);
+            setCropFile(null);
+          }}
+          onConfirm={async (blob) => {
+            setCropOpen(false);
+            setCropFile(null);
+            await applyCroppedAvatar(blob);
+            await loadMe();
+            await loadMembers();
+          }}
+        />
 
         {isLeader && editing ? (
           <EditMemberModal

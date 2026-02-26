@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import EditProjectModal from "../EditProjectModal";
 
 type ProfileMini = {
@@ -124,10 +124,42 @@ async function safeJson(res: Response) {
   return text ? JSON.parse(text) : null;
 }
 
+// ✅ ธีม badge ให้เข้าหน้าอื่น
+function pillToneStatus(status: Project["status"]) {
+  if (status === "COMPLETED") return "green";
+  if (status === "BLOCKED") return "red";
+  if (status === "IN_PROGRESS") return "blue";
+  return "neutral";
+}
+
+function Pill({
+  children,
+  tone = "neutral",
+}: {
+  children: React.ReactNode;
+  tone?: "neutral" | "green" | "amber" | "red" | "blue" | "lime";
+}) {
+  const cls =
+    tone === "green"
+      ? "border-green-500/30 bg-green-500/10 text-green-200"
+      : tone === "amber"
+      ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+      : tone === "red"
+      ? "border-red-500/30 bg-red-500/10 text-red-200"
+      : tone === "blue"
+      ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
+      : tone === "lime"
+      ? "border-[#e5ff78]/30 bg-[#e5ff78]/10 text-[#e5ff78]"
+      : "border-white/10 bg-white/5 text-white/70";
+
+  return <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs ${cls}`}>{children}</span>;
+}
+
 function badgeClass(status: StatusRequest["request_status"]) {
-  if (status === "APPROVED") return "border-green-200 bg-green-50 text-green-700";
-  if (status === "REJECTED") return "border-red-200 bg-red-50 text-red-700";
-  return "border-amber-200 bg-amber-50 text-amber-800";
+  // ใช้โทนเดียวกับ pills
+  if (status === "APPROVED") return "border-green-500/30 bg-green-500/10 text-green-200";
+  if (status === "REJECTED") return "border-red-500/30 bg-red-500/10 text-red-200";
+  return "border-amber-500/30 bg-amber-500/10 text-amber-200";
 }
 
 function priorityLabel(p?: Project["video_priority"] | null) {
@@ -136,23 +168,8 @@ function priorityLabel(p?: Project["video_priority"] | null) {
   return `${p} ดาว`;
 }
 
-export default function ProjectDetailClient({ projectId }: { projectId?: string }) {
+export default function ProjectDetailClient({ projectId }: { projectId: string }) {
   const router = useRouter();
-
-  // ✅ fallback: ถ้า prop ไม่มี ให้ดึงจาก URL params
-  const params = useParams() as Record<string, string | string[] | undefined>;
-  const pid = useMemo(() => {
-    const raw =
-      projectId ??
-      (typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params.id[0] : undefined) ??
-      (typeof params?.projectId === "string"
-        ? params.projectId
-        : Array.isArray(params?.projectId)
-        ? params.projectId[0]
-        : undefined);
-
-    return raw ? String(raw) : "";
-  }, [projectId, params]);
 
   // ✅ me / leader
   const [me, setMe] = useState<MeProfile | null>(null);
@@ -215,7 +232,7 @@ export default function ProjectDetailClient({ projectId }: { projectId?: string 
   }
 
   async function loadAll() {
-    if (!pid) return;
+    if (!projectId) return;
 
     setLoading(true);
     setErr("");
@@ -233,7 +250,7 @@ export default function ProjectDetailClient({ projectId }: { projectId?: string 
       await loadMembersIfLeader(leaderNow);
 
       // 1) project
-      const r1 = await fetch(`/api/projects/${pid}`, { cache: "no-store" });
+      const r1 = await fetch(`/api/projects/${projectId}`, { cache: "no-store" });
       const j1 = await safeJson(r1);
 
       if (!r1.ok) {
@@ -249,12 +266,12 @@ export default function ProjectDetailClient({ projectId }: { projectId?: string 
       setDraftStatus(p?.status ?? "TODO");
 
       // 2) status requests
-      const r2 = await fetch(`/api/projects/${pid}/status-requests`, { cache: "no-store" });
+      const r2 = await fetch(`/api/projects/${projectId}/status-requests`, { cache: "no-store" });
       const j2 = await safeJson(r2);
       setRequests(r2.ok && Array.isArray(j2?.data) ? j2.data : []);
 
       // 3) logs
-      const r3 = await fetch(`/api/projects/${pid}/logs`, { cache: "no-store" });
+      const r3 = await fetch(`/api/projects/${projectId}/logs`, { cache: "no-store" });
       const j3 = await safeJson(r3);
       setLogs(r3.ok && Array.isArray(j3?.data) ? j3.data : []);
     } catch (e: any) {
@@ -267,19 +284,19 @@ export default function ProjectDetailClient({ projectId }: { projectId?: string 
   useEffect(() => {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pid]);
+  }, [projectId]);
 
   async function requestChange() {
     setErr("");
     setMsg("");
 
-    if (!pid) return setErr("Missing project id (client)");
+    if (!projectId) return setErr("Missing project id (client)");
     if (!project) return;
     if (draftStatus === project.status) return setErr("สถานะยังไม่เปลี่ยน");
 
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/projects/${pid}/request-status`, {
+      const res = await fetch(`/api/projects/${projectId}/request-status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ from_status: project.status, to_status: draftStatus }),
@@ -301,6 +318,7 @@ export default function ProjectDetailClient({ projectId }: { projectId?: string 
     }
   }
 
+  // ✅ Delete project (leader only)
   async function deleteProject() {
     setErr("");
     setMsg("");
@@ -316,7 +334,7 @@ export default function ProjectDetailClient({ projectId }: { projectId?: string 
 
     setDeleting(true);
     try {
-      const res = await fetch(`/api/projects/${pid}`, { method: "DELETE" });
+      const res = await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
       const json = await safeJson(res);
 
       if (!res.ok) {
@@ -333,40 +351,95 @@ export default function ProjectDetailClient({ projectId }: { projectId?: string 
     }
   }
 
-  if (!pid) {
+  // ===== UI States =====
+  const Card = ({ children }: { children: React.ReactNode }) => (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-6">{children}</div>
+  );
+
+  const GhostBtn = ({
+    children,
+    onClick,
+    disabled,
+    danger,
+  }: {
+    children: React.ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+    danger?: boolean;
+  }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-xl border px-4 py-2 text-sm transition disabled:opacity-50 ${
+        danger
+          ? "border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/15"
+          : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+      }`}
+    >
+      {children}
+    </button>
+  );
+
+  const LimeBtn = ({
+    children,
+    onClick,
+    disabled,
+  }: {
+    children: React.ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+  }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded-xl bg-[#e5ff78] px-4 py-2 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
+    >
+      {children}
+    </button>
+  );
+
+  if (!projectId) {
     return (
-      <div className="p-10">
-        <div className="rounded-xl border border-yellow-300 bg-yellow-50 p-4 text-sm text-yellow-900">
+      <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
+        <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-yellow-200">
           Missing project id (client)
         </div>
       </div>
     );
   }
 
-  if (loading) return <div className="p-10 text-sm text-gray-600">กำลังโหลด...</div>;
+  if (loading) {
+    return (
+      <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">กำลังโหลด...</div>
+      </div>
+    );
+  }
 
   if (err) {
     return (
-      <div className="p-10">
+      <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
         <div className="mb-4">
-          <Link href="/projects" className="text-sm underline">
+          <Link href="/projects" className="text-sm text-white/70 underline underline-offset-4 hover:text-white">
             ← กลับไปหน้าโปรเจกต์
           </Link>
         </div>
-        <div className="rounded-xl border border-yellow-300 bg-yellow-50 p-4 text-sm text-yellow-900">{err}</div>
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{err}</div>
       </div>
     );
   }
 
   if (!project) {
     return (
-      <div className="p-10">
+      <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
         <div className="mb-4">
-          <Link href="/projects" className="text-sm underline">
+          <Link href="/projects" className="text-sm text-white/70 underline underline-offset-4 hover:text-white">
             ← กลับไปหน้าโปรเจกต์
           </Link>
         </div>
-        <div className="rounded-xl border p-4 text-sm text-gray-600">ไม่พบโปรเจกต์</div>
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">ไม่พบโปรเจกต์</div>
       </div>
     );
   }
@@ -375,245 +448,273 @@ export default function ProjectDetailClient({ projectId }: { projectId?: string 
   const isGraphic = project.type === "GRAPHIC";
 
   return (
-    <div className="p-10">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <Link href="/projects" className="text-sm underline">
+    <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
+      {/* Top Bar */}
+      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <Link href="/projects" className="text-sm text-white/70 underline underline-offset-4 hover:text-white">
           ← กลับไปหน้าโปรเจกต์
         </Link>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {isLeader && (
             <>
-              <button
-                onClick={() => setEditOpen(true)}
-                className="rounded-xl border px-4 py-2 text-sm hover:bg-gray-50"
-                disabled={deleting}
-              >
+              <GhostBtn onClick={() => setEditOpen(true)} disabled={deleting}>
                 แก้ไขโปรเจกต์
-              </button>
-
-              <button
-                onClick={deleteProject}
-                className="rounded-xl border border-red-300 bg-red-50 px-4 py-2 text-sm text-red-700 hover:bg-red-100 disabled:opacity-50"
-                disabled={deleting}
-                title="ลบโปรเจกต์ (เฉพาะหัวหน้า)"
-              >
+              </GhostBtn>
+              <GhostBtn onClick={deleteProject} disabled={deleting} danger>
                 {deleting ? "กำลังลบ..." : "ลบโปรเจกต์"}
-              </button>
+              </GhostBtn>
             </>
           )}
-
-          <button onClick={loadAll} className="rounded-xl border px-4 py-2 text-sm hover:bg-gray-50" disabled={deleting}>
+          <GhostBtn onClick={loadAll} disabled={deleting}>
             รีเฟรช
-          </button>
+          </GhostBtn>
         </div>
       </div>
 
-      <div className="rounded-2xl border p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      {/* Main Card */}
+      <Card>
+        <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+          {/* Left */}
           <div className="min-w-0">
-            <div className="text-2xl font-bold">{project.title}</div>
+            <div className="text-xs font-semibold tracking-widest text-white/50">PROJECT DETAIL</div>
 
-            <div className="mt-1 text-sm text-gray-600">
-              ฝ่าย: <span className="font-semibold">{project.type}</span> · แบรนด์:{" "}
-              <span className="font-semibold">{project.brand || "-"}</span> · status:{" "}
-              <span className="font-semibold">{project.status}</span>
+            <h1 className="mt-2 break-words text-2xl font-extrabold tracking-tight text-white md:text-3xl">
+              {project.title}
+            </h1>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Pill tone={project.type === "VIDEO" ? "blue" : "amber"}>{project.type}</Pill>
+              {project.brand ? <Pill tone="neutral">{project.brand}</Pill> : <Pill tone="neutral">-</Pill>}
+              <Pill tone={pillToneStatus(project.status)}>{project.status}</Pill>
+              {pending ? <Pill tone="lime">มีคำขอรออนุมัติ</Pill> : null}
             </div>
 
-            <div className="mt-2 text-xs text-gray-500">
-              created: {formatDateTimeTH(project.created_at)} · start: {formatDateTH(project.start_date)} · due:{" "}
-              {formatDateTH(project.due_date)}
+            <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-white/70 md:grid-cols-3">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-white/40">Created</div>
+                <div className="mt-1 text-white/85">{formatDateTimeTH(project.created_at)}</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-white/40">Start</div>
+                <div className="mt-1 text-white/85">{formatDateTH(project.start_date)}</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-white/40">Deadline</div>
+                <div className="mt-1 text-white/85">{formatDateTimeTH(project.due_date)}</div>
+              </div>
             </div>
 
-            <div className="mt-3 text-xs text-gray-500">
-              assignee: {project.assignee?.display_name || "-"} · creator: {project.creator?.display_name || "-"}
+            <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-white/70 md:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-white/40">ผู้รับผิดชอบ</div>
+                <div className="mt-1 text-white/85">{project.assignee?.display_name || "-"}</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-white/40">ผู้สร้างงาน</div>
+                <div className="mt-1 text-white/85">{project.creator?.display_name || "-"}</div>
+              </div>
             </div>
 
-            <div className="mt-4 rounded-xl border bg-gray-50 p-4 text-sm">
-              <div className="font-semibold">รายละเอียดงาน</div>
+            {/* Details */}
+            <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
+              <div className="text-sm font-semibold text-white">รายละเอียดงาน</div>
 
               {isVideo && (
-                <div className="mt-2 grid gap-2 text-sm">
-                  <div>
-                    ความสำคัญ: <span className="font-semibold">{priorityLabel(project.video_priority)}</span>
+                <div className="mt-3 grid gap-2 text-sm text-white/75">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-white/45">ความสำคัญ</span>
+                    <Pill tone="neutral">{priorityLabel(project.video_priority)}</Pill>
                   </div>
-                  <div>
-                    รูปแบบงาน: <span className="font-semibold">{project.video_purpose || "-"}</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-white/45">รูปแบบงาน</span>
+                    <Pill tone="neutral">{project.video_purpose || "-"}</Pill>
                   </div>
                 </div>
               )}
 
               {isGraphic && (
-                <div className="mt-2 grid gap-2 text-sm">
-                  <div>
-                    ประเภทงาน: <span className="font-semibold">{project.graphic_job_type || "-"}</span>
+                <div className="mt-3 grid gap-2 text-sm text-white/75">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-white/45">ประเภทงาน</span>
+                    <Pill tone="neutral">{project.graphic_job_type || "-"}</Pill>
                   </div>
                 </div>
               )}
 
-              <div className="mt-3">
-                <div className="text-xs text-gray-600">คำอธิบาย</div>
-                <div className="mt-1 whitespace-pre-wrap text-sm text-gray-900">
+              <div className="mt-4">
+                <div className="text-xs text-white/45">คำอธิบาย</div>
+                <div className="mt-2 whitespace-pre-wrap rounded-xl border border-white/10 bg-black/30 p-4 text-sm text-white/85">
                   {project.description?.trim() ? project.description : "-"}
                 </div>
               </div>
             </div>
 
+            {/* Msg / Err */}
+            {msg && (
+              <div className="mt-4 rounded-2xl border border-green-500/30 bg-green-500/10 p-4 text-sm text-green-200">
+                {msg}
+              </div>
+            )}
+            {err && (
+              <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+                {err}
+              </div>
+            )}
+
+            {/* Pending Banner */}
             {pending && (
-              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                มีคำขอรออนุมัติ: <b>{pending.from_status}</b> → <b>{pending.to_status}</b> · โดย{" "}
-                <b>{pending.requester?.display_name || "-"}</b> · {formatDateTimeTH(pending.created_at)}
-                <div className="mt-1 text-xs text-amber-800">
+              <div className="mt-4 rounded-2xl border border-[#e5ff78]/25 bg-[#e5ff78]/10 p-4 text-sm text-[#e5ff78]">
+                มีคำขอรออนุมัติ: <b className="text-white">{pending.from_status}</b> →{" "}
+                <b className="text-white">{pending.to_status}</b> · โดย{" "}
+                <b className="text-white">{pending.requester?.display_name || "-"}</b> ·{" "}
+                <span className="text-white/70">{formatDateTimeTH(pending.created_at)}</span>
+                <div className="mt-1 text-xs text-white/60">
                   (หัวหน้าไปที่{" "}
-                  <Link className="underline" href="/approvals">
+                  <Link className="underline underline-offset-4" href="/approvals">
                     Approvals
                   </Link>
                   )
                 </div>
               </div>
             )}
-
-            {msg && (
-              <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800">{msg}</div>
-            )}
-
-            {err && (
-              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{err}</div>
-            )}
           </div>
 
-          <div className="w-full md:w-[340px]">
-            <div className="text-sm font-semibold">เปลี่ยนสถานะ</div>
-            <div className="mt-2 flex gap-2">
-              <select
-                className="w-full rounded-xl border px-3 py-2 text-sm"
-                value={draftStatus}
-                onChange={(e) => setDraftStatus(e.target.value as any)}
-                disabled={submitting || deleting}
-              >
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={requestChange}
-                disabled={submitting || deleting}
-                className="rounded-xl bg-black px-4 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
-              >
-                {submitting ? "กำลังส่ง..." : "ส่ง"}
-              </button>
+          {/* Right */}
+          <div className="w-full md:w-[360px]">
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-5">
+              <div className="text-sm font-semibold text-white">เปลี่ยนสถานะ</div>
+              <div className="mt-3 flex gap-2">
+                <select
+                  className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-[#e5ff78]"
+                  value={draftStatus}
+                  onChange={(e) => setDraftStatus(e.target.value as any)}
+                  disabled={submitting || deleting}
+                >
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s} className="bg-black text-white">
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                <LimeBtn onClick={requestChange} disabled={submitting || deleting}>
+                  {submitting ? "กำลังส่ง..." : "ส่ง"}
+                </LimeBtn>
+              </div>
+              <div className="mt-3 text-xs text-white/40">
+                * สมาชิกจะเป็น “ส่งคำขอ” ส่วนหัวหน้าจะ “เปลี่ยนสถานะได้ทันที”
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div className="mt-6 rounded-2xl border p-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold">ประวัติคำขอเปลี่ยนสถานะ</div>
-            <div className="text-xs text-gray-500">ทั้งหมด: {requests.length}</div>
+      {/* History */}
+      <div className="mt-6">
+        <Card>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-white">ประวัติคำขอเปลี่ยนสถานะ</div>
+              <div className="text-xs text-white/50">ทั้งหมด: {requests.length}</div>
+            </div>
+
+            {requests.length > 1 && (
+              <GhostBtn onClick={() => setShowAllHistory((v) => !v)}>
+                {showAllHistory ? "ยุบประวัติ" : `ดูทั้งหมด (${requests.length})`}
+              </GhostBtn>
+            )}
           </div>
 
-          {requests.length > 1 && (
-            <button
-              onClick={() => setShowAllHistory((v) => !v)}
-              className="rounded-xl border px-3 py-2 text-xs hover:bg-gray-50"
-            >
-              {showAllHistory ? "ยุบประวัติ" : `ดูทั้งหมด (${requests.length})`}
-            </button>
-          )}
-        </div>
-
-        {sortedRequests.length === 0 ? (
-          <div className="mt-3 text-sm text-gray-500">ยังไม่มีประวัติคำขอ</div>
-        ) : (
-          <div className="mt-4 space-y-2">
-            {visibleRequests.map((r) => {
-              const open = !!expandedIds[r.id];
-              return (
-                <div key={r.id} className="rounded-xl border p-4 text-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="font-semibold">
-                        {r.from_status} → {r.to_status}
+          {sortedRequests.length === 0 ? (
+            <div className="mt-4 text-sm text-white/50">ยังไม่มีประวัติคำขอ</div>
+          ) : (
+            <div className="mt-4 space-y-2">
+              {visibleRequests.map((r) => {
+                const open = !!expandedIds[r.id];
+                return (
+                  <div key={r.id} className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="font-semibold text-white">
+                          {r.from_status} → {r.to_status}
+                        </div>
+                        <span className={`rounded-full border px-2 py-1 text-xs ${badgeClass(r.request_status)}`}>
+                          {r.request_status}
+                        </span>
                       </div>
-                      <span className={`rounded-lg border px-2 py-0.5 text-xs ${badgeClass(r.request_status)}`}>
-                        {r.request_status}
-                      </span>
+                      <div className="text-xs text-white/45">{formatDateTimeTH(r.created_at)}</div>
                     </div>
-                    <div className="text-xs text-gray-500">{formatDateTimeTH(r.created_at)}</div>
-                  </div>
 
-                  <div className="mt-1 text-xs text-gray-600">
-                    โดย: {r.requester?.display_name || "-"}
-                    {r.request_status !== "PENDING" && (
-                      <>
-                        {" "}
-                        · อนุมัติโดย: {r.approver?.display_name || "-"} · {formatDateTimeTH(r.approved_at)}
-                      </>
+                    <div className="mt-1 text-xs text-white/55">
+                      โดย: {r.requester?.display_name || "-"}
+                      {r.request_status !== "PENDING" && (
+                        <>
+                          {" "}
+                          · อนุมัติโดย: {r.approver?.display_name || "-"} · {formatDateTimeTH(r.approved_at)}
+                        </>
+                      )}
+                    </div>
+
+                    {showAllHistory && (
+                      <button
+                        className="mt-2 text-xs text-white/50 underline underline-offset-2 hover:text-white"
+                        onClick={() => setExpandedIds((prev) => ({ ...prev, [r.id]: !prev[r.id] }))}
+                      >
+                        {open ? "ซ่อนรายละเอียด" : "ดูรายละเอียด"}
+                      </button>
+                    )}
+
+                    {showAllHistory && open && (
+                      <div className="mt-2 text-[11px] text-white/35">
+                        request id: {r.id} · project id: {r.project_id}
+                      </div>
                     )}
                   </div>
-
-                  {showAllHistory && (
-                    <button
-                      className="mt-2 text-xs text-gray-500 underline underline-offset-2"
-                      onClick={() => setExpandedIds((prev) => ({ ...prev, [r.id]: !prev[r.id] }))}
-                    >
-                      {open ? "ซ่อนรายละเอียด" : "ดูรายละเอียด"}
-                    </button>
-                  )}
-
-                  {showAllHistory && open && (
-                    <div className="mt-2 text-[11px] text-gray-400">
-                      request id: {r.id} · project id: {r.project_id}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      <div className="mt-6 rounded-2xl border p-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold">Activity Log</div>
-            <div className="text-xs text-gray-500">ทั้งหมด: {logs.length}</div>
-          </div>
-
-          {logs.length > 5 && (
-            <button
-              onClick={() => setShowAllLogs((v) => !v)}
-              className="rounded-xl border px-3 py-2 text-xs hover:bg-gray-50"
-            >
-              {showAllLogs ? "ยุบ log" : `ดูทั้งหมด (${logs.length})`}
-            </button>
+                );
+              })}
+            </div>
           )}
-        </div>
-
-        {visibleLogs.length === 0 ? (
-          <div className="mt-3 text-sm text-gray-500">ยังไม่มี log</div>
-        ) : (
-          <div className="mt-4 space-y-2">
-            {visibleLogs.map((l) => (
-              <div key={l.id} className="rounded-xl border p-4 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="font-semibold">{l.action}</div>
-                  <div className="text-xs text-gray-500">{formatDateTimeTH(l.created_at)}</div>
-                </div>
-                <div className="mt-1 text-xs text-gray-700">
-                  โดย: <span className="font-medium">{l.actor?.display_name || l.actor_id || "-"}</span>
-                </div>
-                {l.message && <div className="mt-2 text-sm text-gray-900">{l.message}</div>}
-              </div>
-            ))}
-          </div>
-        )}
+        </Card>
       </div>
 
+      {/* Activity Log */}
+      <div className="mt-6">
+        <Card>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-white">Activity Log</div>
+              <div className="text-xs text-white/50">ทั้งหมด: {logs.length}</div>
+            </div>
+
+            {logs.length > 5 && (
+              <GhostBtn onClick={() => setShowAllLogs((v) => !v)}>
+                {showAllLogs ? "ยุบ log" : `ดูทั้งหมด (${logs.length})`}
+              </GhostBtn>
+            )}
+          </div>
+
+          {visibleLogs.length === 0 ? (
+            <div className="mt-4 text-sm text-white/50">ยังไม่มี log</div>
+          ) : (
+            <div className="mt-4 space-y-2">
+              {visibleLogs.map((l) => (
+                <div key={l.id} className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-semibold text-white">{l.action}</div>
+                    <div className="text-xs text-white/45">{formatDateTimeTH(l.created_at)}</div>
+                  </div>
+                  <div className="mt-1 text-xs text-white/55">
+                    โดย: <span className="font-medium text-white/80">{l.actor?.display_name || l.actor_id || "-"}</span>
+                  </div>
+                  {l.message && <div className="mt-2 text-sm text-white/85">{l.message}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* ✅ Render modal เฉพาะหัวหน้าเท่านั้น */}
       {isLeader && (
         <EditProjectModal
           open={editOpen}

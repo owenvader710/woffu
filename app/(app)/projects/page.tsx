@@ -87,7 +87,7 @@ function secondLine(p: Project) {
     p.type === "VIDEO"
       ? [
           p.video_priority
-            ? `${p.video_priority === "SPECIAL" ? "SPECIAL" : `${p.video_priority}ดาว`}`
+            ? `${p.video_priority === "SPECIAL" ? "SPECIAL" : `${p.video_priority}`}`
             : null,
           p.video_purpose ? `${p.video_purpose}` : null,
         ].filter(Boolean)

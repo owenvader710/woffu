@@ -97,7 +97,9 @@ export default function MyWorkPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  const [statusFilter, setStatusFilter] = useState<"ALL" | Status>("ALL");
+  // ✅ เปลี่ยนให้เหลือแค่ชุดนี้
+  const STATUS_TABS = ["ALL", "TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"] as const;
+  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_TABS)[number]>("ALL");
 
   async function load() {
     setLoading(true);
@@ -149,6 +151,25 @@ export default function MyWorkPage() {
     return byStatus;
   }, [items, statusFilter]);
 
+  // ✅ นับจำนวนตามสถานะ (เพื่อโชว์ในหัวข้อ)
+  const counts = useMemo(() => {
+    const c: Record<(typeof STATUS_TABS)[number], number> = {
+      ALL: 0,
+      TODO: 0,
+      IN_PROGRESS: 0,
+      COMPLETED: 0,
+      BLOCKED: 0,
+    };
+    for (const x of items) {
+      c.ALL += 1;
+      if (x.status === "TODO") c.TODO += 1;
+      else if (x.status === "IN_PROGRESS") c.IN_PROGRESS += 1;
+      else if (x.status === "COMPLETED") c.COMPLETED += 1;
+      else if (x.status === "BLOCKED") c.BLOCKED += 1;
+    }
+    return c;
+  }, [items]);
+
   return (
     <div className="w-full bg-black text-white">
       <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
@@ -169,15 +190,15 @@ export default function MyWorkPage() {
           </button>
         </div>
 
-        {/* Status Filter (เหมือน Projects) */}
+        {/* Status Filter (จำกัดชุดสถานะ) + จำนวน */}
         <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-4">
           <div className="flex flex-wrap items-center gap-2">
-            {(["ALL", "TODO", "IN_PROGRESS", "REVIEW", "DONE", "CANCELLED"] as const).map((s) => {
+            {STATUS_TABS.map((s) => {
               const active = statusFilter === s;
               return (
                 <button
                   key={s}
-                  onClick={() => setStatusFilter(s as any)}
+                  onClick={() => setStatusFilter(s)}
                   className={cn(
                     "rounded-2xl border px-3 py-2 text-xs font-extrabold transition",
                     active
@@ -185,7 +206,10 @@ export default function MyWorkPage() {
                       : "border-white/10 bg-transparent text-white/70 hover:bg-white/10 hover:text-white"
                   )}
                 >
-                  {s}
+                  {s}{" "}
+                  <span className={cn(active ? "text-black/60" : "text-white/35")}>
+                    ({counts[s]})
+                  </span>
                 </button>
               );
             })}

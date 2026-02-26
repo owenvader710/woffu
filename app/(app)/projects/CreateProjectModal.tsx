@@ -1,7 +1,7 @@
 // app/(app)/projects/CreateProjectModal.tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 
 type Member = {
   id: string;
@@ -14,111 +14,118 @@ type Member = {
 type Props = {
   open: boolean;
   onClose: () => void;
-  onCreated: () => Promise<void> | void;
+  onCreated: () => void | Promise<void>;
   members: Member[];
 };
 
-function cx(...xs: Array<string | false | null | undefined>) {
-  return xs.filter(Boolean).join(" ");
-}
+const BRANDS = ["IRONTEC", "IVADE", "AMURO", "THE GYM CO.", "OVCM"] as const;
 
-function toISO(value: string) {
-  if (!value) return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString();
-}
+const VIDEO_PRIORITIES = ["5ดาว", "4ดาว", "3ดาว", "2ดาว", "1ดาว", "SPECIAL"] as const;
 
-const INPUT =
-  "mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]";
-const SELECT =
-  "mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]";
+const VIDEO_PURPOSES = [
+  "สร้างความต้องการ",
+  "กระตุ้นความสนใจ",
+  "ให้ข้อมูลสินค้า",
+  "สร้างความน่าเชื่อถือ",
+  "มิติการแข่งขัน",
+  "Sponsor",
+] as const;
+
+const GRAPHIC_JOB_TYPES = [
+  "Support MKT",
+  "Support Sale",
+  "Support VIDEO",
+  "ถ่ายภาพนิ่ง",
+  "งานทั่วไป",
+  "Promotion / Campaign",
+  "งานพิเศษ",
+  "Ai Photo",
+] as const;
+
+async function safeJson(res: Response) {
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
 
 export default function CreateProjectModal({ open, onClose, onCreated, members }: Props) {
   const [type, setType] = useState<"VIDEO" | "GRAPHIC">("VIDEO");
+
   const [code, setCode] = useState("");
   const [title, setTitle] = useState("");
+  const [brand, setBrand] = useState<string>("");
+  const [assigneeId, setAssigneeId] = useState<string>("");
 
-  const [productGroup, setProductGroup] = useState<string>(""); // A-H
-  const [brand, setBrand] = useState<string>("-");
-  const [assigneeId, setAssigneeId] = useState<string>("-");
+  const [startDate, setStartDate] = useState<string>(""); // datetime-local
+  const [dueDate, setDueDate] = useState<string>(""); // datetime-local
 
-  const [startDT, setStartDT] = useState<string>(""); // datetime-local
-  const [dueDT, setDueDT] = useState<string>(""); // datetime-local
+  const [videoPriority, setVideoPriority] = useState<(typeof VIDEO_PRIORITIES)[number]>("3ดาว");
+  const [videoPurpose, setVideoPurpose] = useState<(typeof VIDEO_PURPOSES)[number]>("สร้างความต้องการ");
 
-  const [videoPriority, setVideoPriority] = useState<string>("3");
-  const [videoPurpose, setVideoPurpose] = useState<string>("สร้างความต้องการ");
-  const [graphicJobType, setGraphicJobType] = useState<string>("");
+  const [graphicJobType, setGraphicJobType] = useState<(typeof GRAPHIC_JOB_TYPES)[number]>("Support MKT");
 
   const [description, setDescription] = useState("");
 
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   const activeMembers = useMemo(
-    () => (members || []).filter((m) => m.is_active !== false),
+    () => (Array.isArray(members) ? members : []).filter((m) => m.is_active !== false),
     [members]
   );
 
-  useEffect(() => {
-    if (!open) return;
-    setErr("");
-    setBusy(false);
+  // ✅ แสดงผู้รับผิดชอบเฉพาะฝ่ายที่เลือก (VIDEO -> เฉพาะ VIDEO, GRAPHIC -> เฉพาะ GRAPHIC)
+  const assigneeOptions = useMemo(() => {
+    const list = activeMembers.filter((m) => m.department === type);
+    return list.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || "", "th"));
+  }, [activeMembers, type]);
+
+  function resetForm() {
     setType("VIDEO");
     setCode("");
     setTitle("");
-    setProductGroup("");
-    setBrand("-");
-    setAssigneeId("-");
-    setStartDT("");
-    setDueDT("");
-    setVideoPriority("3");
+    setBrand("");
+    setAssigneeId("");
+    setStartDate("");
+    setDueDate("");
+    setVideoPriority("3ดาว");
     setVideoPurpose("สร้างความต้องการ");
-    setGraphicJobType("");
+    setGraphicJobType("Support MKT");
     setDescription("");
-  }, [open]);
+    setError("");
+  }
 
   if (!open) return null;
 
-  const tabBtn = (active: boolean) =>
-    cx(
-      "rounded-xl border px-4 py-2 text-sm font-semibold transition",
-      active
-        ? "border-[#e5ff78]/20 bg-[#e5ff78] text-black"
-        : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
-    );
-
-  async function submit() {
-    setErr("");
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
 
     if (!title.trim()) {
-      setErr("กรุณาใส่ชื่อโปรเจกต์");
+      setError("กรุณากรอกชื่อโปรเจกต์");
       return;
     }
 
-    setBusy(true);
+    setSubmitting(true);
     try {
       const payload: any = {
-        code: code.trim() || null,
-        title: title.trim(),
         type,
         department: type,
-        brand: brand === "-" ? null : brand,
-        assignee_id: assigneeId === "-" ? null : assigneeId,
-        start_date: toISO(startDT),
-        due_date: toISO(dueDT),
+        status: "TODO",
+        title: title.trim(),
+        code: code.trim() || null,
+        brand: brand || null,
+        assignee_id: assigneeId || null,
+        start_date: startDate ? new Date(startDate).toISOString() : null,
+        due_date: dueDate ? new Date(dueDate).toISOString() : null,
         description: description.trim() || null,
       };
 
-      // ถ้า DB ยังไม่มีคอลัมน์นี้ ให้คอมเมนต์บรรทัดนี้
-      payload.product_group = productGroup || null;
-
       if (type === "VIDEO") {
-        payload.video_priority = videoPriority || null;
-        payload.video_purpose = videoPurpose || null;
+        payload.video_priority = videoPriority;
+        payload.video_purpose = videoPurpose;
         payload.graphic_job_type = null;
       } else {
-        payload.graphic_job_type = graphicJobType || null;
+        payload.graphic_job_type = graphicJobType; // ✅ เอา dropdown ประเภทงานกราฟิกกลับมา
         payload.video_priority = null;
         payload.video_purpose = null;
       }
@@ -129,36 +136,38 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
         body: JSON.stringify(payload),
       });
 
-      const text = await res.text();
-      const json = text ? JSON.parse(text) : null;
-
+      const json = await safeJson(res);
       if (!res.ok) {
-        setErr((json && (json.error || json.message)) || `สร้างงานไม่สำเร็จ (${res.status})`);
-        setBusy(false);
+        setError((json && (json.error || json.message)) || `Create failed (${res.status})`);
         return;
       }
 
       await onCreated?.();
+      resetForm();
       onClose();
-    } catch (e: any) {
-      setErr(e?.message || "สร้างงานไม่สำเร็จ");
+    } catch (err: any) {
+      setError(err?.message || "Create failed");
     } finally {
-      setBusy(false);
+      setSubmitting(false);
     }
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-4xl overflow-hidden rounded-3xl border border-white/10 bg-black shadow-2xl">
+      <div className="w-full max-w-3xl overflow-hidden rounded-3xl border border-white/10 bg-black shadow-2xl">
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-white/10 px-8 py-6">
+        <div className="flex items-start justify-between border-b border-white/10 bg-black px-6 py-5">
           <div>
             <div className="text-lg font-extrabold text-white">สร้างงานใหม่</div>
             <div className="mt-1 text-sm text-white/50">กรอกข้อมูลงาน แล้วกดสร้าง</div>
           </div>
 
           <button
-            onClick={onClose}
+            type="button"
+            onClick={() => {
+              resetForm();
+              onClose();
+            }}
             className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
           >
             ปิด
@@ -166,168 +175,207 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
         </div>
 
         {/* Body */}
-        <div className="px-8 py-6">
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-            {/* 1) ฝ่าย (buttons) */}
-            <div>
+        <form onSubmit={onSubmit} className="px-6 py-6">
+          {/* Row 1: type + code */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="md:col-span-1">
               <div className="text-xs font-semibold text-white/60">ฝ่าย</div>
               <div className="mt-2 flex gap-2">
-                <button type="button" className={tabBtn(type === "VIDEO")} onClick={() => setType("VIDEO")}>
+                <button
+                  type="button"
+                  onClick={() => setType("VIDEO")}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                    type === "VIDEO"
+                      ? "bg-[#e5ff78] text-black"
+                      : "border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                  }`}
+                >
                   VIDEO
                 </button>
-                <button type="button" className={tabBtn(type === "GRAPHIC")} onClick={() => setType("GRAPHIC")}>
+                <button
+                  type="button"
+                  onClick={() => setType("GRAPHIC")}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                    type === "GRAPHIC"
+                      ? "bg-[#e5ff78] text-black"
+                      : "border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                  }`}
+                >
                   GRAPHIC
                 </button>
               </div>
             </div>
 
-            {/* 1) รหัสโปรเจกต์ */}
-            <div>
-              <div className="text-xs font-semibold text-white/60">รหัสโปรเจกต์</div>
+            <div className="md:col-span-2">
+              <label className="text-xs font-semibold text-white/60">รหัสโปรเจกต์ (code)</label>
               <input
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 placeholder="เช่น 5x-1234 / 0001 / 22"
-                className={INPUT}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
               />
             </div>
+          </div>
 
-            {/* 2) ชื่อโปรเจกต์ (เต็มแถว) */}
-            <div className="md:col-span-2">
-              <div className="text-xs font-semibold text-white/60">ชื่อโปรเจกต์</div>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="เช่น Ads กระเป๋า..."
-                className={INPUT}
-              />
-            </div>
+          {/* Row 2: title */}
+          <div className="mt-4">
+            <label className="text-xs font-semibold text-white/60">ชื่อโปรเจกต์</label>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="เช่น Ads กระเป๋า..."
+              className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
+            />
+          </div>
 
-            {/* 3) แบรนด์ */}
+          {/* Row 3: brand + assignee */}
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <div className="text-xs font-semibold text-white/60">แบรนด์</div>
-              <select value={brand} onChange={(e) => setBrand(e.target.value)} className={SELECT}>
-                <option value="-">-</option>
-                <option value="IRONTEC">IRONTEC</option>
-                <option value="IVADE">IVADE</option>
-                <option value="AMURO">AMURO</option>
-                <option value="THE GYM CO.">THE GYM CO.</option>
-                <option value="OVCM">OVCM</option>
-              </select>
-            </div>
-
-            {/* 3) กลุ่มสินค้า A-H */}
-            <div>
-              <div className="text-xs font-semibold text-white/60">กลุ่มสินค้า</div>
-              <select value={productGroup} onChange={(e) => setProductGroup(e.target.value)} className={SELECT}>
+              <label className="text-xs font-semibold text-white/60">แบรนด์</label>
+              <select
+                value={brand}
+                onChange={(e) => setBrand(e.target.value)}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+              >
                 <option value="">-</option>
-                {["A", "B", "C", "D", "E", "F", "G", "H"].map((x) => (
-                  <option key={x} value={x}>
-                    {x}
+                {BRANDS.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* 4) ความสำคัญ / รูปแบบ (VIDEO) หรือ ประเภทงาน (GRAPHIC) */}
-            {type === "VIDEO" ? (
-              <>
-                <div>
-                  <div className="text-xs font-semibold text-white/60">ความสำคัญ</div>
-                  <select value={videoPriority} onChange={(e) => setVideoPriority(e.target.value)} className={SELECT}>
-                    <option value="1">1ดาว</option>
-                    <option value="2">2ดาว</option>
-                    <option value="3">3ดาว</option>
-                    <option value="SPECIAL">SPECIAL</option>
-                  </select>
-                </div>
-
-                <div>
-                  <div className="text-xs font-semibold text-white/60">รูปแบบ</div>
-                  <select value={videoPurpose} onChange={(e) => setVideoPurpose(e.target.value)} className={SELECT}>
-                    <option value="สร้างความต้องการ">สร้างความต้องการ</option>
-                    <option value="สร้างความน่าเชื่อถือ">สร้างความน่าเชื่อถือ</option>
-                    <option value="รีวิว/ใช้งานจริง">รีวิว/ใช้งานจริง</option>
-                    <option value="โปรโมชั่น">โปรโมชั่น</option>
-                  </select>
-                </div>
-              </>
-            ) : (
-              <div className="md:col-span-2">
-                <div className="text-xs font-semibold text-white/60">ประเภทงานกราฟิก</div>
-                <input
-                  value={graphicJobType}
-                  onChange={(e) => setGraphicJobType(e.target.value)}
-                  placeholder="เช่น Thumbnail / Poster / Banner"
-                  className={INPUT}
-                />
-              </div>
-            )}
-
-            {/* 5) ผู้รับผิดชอบ (เต็มแถว) */}
-            <div className="md:col-span-2">
-              <div className="text-xs font-semibold text-white/60">ผู้รับผิดชอบ</div>
-              <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className={SELECT}>
-                <option value="-">-</option>
-                {activeMembers.map((m) => (
+            <div>
+              <label className="text-xs font-semibold text-white/60">ผู้รับผิดชอบ</label>
+              <select
+                value={assigneeId}
+                onChange={(e) => setAssigneeId(e.target.value)}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+              >
+                <option value="">-</option>
+                {assigneeOptions.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.display_name || m.id}
                   </option>
                 ))}
               </select>
             </div>
+          </div>
 
-            {/* 6) วันสั่งงาน / Deadline (ใส่เวลาได้) */}
+          {/* Row 4: dates */}
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <div className="text-xs font-semibold text-white/60">วันสั่งงาน</div>
-              <input type="datetime-local" value={startDT} onChange={(e) => setStartDT(e.target.value)} className={INPUT} />
-              <div className="mt-1 text-[11px] text-white/35">เลือกได้ทั้งวัน/เดือน/ปี และเวลา</div>
+              <label className="text-xs font-semibold text-white/60">วันสั่งงาน</label>
+              <input
+                type="datetime-local"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78] [color-scheme:dark]"
+              />
             </div>
 
             <div>
-              <div className="text-xs font-semibold text-white/60">Deadline</div>
-              <input type="datetime-local" value={dueDT} onChange={(e) => setDueDT(e.target.value)} className={INPUT} />
-              <div className="mt-1 text-[11px] text-white/35">เลือกได้ทั้งวัน/เดือน/ปี และเวลา</div>
-            </div>
-
-            {/* 7) รายละเอียด (ล่างสุด) */}
-            <div className="md:col-span-2">
-              <div className="text-xs font-semibold text-white/60">รายละเอียด</div>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="ใส่รายละเอียดงานเพิ่มเติมได้"
-                className="mt-2 min-h-[140px] w-full resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
+              <label className="text-xs font-semibold text-white/60">Deadline</label>
+              <input
+                type="datetime-local"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78] [color-scheme:dark]"
               />
             </div>
           </div>
 
-          {err ? (
-            <div className="mt-5 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-              {err}
+          {/* Row 5: type-specific fields */}
+          {type === "VIDEO" ? (
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label className="text-xs font-semibold text-white/60">ความสำคัญ</label>
+                <select
+                  value={videoPriority}
+                  onChange={(e) => setVideoPriority(e.target.value as any)}
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+                >
+                  {VIDEO_PRIORITIES.map((x) => (
+                    <option key={x} value={x}>
+                      {x}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-white/60">รูปแบบ</label>
+                <select
+                  value={videoPurpose}
+                  onChange={(e) => setVideoPurpose(e.target.value as any)}
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+                >
+                  {VIDEO_PURPOSES.map((x, idx) => (
+                    <option key={x} value={x}>
+                      {idx}. {x}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4">
+              <label className="text-xs font-semibold text-white/60">ประเภทงาน (Graphic)</label>
+              <select
+                value={graphicJobType}
+                onChange={(e) => setGraphicJobType(e.target.value as any)}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+              >
+                {GRAPHIC_JOB_TYPES.map((x, idx) => (
+                  <option key={x} value={x}>
+                    {idx + 1}. {x}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Details */}
+          <div className="mt-4">
+            <label className="text-xs font-semibold text-white/60">รายละเอียด</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="ใส่รายละเอียดงานเพิ่มเติมได้"
+              className="mt-2 h-32 w-full resize-none rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
+            />
+          </div>
+
+          {error ? (
+            <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {error}
             </div>
           ) : null}
-        </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 border-t border-white/10 px-8 py-5">
-          <button
-            onClick={onClose}
-            className="rounded-2xl border border-white/10 bg-white/5 px-5 py-2 text-sm text-white/80 hover:bg-white/10"
-          >
-            ยกเลิก
-          </button>
-          <button
-            disabled={busy}
-            onClick={submit}
-            className={cx(
-              "rounded-2xl bg-[#e5ff78] px-6 py-2 text-sm font-semibold text-black hover:opacity-90",
-              busy && "cursor-not-allowed opacity-60"
-            )}
-          >
-            {busy ? "กำลังสร้าง..." : "สร้างงาน"}
-          </button>
-        </div>
+          {/* Footer */}
+          <div className="mt-6 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                resetForm();
+                onClose();
+              }}
+              className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-white/80 hover:bg-white/10"
+              disabled={submitting}
+            >
+              ยกเลิก
+            </button>
+
+            <button
+              type="submit"
+              className="rounded-2xl bg-[#e5ff78] px-6 py-3 text-sm font-extrabold text-black hover:opacity-90 disabled:opacity-60"
+              disabled={submitting}
+            >
+              {submitting ? "กำลังสร้าง..." : "สร้างงาน"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

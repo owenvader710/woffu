@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseFromRequest } from "@/utils/supabase/api";
+import { createSupabaseServer } from "@/utils/supabase/server";
 
-// ดึงสมาชิกจาก profiles โดยตรง (กัน members เป็น VIEW แล้วคอลัมน์ไม่ตรง)
-export async function GET(req: NextRequest) {
-  const { supabase, applyCookies } = supabaseFromRequest(req);
+export async function GET(_req: NextRequest) {
+  const supabase = createSupabaseServer();
 
   const { data, error } = await supabase
     .from("profiles")
@@ -11,8 +10,8 @@ export async function GET(req: NextRequest) {
     .order("display_name", { ascending: true });
 
   if (error) {
-    return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return applyCookies(NextResponse.json({ data }));
+  return NextResponse.json({ data });
 }

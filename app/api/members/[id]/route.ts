@@ -1,49 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseFromRequest } from "@/utils/supabase/api";
+import { createSupabaseServer } from "@/utils/supabase/server";
 
 type Ctx = {
   params: Promise<{ id: string }>;
 };
 
+function badId(id?: string | null) {
+  return !id || id === "undefined" || id === "null";
+}
+
 export async function PATCH(req: NextRequest, ctx: Ctx) {
-  const { supabase, applyCookies } = supabaseFromRequest(req);
+  const supabase = createSupabaseServer();
 
-  // ✅ Next.js 16 ต้อง await params
   const { id } = await ctx.params;
-
-  if (!id)
-    return applyCookies(
-      NextResponse.json({ error: "Missing id" }, { status: 400 })
-    );
-
-  // auth
-  const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr)
-    return applyCookies(
-      NextResponse.json({ error: authErr.message }, { status: 401 })
-    );
-
-  const user = authData?.user;
-  if (!user)
-    return applyCookies(
-      NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    );
+  if (badId(id)) return NextResponse.json({ error: "Invalid member id" }, { status: 400 });
 
   const body = await req.json().catch(() => null);
-  if (!body)
-    return applyCookies(
-      NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
-    );
+  if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
 
-  // only allow patch fields we expect
   const patch: any = {
     display_name: body.display_name ?? undefined,
     department: body.department ?? undefined,
     role: body.role ?? undefined,
     is_active: body.is_active ?? undefined,
     phone: body.phone ?? undefined,
+    email: body.email ?? undefined,
     avatar_url: body.avatar_url ?? undefined,
-    birth_date: body.birth_date ?? undefined,
+    birth_date: body.birth_date ?? undefined, // ✅ เพิ่ม
   };
 
   // normalize empty string -> null (สำคัญสำหรับ date)
@@ -56,16 +39,10 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     .from("profiles")
     .update(patch)
     .eq("id", id)
-    .select(
-      "id, display_name, department, role, is_active, avatar_url, phone, email, birth_date"
-    )
+    .select("id, display_name, department, role, is_active, avatar_url, phone, email, birth_date")
     .single();
 
-  if (error) {
-    return applyCookies(
-      NextResponse.json({ error: error.message }, { status: 500 })
-    );
-  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return applyCookies(NextResponse.json({ data }));
+  return NextResponse.json({ data });
 }

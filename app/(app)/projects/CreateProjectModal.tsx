@@ -18,7 +18,35 @@ type Props = {
   members: Member[];
 };
 
-const BRANDS = ["IRONTEC", "IVADE", "AMURO", "THE GYM CO.", "OVCM"] as const;
+// ✅ แยก Brand ตามฝ่าย
+const VIDEO_BRANDS = ["IRONTEC", "IVADE", "AMURO", "THE GYM CO.", "OVCM"] as const;
+
+const GRAPHIC_BRANDS = [
+  "IRONTEC",
+  "THE GYM CO",
+  "IVADE",
+  "AMURO",
+  "MEGA",
+  "ENJOY",
+  "JOCKO",
+  "EXSER",
+  "Dog Have Muscle",
+  "DECATHLON",
+  "HOME PRO",
+  "CENTRAL",
+  "SPINX",
+  "Article",
+  "Shopee",
+  "Fitoutlet",
+  "ALL SHOP",
+  "FLOORBLOCK",
+  "Lazada",
+  "Whey zone",
+  "Fitnomic",
+  "ALL",
+  "OVCM",
+  "MDbuddy",
+] as const;
 
 const PRODUCT_GROUPS = ["A", "B", "C", "D", "E", "F", "G", "H"] as const;
 
@@ -55,7 +83,6 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
   const [code, setCode] = useState("");
   const [title, setTitle] = useState("");
 
-  // ✅ เพิ่ม "กลุ่มสินค้า" กลับมา (A-H)
   const [productGroup, setProductGroup] = useState<(typeof PRODUCT_GROUPS)[number] | "">("");
 
   const [brand, setBrand] = useState<string>("");
@@ -79,11 +106,22 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
     [members]
   );
 
-  // ✅ แสดงผู้รับผิดชอบเฉพาะฝ่ายที่เลือก (VIDEO -> เฉพาะ VIDEO, GRAPHIC -> เฉพาะ GRAPHIC)
+  // ✅ แสดงผู้รับผิดชอบเฉพาะฝ่ายที่เลือก
   const assigneeOptions = useMemo(() => {
     const list = activeMembers.filter((m) => m.department === type);
     return list.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || "", "th"));
   }, [activeMembers, type]);
+
+  // ✅ list แบรนด์ตามฝ่าย
+  const brandOptions = useMemo(() => {
+    return (type === "VIDEO" ? VIDEO_BRANDS : GRAPHIC_BRANDS) as readonly string[];
+  }, [type]);
+
+  // ✅ ถ้าเปลี่ยนฝ่ายแล้ว brand เดิมไม่อยู่ใน list ใหม่ ให้รีเซ็ตเป็น "-"
+  React.useEffect(() => {
+    if (brand && !brandOptions.includes(brand)) setBrand("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type]);
 
   function resetForm() {
     setType("VIDEO");
@@ -121,8 +159,6 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
         title: title.trim(),
         code: code.trim() || null,
 
-        // ✅ ส่งกลุ่มสินค้าไปด้วย (ชื่อฟิลด์: product_group)
-        // ถ้าตารางคุณใช้ชื่ออื่น เปลี่ยน key นี้เป็นชื่อคอลัมน์จริงได้เลย
         product_group: productGroup || null,
 
         brand: brand || null,
@@ -167,7 +203,6 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="w-full max-w-3xl overflow-hidden rounded-3xl border border-white/10 bg-black shadow-2xl">
-        {/* Header */}
         <div className="flex items-start justify-between border-b border-white/10 bg-black px-6 py-5">
           <div>
             <div className="text-lg font-extrabold text-white">สร้างงานใหม่</div>
@@ -186,9 +221,7 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
           </button>
         </div>
 
-        {/* Body */}
         <form onSubmit={onSubmit} className="px-6 py-6">
-          {/* Row 1: type + code */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div className="md:col-span-1">
               <div className="text-xs font-semibold text-white/60">ฝ่าย</div>
@@ -229,7 +262,6 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
             </div>
           </div>
 
-          {/* Row 2: title */}
           <div className="mt-4">
             <label className="text-xs font-semibold text-white/60">ชื่อโปรเจกต์</label>
             <input
@@ -240,7 +272,6 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
             />
           </div>
 
-          {/* Row 3: product_group + brand */}
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <label className="text-xs font-semibold text-white/60">กลุ่มสินค้า</label>
@@ -266,7 +297,7 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
                 className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
               >
                 <option value="">-</option>
-                {BRANDS.map((b) => (
+                {brandOptions.map((b) => (
                   <option key={b} value={b}>
                     {b}
                   </option>
@@ -275,7 +306,6 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
             </div>
           </div>
 
-          {/* Row 4: assignee */}
           <div className="mt-4">
             <label className="text-xs font-semibold text-white/60">ผู้รับผิดชอบ</label>
             <select
@@ -292,7 +322,6 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
             </select>
           </div>
 
-          {/* Row 5: dates */}
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <label className="text-xs font-semibold text-white/60">วันสั่งงาน</label>
@@ -315,7 +344,6 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
             </div>
           </div>
 
-          {/* Row 6: type-specific fields */}
           {type === "VIDEO" ? (
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
@@ -365,7 +393,6 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
             </div>
           )}
 
-          {/* Details */}
           <div className="mt-4">
             <label className="text-xs font-semibold text-white/60">รายละเอียด</label>
             <textarea
@@ -382,7 +409,6 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
             </div>
           ) : null}
 
-          {/* Footer */}
           <div className="mt-6 flex items-center justify-end gap-3">
             <button
               type="button"

@@ -367,20 +367,18 @@ export default function MembersPage() {
 
         {/* Modals */}
         <AvatarCropModal
-          open={cropOpen}
-          imageFile={cropFile}
-          onClose={() => {
-            setCropOpen(false);
-            setCropFile(null);
-          }}
-          onSaved={async () => {
-            setCropOpen(false);
-            setCropFile(null);
-            await loadMe();
-            await loadMembers();
-            router.refresh();
-          }}
-        />
+  open={cropOpen}
+  imageFile={cropFile}
+  onClose={() => {
+    setCropOpen(false);
+    setCropFile(null);
+  }}
+  onConfirm={async (blob) => {
+    setCropOpen(false);
+    setCropFile(null);
+    await applyCroppedAvatar(blob); // ✅ ให้เรียกตัวเดิมที่ใช้เซฟรูป
+  }}
+/>
 
         {isLeader && editing ? (
           <EditMemberModal

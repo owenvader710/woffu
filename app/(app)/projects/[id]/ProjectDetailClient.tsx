@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import EditProjectModal from "../EditProjectModal";
 
 type ProfileMini = {
@@ -136,8 +136,23 @@ function priorityLabel(p?: Project["video_priority"] | null) {
   return `${p} ดาว`;
 }
 
-export default function ProjectDetailClient({ projectId }: { projectId: string }) {
+export default function ProjectDetailClient({ projectId }: { projectId?: string }) {
   const router = useRouter();
+
+  // ✅ fallback: ถ้า prop ไม่มี ให้ดึงจาก URL params
+  const params = useParams() as Record<string, string | string[] | undefined>;
+  const pid = useMemo(() => {
+    const raw =
+      projectId ??
+      (typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params.id[0] : undefined) ??
+      (typeof params?.projectId === "string"
+        ? params.projectId
+        : Array.isArray(params?.projectId)
+        ? params.projectId[0]
+        : undefined);
+
+    return raw ? String(raw) : "";
+  }, [projectId, params]);
 
   // ✅ me / leader
   const [me, setMe] = useState<MeProfile | null>(null);
@@ -200,7 +215,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
   }
 
   async function loadAll() {
-    if (!projectId) return;
+    if (!pid) return;
 
     setLoading(true);
     setErr("");
@@ -218,7 +233,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
       await loadMembersIfLeader(leaderNow);
 
       // 1) project
-      const r1 = await fetch(`/api/projects/${projectId}`, { cache: "no-store" });
+      const r1 = await fetch(`/api/projects/${pid}`, { cache: "no-store" });
       const j1 = await safeJson(r1);
 
       if (!r1.ok) {
@@ -234,12 +249,12 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
       setDraftStatus(p?.status ?? "TODO");
 
       // 2) status requests
-      const r2 = await fetch(`/api/projects/${projectId}/status-requests`, { cache: "no-store" });
+      const r2 = await fetch(`/api/projects/${pid}/status-requests`, { cache: "no-store" });
       const j2 = await safeJson(r2);
       setRequests(r2.ok && Array.isArray(j2?.data) ? j2.data : []);
 
       // 3) logs
-      const r3 = await fetch(`/api/projects/${projectId}/logs`, { cache: "no-store" });
+      const r3 = await fetch(`/api/projects/${pid}/logs`, { cache: "no-store" });
       const j3 = await safeJson(r3);
       setLogs(r3.ok && Array.isArray(j3?.data) ? j3.data : []);
     } catch (e: any) {
@@ -252,19 +267,19 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
   useEffect(() => {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  }, [pid]);
 
   async function requestChange() {
     setErr("");
     setMsg("");
 
-    if (!projectId) return setErr("Missing project id (client)");
+    if (!pid) return setErr("Missing project id (client)");
     if (!project) return;
     if (draftStatus === project.status) return setErr("สถานะยังไม่เปลี่ยน");
 
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}/request-status`, {
+      const res = await fetch(`/api/projects/${pid}/request-status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ from_status: project.status, to_status: draftStatus }),
@@ -286,7 +301,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
     }
   }
 
-  // ✅ Delete project (leader only)
   async function deleteProject() {
     setErr("");
     setMsg("");
@@ -302,7 +316,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
     setDeleting(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
+      const res = await fetch(`/api/projects/${pid}`, { method: "DELETE" });
       const json = await safeJson(res);
 
       if (!res.ok) {
@@ -310,7 +324,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
         return;
       }
 
-      // ✅ กลับไปหน้ารวม
       router.push("/projects");
       router.refresh();
     } catch (e: any) {
@@ -320,7 +333,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
     }
   }
 
-  if (!projectId) {
+  if (!pid) {
     return (
       <div className="p-10">
         <div className="rounded-xl border border-yellow-300 bg-yellow-50 p-4 text-sm text-yellow-900">
@@ -369,7 +382,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
         </Link>
 
         <div className="flex gap-2">
-          {/* ✅ เฉพาะหัวหน้า */}
           {isLeader && (
             <>
               <button
@@ -452,21 +464,21 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
                 มีคำขอรออนุมัติ: <b>{pending.from_status}</b> → <b>{pending.to_status}</b> · โดย{" "}
                 <b>{pending.requester?.display_name || "-"}</b> · {formatDateTimeTH(pending.created_at)}
                 <div className="mt-1 text-xs text-amber-800">
-                  (หัวหน้าไปที่ <Link className="underline" href="/approvals">Approvals</Link>)
+                  (หัวหน้าไปที่{" "}
+                  <Link className="underline" href="/approvals">
+                    Approvals
+                  </Link>
+                  )
                 </div>
               </div>
             )}
 
             {msg && (
-              <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-                {msg}
-              </div>
+              <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800">{msg}</div>
             )}
 
             {err && (
-              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                {err}
-              </div>
+              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{err}</div>
             )}
           </div>
 
@@ -497,7 +509,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
         </div>
       </div>
 
-      {/* History */}
       <div className="mt-6 rounded-2xl border p-6">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -566,7 +577,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
         )}
       </div>
 
-      {/* Activity Log */}
       <div className="mt-6 rounded-2xl border p-6">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -604,7 +614,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
         )}
       </div>
 
-      {/* ✅ Render modal เฉพาะหัวหน้าเท่านั้น */}
       {isLeader && (
         <EditProjectModal
           open={editOpen}

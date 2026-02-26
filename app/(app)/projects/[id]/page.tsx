@@ -4,12 +4,16 @@ import ProjectDetailClient from "./ProjectDetailClient";
 
 export const dynamic = "force-dynamic";
 
-export default function ProjectDetailPage({
+type Params = { id?: string };
+
+export default async function ProjectDetailPage({
   params,
 }: {
-  params: { id?: string };
+  params: Params | Promise<Params>;
 }) {
-  const projectId = params?.id;
+  // ✅ รองรับกรณี Next ส่ง params มาเป็น Promise (บาง env/prod)
+  const resolvedParams = await params;
+  const projectId = resolvedParams?.id;
 
   if (!projectId) {
     return (

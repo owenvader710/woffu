@@ -1,26 +1,12 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 export type Status = "TODO" | "IN_PROGRESS" | "COMPLETED" | "BLOCKED";
 
 function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
-}
-
-function useOutsideClick(ref: React.RefObject<HTMLElement>, onOutside: () => void) {
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      const el = ref.current;
-      if (!el) return;
-      if (el.contains(e.target as Node)) return;
-      onOutside();
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [ref, onOutside]);
 }
 
 export default function StatusDropdown({
@@ -32,33 +18,49 @@ export default function StatusDropdown({
   onChange: (s: Status) => void;
   disabled?: boolean;
 }) {
+  const btnRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
 
-  useOutsideClick(rootRef as unknown as React.RefObject<HTMLElement>, () => setOpen(false));
+  const options = useMemo(() => ["TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"] as const, []);
 
-  const options: Status[] = ["TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"];
+  function updatePos() {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({
+      top: r.bottom + 8,
+      left: r.right,
+      width: Math.max(200, r.width),
+    });
+  }
 
   useEffect(() => {
     if (!open) return;
+    updatePos();
 
-    const btn = btnRef.current;
-    if (!btn) return;
+    const onResize = () => updatePos();
+    const onScroll = () => updatePos();
 
-    const r = btn.getBoundingClientRect();
+    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onScroll, true);
 
-    // fixed positioning (ไม่โดน overflow ของ table)
-    setPos({
-      top: r.bottom + 8,
-      left: Math.min(r.left, window.innerWidth - Math.max(260, r.width) - 12),
-      width: Math.max(260, r.width),
-    });
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    if (open) window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
   return (
-    <div ref={rootRef} className="relative inline-flex">
+    <div className="relative inline-flex">
       <button
         ref={btnRef}
         type="button"
@@ -67,48 +69,58 @@ export default function StatusDropdown({
           setOpen((v) => !v);
         }}
         className={cn(
-          "inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-black/30 px-4 py-2 text-xs font-extrabold text-white/90",
-          disabled ? "cursor-not-allowed opacity-50" : "hover:bg-white/10"
+          "inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-black/30 px-4 py-2 text-xs font-extrabold text-white/90 hover:bg-white/10",
+          disabled ? "cursor-not-allowed opacity-50 hover:bg-black/30" : ""
         )}
-        aria-disabled={disabled ? "true" : "false"}
-        disabled={disabled}
       >
         {value}
         <ChevronDown size={14} className={cn("transition", open ? "rotate-180" : "")} />
       </button>
 
-      {open && pos
-        ? createPortal(
-            <div
-              className="fixed z-[9999] overflow-hidden rounded-2xl border border-white/10 bg-black/90 shadow-[0_20px_60px_rgba(0,0,0,0.55)] backdrop-blur"
-              style={{ top: pos.top, left: pos.left, width: pos.width }}
-            >
-              <div className="p-2">
-                {options.map((s) => {
-                  const active = s === value;
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => {
-                        setOpen(false);
-                        if (s !== value) onChange(s);
-                      }}
-                      className={cn(
-                        "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-extrabold",
-                        active ? "bg-white text-black" : "text-white/85 hover:bg-white/10"
-                      )}
-                    >
-                      <span>{s}</span>
-                      {active ? <span className="text-[10px] font-black opacity-70">CURRENT</span> : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>,
-            document.body
-          )
-        : null}
+      {open ? (
+        <button
+          type="button"
+          aria-label="close"
+          className="fixed inset-0 z-[9998] cursor-default"
+          onClick={() => setOpen(false)}
+        />
+      ) : null}
+
+      {open ? (
+        <div
+          className="fixed z-[9999] overflow-hidden rounded-2xl border border-white/10 bg-[#0b0b0b] shadow-[0_30px_120px_rgba(0,0,0,0.75)]"
+          style={{
+            top: pos.top,
+            left: Math.max(12, pos.left - pos.width),
+            width: pos.width,
+          }}
+        >
+          <div className="px-3 py-2 text-[11px] font-extrabold tracking-widest text-white/45">CHANGE STATUS</div>
+          <div className="h-px bg-white/10" />
+          <div className="p-2">
+            {options.map((s) => {
+              const active = value === s;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => {
+                    onChange(s);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-extrabold transition",
+                    active ? "bg-white text-black" : "text-white/85 hover:bg-white/10"
+                  )}
+                >
+                  <span>{s}</span>
+                  {active ? <span className="text-[10px] font-black">CURRENT</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

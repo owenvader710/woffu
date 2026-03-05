@@ -2,20 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseFromRequest } from "@/utils/supabase/api";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 
-export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
   try {
-    const { id } = await ctx.params;
     const { supabase, applyCookies } = supabaseFromRequest(req);
-    const admin = supabaseAdmin();
 
+    // auth
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
     const user = authData?.user;
     if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
+    // check leader
     const { data: me, error: meErr } = await supabase
       .from("profiles")
-      .select("id, role")
+      .select("id, role, is_active")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -23,14 +23,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       const res = NextResponse.json({ error: meErr.message }, { status: 400 });
       return applyCookies(res);
     }
-    if (me?.role !== "LEADER") {
+    const isLeader = me?.role === "LEADER" && me?.is_active !== false;
+    if (!isLeader) {
       const res = NextResponse.json({ error: "Not allowed" }, { status: 403 });
       return applyCookies(res);
     }
 
+    const id = ctx.params.id;
+    const admin = supabaseAdmin();
+
+    // load request
     const { data: reqRow, error: reqErr } = await admin
       .from("status_change_requests")
-      .select("*")
+      .select("id, request_status")
       .eq("id", id)
       .maybeSingle();
 
@@ -43,28 +48,23 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return applyCookies(res);
     }
     if (reqRow.request_status !== "PENDING") {
-      const res = NextResponse.json({ error: "Already processed" }, { status: 400 });
+      const res = NextResponse.json({ error: "Already processed" }, { status: 409 });
       return applyCookies(res);
     }
 
-    const { error: updReqErr } = await admin
+    const { error: upReqErr } = await admin
       .from("status_change_requests")
-      .update({ request_status: "REJECTED", approved_by: user.id })
+      .update({
+        request_status: "REJECTED",
+        rejected_by: user.id,
+        rejected_at: new Date().toISOString(),
+      })
       .eq("id", id);
 
-    if (updReqErr) {
-      const res = NextResponse.json({ error: updReqErr.message }, { status: 400 });
+    if (upReqErr) {
+      const res = NextResponse.json({ error: upReqErr.message }, { status: 400 });
       return applyCookies(res);
     }
-
-    try {
-      await admin.from("activity_logs").insert({
-        action: "STATUS_CHANGE_REJECTED",
-        project_id: reqRow.project_id,
-        meta: { from: reqRow.from_status, to: reqRow.to_status, request_id: id },
-        created_by: user.id,
-      });
-    } catch {}
 
     const res = NextResponse.json({ ok: true }, { status: 200 });
     return applyCookies(res);

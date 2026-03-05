@@ -1,22 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseFromRequest } from "@/utils/supabase/api";
-import { supabaseAdmin } from "@/utils/supabase/admin";
+
+type Dept = "VIDEO" | "GRAPHIC" | "ALL";
 
 export async function GET(req: NextRequest) {
   try {
     const { supabase, applyCookies } = supabaseFromRequest(req);
-    const admin = supabaseAdmin();
 
-    // auth
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
     const user = authData?.user;
     if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
-    // leader check
+    // ✅ allow leader only
     const { data: me, error: meErr } = await supabase
       .from("profiles")
-      .select("id, role")
+      .select("id, role, is_active")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -24,48 +23,85 @@ export async function GET(req: NextRequest) {
       const res = NextResponse.json({ error: meErr.message }, { status: 400 });
       return applyCookies(res);
     }
-    if (me?.role !== "LEADER") {
+
+    if (!me || me.is_active === false || me.role !== "LEADER") {
       const res = NextResponse.json({ error: "Not allowed" }, { status: 403 });
       return applyCookies(res);
     }
 
-    // ✅ admin read
-    const pendingQ = await admin
+    // ✅ status_change_requests (pending + history)
+    const { data: rows, error } = await supabase
       .from("status_change_requests")
       .select(
         `
-        id, project_id, requested_by, from_status, to_status, request_status, created_at, updated_at,
-        projects:projects(id, title, code)
+        id,
+        project_id,
+        requested_by,
+        from_status,
+        to_status,
+        status,
+        created_at,
+        processed_at,
+        processed_by,
+        note,
+        project:projects(
+          id,
+          code,
+          title,
+          department,
+          assignee_id
+        )
       `
       )
-      .eq("request_status", "PENDING")
       .order("created_at", { ascending: false });
 
-    const historyQ = await admin
-  .from("status_change_requests")
-  .select(
-    `
-    id, project_id, requested_by, from_status, to_status, request_status, created_at,
-    projects:projects(id, title, code)
-  `
-  )
-  .neq("request_status", "PENDING")
-  .order("created_at", { ascending: false }) // ✅ ใช้ created_at แทน updated_at
-  .limit(50);
-
-    if (pendingQ.error) {
-      const res = NextResponse.json({ error: pendingQ.error.message }, { status: 400 });
-      return applyCookies(res);
-    }
-    if (historyQ.error) {
-      const res = NextResponse.json({ error: historyQ.error.message }, { status: 400 });
+    if (error) {
+      const res = NextResponse.json({ error: error.message }, { status: 400 });
       return applyCookies(res);
     }
 
-    const res = NextResponse.json(
-      { pending: pendingQ.data ?? [], history: historyQ.data ?? [] },
-      { status: 200 }
-    );
+    // ✅ เติมข้อมูล assignee ให้ UI (กันปัญหา FK name ใน select)
+    const assigneeIds = Array.from(
+      new Set(
+        (rows ?? [])
+          .map((r: any) => r?.project?.assignee_id)
+          .filter(Boolean)
+      )
+    ) as string[];
+
+    let assigneesMap = new Map<string, { id: string; display_name: string | null; department: Dept | null }>();
+
+    if (assigneeIds.length) {
+      const { data: assignees, error: aErr } = await supabase
+        .from("profiles")
+        .select("id, display_name, department")
+        .in("id", assigneeIds);
+
+      if (!aErr && Array.isArray(assignees)) {
+        for (const a of assignees as any[]) {
+          assigneesMap.set(a.id, {
+            id: a.id,
+            display_name: a.display_name ?? null,
+            department: (a.department ?? null) as Dept | null,
+          });
+        }
+      }
+    }
+
+    const data = (rows ?? []).map((r: any) => {
+      const assigneeId = r?.project?.assignee_id ?? null;
+      return {
+        ...r,
+        project: r.project
+          ? {
+              ...r.project,
+              assignee: assigneeId ? assigneesMap.get(assigneeId) ?? null : null,
+            }
+          : null,
+      };
+    });
+
+    const res = NextResponse.json({ data }, { status: 200 });
     return applyCookies(res);
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? "Internal error" }, { status: 500 });

@@ -1,109 +1,151 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-export type Status = "TODO" | "IN_PROGRESS" | "COMPLETED" | "BLOCKED";
+export type Status =
+  | "TODO"
+  | "IN_PROGRESS"
+  // DB เดิม
+  | "DONE"
+  | "CANCELLED"
+  // UI ใหม่
+  | "COMPLETED"
+  | "BLOCKED";
+
+type Props = {
+  value: Status;
+  onChange: (s: Status) => void;
+  disabled?: boolean;
+};
 
 function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-function useOutsideClick(ref: React.RefObject<HTMLElement | null>, onOutside: () => void) {
-  useEffect(() => {
-    function onDown(e: MouseEvent) {
-      const el = ref.current;
-      if (!el) return;
-      if (e.target instanceof Node && !el.contains(e.target)) onOutside();
-    }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [ref, onOutside]);
-}
-
-export default function StatusDropdown({
-  value,
-  onChange,
-  disabled = false,
-}: {
-  value: Status;
-  onChange: (v: Status) => void;
-  disabled?: boolean;
-}) {
+export default function StatusDropdown({ value, onChange, disabled }: Props) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
   const btnRef = useRef<HTMLButtonElement | null>(null);
 
-  useOutsideClick(rootRef as React.RefObject<HTMLElement | null>, () => setOpen(false));
+  // ตำแหน่งของเมนู (fixed) เพื่อให้ไม่โดน overflow ของตารางตัด
+  const [pos, setPos] = useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: 176,
+  });
 
-  const options: Status[] = ["TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"];
+  // ✅ เมนูที่ต้องการให้เลือก (เฉพาะหน้า My Work)
+  const options: Status[] = useMemo(
+    () => ["TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"],
+    []
+  );
 
-  const pos = useMemo(() => {
-    const b = btnRef.current?.getBoundingClientRect();
-    if (!b) return null;
-    return { left: b.left, top: b.bottom + 8, width: b.width };
+  const label = value; // หน้า my-work ใช้ label ตรง ๆ (mapping ทำที่ page.tsx)
+
+  const syncPos = () => {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+
+    // เมนูชิดขวาปุ่ม + ลงมาเล็กน้อย
+    const menuWidth = Math.max(176, r.width);
+    const left = Math.max(8, r.right - menuWidth);
+    const top = r.bottom + 8;
+
+    setPos({ top, left, width: menuWidth });
+  };
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    syncPos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // ปิดเมื่อคลิกนอก + รีโพซิชันเมื่อ scroll/resize
+  useEffect(() => {
+    if (!open) return;
+
+    const onDown = (e: MouseEvent) => {
+      const btn = btnRef.current;
+      const target = e.target as Node | null;
+      if (!btn || !target) return;
+
+      // ถ้าคลิกที่ปุ่มเอง ให้ปล่อยให้ toggle ทำงาน
+      if (btn.contains(target)) return;
+
+      // ถ้าคลิกที่เมนู (portal) จะมี data-attr ช่วยเช็ค
+      const el = (e.target as HTMLElement | null)?.closest?.("[data-status-menu='1']");
+      if (el) return;
+
+      setOpen(false);
+    };
+
+    const onScrollOrResize = () => {
+      syncPos();
+    };
+
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("resize", onScrollOrResize, { passive: true });
+    window.addEventListener("scroll", onScrollOrResize, { passive: true, capture: true });
+
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("resize", onScrollOrResize as any);
+      window.removeEventListener("scroll", onScrollOrResize as any, true as any);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   return (
-    <div ref={rootRef} className="inline-block">
+    <div className="relative inline-block">
       <button
         ref={btnRef}
         type="button"
         disabled={disabled}
-        onClick={() => {
-          if (disabled) return;
-          setOpen((v) => !v);
-        }}
+        onClick={() => setOpen((v) => !v)}
         className={cn(
-          "inline-flex items-center justify-center gap-2 rounded-2xl border px-4 py-2 text-xs font-extrabold transition",
-          disabled
-            ? "border-white/10 bg-white/5 text-white/40 cursor-not-allowed"
-            : "border-white/10 bg-black/30 text-white/85 hover:bg-white/10"
+          "inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-xs font-extrabold transition",
+          "border-white/10 bg-black/20 text-white/85 hover:bg-white/10",
+          disabled && "opacity-50 cursor-not-allowed"
         )}
-        aria-haspopup="menu"
-        aria-expanded={open}
       >
-        {value}
-        <span className="text-white/60">▾</span>
+        {label}
+        <span className={cn("text-white/60 transition", open ? "rotate-180" : "")}>▾</span>
       </button>
 
-      {open && pos
-        ? createPortal(
-            <div
-              className="fixed z-[9999]"
-              style={{ left: pos.left, top: pos.top, minWidth: Math.max(220, pos.width) }}
-            >
-              <div className="rounded-2xl border border-white/10 bg-black/90 p-2 shadow-[0_25px_80px_rgba(0,0,0,0.65)] backdrop-blur">
-                <div className="px-3 py-2 text-[11px] font-extrabold tracking-widest text-white/45">
-                  CHANGE STATUS
-                </div>
-
-                <div className="mt-1 space-y-1">
-                  {options.map((s) => {
-                    const active = s === value;
-                    return (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => {
-                          setOpen(false);
-                          onChange(s);
-                        }}
-                        className={cn(
-                          "w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition",
-                          active ? "bg-white text-black" : "text-white/85 hover:bg-white/10"
-                        )}
-                      >
-                        {s}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>,
-            document.body
-          )
-        : null}
+      {/* ✅ Portal menu: ไม่โดน overflow ของตาราง/กรอบตัดแน่นอน */}
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            data-status-menu="1"
+            className="fixed z-[9999]"
+            style={{ top: pos.top, left: pos.left, width: pos.width }}
+          >
+            <div className="rounded-2xl border border-white/10 bg-black/90 p-2 shadow-2xl backdrop-blur">
+              {options.map((s) => {
+                const active = s === value;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => {
+                      setOpen(false);
+                      if (s !== value) onChange(s);
+                    }}
+                    className={cn(
+                      "w-full rounded-xl px-3 py-2 text-left text-xs font-extrabold transition",
+                      active ? "bg-white text-black" : "text-white/80 hover:bg-white/10"
+                    )}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

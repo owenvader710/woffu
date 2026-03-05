@@ -42,16 +42,16 @@ export async function GET(req: NextRequest) {
       .order("created_at", { ascending: false });
 
     const historyQ = await admin
-      .from("status_change_requests")
-      .select(
-        `
-        id, project_id, requested_by, from_status, to_status, request_status, created_at, updated_at,
-        projects:projects(id, title, code)
-      `
-      )
-      .neq("request_status", "PENDING")
-      .order("updated_at", { ascending: false })
-      .limit(50);
+  .from("status_change_requests")
+  .select(
+    `
+    id, project_id, requested_by, from_status, to_status, request_status, created_at,
+    projects:projects(id, title, code)
+  `
+  )
+  .neq("request_status", "PENDING")
+  .order("created_at", { ascending: false }) // ✅ ใช้ created_at แทน updated_at
+  .limit(50);
 
     if (pendingQ.error) {
       const res = NextResponse.json({ error: pendingQ.error.message }, { status: 400 });

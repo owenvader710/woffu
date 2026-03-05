@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       return applyCookies(res);
     }
 
-    // ✅ status_change_requests (pending + history)
+    // ✅ IMPORTANT: table ไม่มี processed_at / processed_by -> ห้าม select
     const { data: rows, error } = await supabase
       .from("status_change_requests")
       .select(
@@ -41,8 +41,6 @@ export async function GET(req: NextRequest) {
         to_status,
         status,
         created_at,
-        processed_at,
-        processed_by,
         note,
         project:projects(
           id,
@@ -60,7 +58,7 @@ export async function GET(req: NextRequest) {
       return applyCookies(res);
     }
 
-    // ✅ เติมข้อมูล assignee ให้ UI (กันปัญหา FK name ใน select)
+    // ✅ เติมข้อมูล assignee ให้ UI
     const assigneeIds = Array.from(
       new Set(
         (rows ?? [])
@@ -69,7 +67,7 @@ export async function GET(req: NextRequest) {
       )
     ) as string[];
 
-    let assigneesMap = new Map<string, { id: string; display_name: string | null; department: Dept | null }>();
+    const assigneesMap = new Map<string, { id: string; display_name: string | null; department: Dept | null }>();
 
     if (assigneeIds.length) {
       const { data: assignees, error: aErr } = await supabase

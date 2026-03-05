@@ -19,8 +19,7 @@ type StatusRequest = {
   status: ReqStatus;
   from_status: string;
   to_status: string;
-  created_at?: string | null;
-  processed_at?: string | null;
+  created_at?: string | null; // ✅ ใช้ตัวนี้พอ (processed_at ไม่มี)
   note?: string | null;
   project?: ProjectLite | null;
 };
@@ -116,10 +115,8 @@ export default function ApprovalsPage() {
 
   const filtered = useMemo(() => {
     if (tab === "HISTORY") return history;
-
     const base = pending;
     if (tab === "ALL") return base;
-
     return base.filter((x) => (x.project?.department ?? "ALL") === tab);
   }, [tab, pending, history]);
 
@@ -152,7 +149,6 @@ export default function ApprovalsPage() {
           </button>
         </div>
 
-        {/* Tabs */}
         <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-4">
           <div className="flex flex-wrap items-center gap-2">
             {FILTERS.map((k) => {
@@ -202,7 +198,6 @@ export default function ApprovalsPage() {
                   className="rounded-[30px] border border-white/10 bg-white/5 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)]"
                 >
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    {/* LEFT: details */}
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="inline-flex items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
@@ -215,21 +210,19 @@ export default function ApprovalsPage() {
                       <div className="mt-2 truncate text-lg font-extrabold text-white">{title}</div>
 
                       <div className="mt-2 text-sm text-white/70">
-                        ขอเปลี่ยนสถานะ:{" "}
-                        <span className="font-extrabold text-white">{it.from_status}</span> →{" "}
+                        ขอเปลี่ยนสถานะ: <span className="font-extrabold text-white">{it.from_status}</span> →{" "}
                         <span className="font-extrabold text-white">{it.to_status}</span>
                       </div>
 
+                      {/* ✅ ใช้ created_at อย่างเดียว */}
                       <div className="mt-1 text-xs text-white/40">
-                        {it.status === "PENDING" ? `ส่งคำขอเมื่อ ${fmtTime(it.created_at)}` : `ทำรายการเมื่อ ${fmtTime(it.processed_at)}`}
+                        {it.status === "PENDING" ? `ส่งคำขอเมื่อ ${fmtTime(it.created_at)}` : `ทำรายการเมื่อ ${fmtTime(it.created_at)}`}
                       </div>
                     </div>
 
-                    {/* RIGHT: actions */}
                     <div className="flex shrink-0 items-center justify-end gap-2">
                       {it.status === "PENDING" ? (
                         <>
-                          {/* ✅ Approve = เขียว */}
                           <button
                             onClick={() => approve(it.id)}
                             className="rounded-2xl border border-green-500/30 bg-green-500/15 px-4 py-2 text-sm font-extrabold text-green-200 hover:bg-green-500/25"
@@ -237,7 +230,6 @@ export default function ApprovalsPage() {
                             อนุมัติ
                           </button>
 
-                          {/* ✅ Reject = แดง */}
                           <button
                             onClick={() => reject(it.id)}
                             className="rounded-2xl border border-red-500/30 bg-red-500/15 px-4 py-2 text-sm font-extrabold text-red-200 hover:bg-red-500/25"

@@ -7,7 +7,6 @@ import StatusDropdown, { Status } from "./StatusDropdown";
 type WorkItem = {
   id: string;
 
-  // ✅ เพิ่ม code เพื่อใช้รหัสจริงจาก DB
   code?: string | null;
 
   title: string | null;
@@ -36,6 +35,20 @@ async function safeJson(res: Response) {
 
 function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
+}
+
+/** ✅ เฉพาะหน้า My Work: UI <-> DB mapping */
+function toDbStatus(s: Status): Status {
+  // UI -> DB
+  if (s === "COMPLETED") return "DONE";
+  if (s === "BLOCKED") return "CANCELLED";
+  return s;
+}
+function toUiStatus(s: any): Status {
+  // DB -> UI
+  if (s === "DONE") return "COMPLETED";
+  if (s === "CANCELLED") return "BLOCKED";
+  return s as Status;
 }
 
 function DeptPill({ dept }: { dept: WorkItem["department"] }) {
@@ -70,12 +83,10 @@ function fmtDeadline(iso?: string | null) {
   return `${date} ${time}`;
 }
 
-// ✅ ใช้ “รหัสจริง” จาก DB ก่อน (w.code) ไม่ใช่เดาจาก id
 function makeCode(w: WorkItem) {
   const real = (w.code ?? "").toString().trim();
   if (real) return real;
 
-  // fallback (กันเคสยังไม่มี code ใน DB)
   const t = (w.type || "").toUpperCase().trim();
   const short = (w.id || "").replace(/-/g, "").slice(0, 6).toUpperCase();
   return t ? `${t}-${short}` : short;
@@ -97,9 +108,9 @@ export default function MyWorkPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  // ✅ เปลี่ยนให้เหลือแค่ชุดนี้
-  const STATUS_TABS = ["ALL", "TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"] as const;
-  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_TABS)[number]>("ALL");
+  // ✅ เหลือแค่ 4 สถานะ + ALL
+  const FILTERS = ["ALL", "TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"] as const;
+  const [statusFilter, setStatusFilter] = useState<(typeof FILTERS)[number]>("ALL");
 
   async function load() {
     setLoading(true);
@@ -112,8 +123,16 @@ export default function MyWorkPage() {
         setErr((j && (j.error || j.message)) || `Load failed (${r.status})`);
         return;
       }
+
       const arr = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
-      setItems(arr as WorkItem[]);
+
+      // ✅ map DB -> UI (DONE/CANCELLED -> COMPLETED/BLOCKED)
+      const normalized = (arr as WorkItem[]).map((x: any) => ({
+        ...x,
+        status: toUiStatus(x.status),
+      }));
+
+      setItems(normalized);
     } catch (e: any) {
       setItems([]);
       setErr(e?.message || "Load failed");
@@ -122,16 +141,21 @@ export default function MyWorkPage() {
     }
   }
 
-  async function changeStatus(id: string, next: Status) {
+  async function changeStatus(id: string, nextUi: Status) {
     const prev = items;
-    setItems((xs) => xs.map((x) => (x.id === id ? { ...x, status: next } : x)));
+
+    // optimistic (เก็บเป็น UI status)
+    setItems((xs) => xs.map((x) => (x.id === id ? { ...x, status: nextUi } : x)));
 
     try {
+      const nextDb = toDbStatus(nextUi);
+
       const res = await fetch(`/api/my-work/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: next }),
+        body: JSON.stringify({ status: nextDb }),
       });
+
       const j = await safeJson(res);
       if (!res.ok) throw new Error((j && (j.error || j.message)) || "Update failed");
     } catch {
@@ -145,30 +169,17 @@ export default function MyWorkPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const filtered = useMemo(() => {
-    const base = items.slice();
-    const byStatus = statusFilter === "ALL" ? base : base.filter((x) => x.status === statusFilter);
-    return byStatus;
-  }, [items, statusFilter]);
-
-  // ✅ นับจำนวนตามสถานะ (เพื่อโชว์ในหัวข้อ)
+  // ✅ count ต่อสถานะ (UI)
   const counts = useMemo(() => {
-    const c: Record<(typeof STATUS_TABS)[number], number> = {
-      ALL: 0,
-      TODO: 0,
-      IN_PROGRESS: 0,
-      COMPLETED: 0,
-      BLOCKED: 0,
-    };
-    for (const x of items) {
-      c.ALL += 1;
-      if (x.status === "TODO") c.TODO += 1;
-      else if (x.status === "IN_PROGRESS") c.IN_PROGRESS += 1;
-      else if (x.status === "COMPLETED") c.COMPLETED += 1;
-      else if (x.status === "BLOCKED") c.BLOCKED += 1;
-    }
+    const c: Record<string, number> = { ALL: items.length, TODO: 0, IN_PROGRESS: 0, COMPLETED: 0, BLOCKED: 0 };
+    for (const x of items) c[x.status] = (c[x.status] || 0) + 1;
     return c;
   }, [items]);
+
+  const filtered = useMemo(() => {
+    if (statusFilter === "ALL") return items;
+    return items.filter((x) => x.status === statusFilter);
+  }, [items, statusFilter]);
 
   return (
     <div className="w-full bg-black text-white">
@@ -190,11 +201,13 @@ export default function MyWorkPage() {
           </button>
         </div>
 
-        {/* Status Filter (จำกัดชุดสถานะ) + จำนวน */}
+        {/* Status Filter */}
         <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-4">
           <div className="flex flex-wrap items-center gap-2">
-            {STATUS_TABS.map((s) => {
+            {FILTERS.map((s) => {
               const active = statusFilter === s;
+              const label = s === "ALL" ? `ALL (${counts.ALL || 0})` : `${s} (${counts[s] || 0})`;
+
               return (
                 <button
                   key={s}
@@ -206,10 +219,7 @@ export default function MyWorkPage() {
                       : "border-white/10 bg-transparent text-white/70 hover:bg-white/10 hover:text-white"
                   )}
                 >
-                  {s}{" "}
-                  <span className={cn(active ? "text-black/60" : "text-white/35")}>
-                    ({counts[s]})
-                  </span>
+                  {label}
                 </button>
               );
             })}
@@ -221,7 +231,7 @@ export default function MyWorkPage() {
         ) : err ? (
           <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">{err}</div>
         ) : (
-          // ✅ FIX dropdown จม: เอา overflow-hidden ออก + ทำให้ overflow-visible
+          // ✅ ไม่ให้ dropdown จม: outer = overflow-visible
           <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 overflow-visible">
             <div className="w-full overflow-x-auto overflow-y-visible">
               <table className="min-w-[980px] w-full">
@@ -245,15 +255,10 @@ export default function MyWorkPage() {
                           </span>
 
                           <div className="min-w-0">
-                            <Link
-                              href={`/projects/${w.id}`}
-                              className="block truncate text-base font-extrabold text-white hover:underline"
-                            >
+                            <Link href={`/projects/${w.id}`} className="block truncate text-base font-extrabold text-white hover:underline">
                               {w.title || "-"}
                             </Link>
-                            {secondLine(w) ? (
-                              <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div>
-                            ) : null}
+                            {secondLine(w) ? <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div> : null}
                           </div>
                         </div>
                       </td>
@@ -269,6 +274,7 @@ export default function MyWorkPage() {
                       <td className="px-6 py-5 text-center text-sm text-white/80">{fmtDeadline(w.due_date)}</td>
 
                       <td className="px-6 py-5 text-right">
+                        {/* ✅ Dropdown ใช้ UI status แต่ยิง PATCH เป็น DB status ด้วย mapping */}
                         <StatusDropdown value={w.status} onChange={(s) => changeStatus(w.id, s)} />
                       </td>
                     </tr>

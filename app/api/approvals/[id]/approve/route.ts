@@ -1,82 +1,65 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseFromRequest } from "@/utils/supabase/api";
-import { supabaseAdmin } from "@/utils/supabase/admin";
+import { createSupabaseAdmin } from "@/app/api/_supabaseAdmin";
 
-function isLeaderRole(role?: string | null) {
-  return String(role || "").toUpperCase() === "LEADER";
+function badId(id: string) {
+  return !id || id.length < 10;
 }
 
-export async function POST(
-  req: NextRequest,
-  ctx: { params: Promise<{ id: string }> }
-) {
-  const { supabase, applyCookies } = await supabaseFromRequest(req);
-  const admin = supabaseAdmin();
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
+  if (badId(id)) return NextResponse.json({ error: "Invalid approval id" }, { status: 400 });
 
-  // auth
-  const { data: authData, error: authErr } = await supabase.auth.getUser();
+  const { supabase } = await supabaseFromRequest(req);
+  const admin = createSupabaseAdmin();
+
+  const { data: auth, error: authErr } = await supabase.auth.getUser();
   if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
-  if (!authData?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = auth?.user;
+  if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
-  // leader check (ใช้ client session)
-  const { data: me, error: meErr } = await supabase
-    .from("profiles")
-    .select("id, role, is_active")
-    .eq("id", authData.user.id)
-    .single();
-
+  const { data: me, error: meErr } = await supabase.from("profiles").select("id, role, is_active").eq("id", user.id).maybeSingle();
   if (meErr) return NextResponse.json({ error: meErr.message }, { status: 500 });
-  if (!me || !isLeaderRole(me.role) || me.is_active === false) {
+  if (!me || me.is_active === false || (me.role !== "LEADER" && me.role !== "ADMIN")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // ✅ admin load request
+  // load request (admin)
   const { data: reqRow, error: reqErr } = await admin
     .from("status_change_requests")
-    .select("id, project_id, from_status, to_status, request_status")
+    .select("id, project_id, from_status, to_status, request_status, requested_by")
     .eq("id", id)
-    .maybeSingle();
+    .single();
 
-  if (reqErr) {
-    const res = NextResponse.json({ error: reqErr.message }, { status: 500 });
-    return applyCookies(res);
-  }
-  if (!reqRow) {
-    const res = NextResponse.json({ error: "Not found" }, { status: 404 });
-    return applyCookies(res);
-  }
+  if (reqErr) return NextResponse.json({ error: reqErr.message }, { status: 500 });
+  if (!reqRow) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (reqRow.request_status !== "PENDING") {
-    const res = NextResponse.json({ error: "Already processed" }, { status: 400 });
-    return applyCookies(res);
+    return NextResponse.json({ error: "Already processed" }, { status: 400 });
   }
 
-  // ✅ admin update project status
-  const { error: pErr } = await admin
-    .from("projects")
-    .update({ status: reqRow.to_status })
-    .eq("id", reqRow.project_id);
-
-  if (pErr) {
-    const res = NextResponse.json({ error: pErr.message }, { status: 500 });
-    return applyCookies(res);
-  }
-
-  // ✅ admin mark approved (อย่าใช้ processed_at / updated_at)
-  const { error: uErr } = await admin
+  // approve request (no *_at)
+  const { error: updReqErr } = await admin
     .from("status_change_requests")
-    .update({
-      request_status: "APPROVED",
-      approved_by: authData.user.id,
-      approved_at: new Date().toISOString(),
-    })
-    .eq("id", reqRow.id);
+    .update({ request_status: "APPROVED", approved_by: user.id })
+    .eq("id", id);
 
-  if (uErr) {
-    const res = NextResponse.json({ error: uErr.message }, { status: 500 });
-    return applyCookies(res);
-  }
+  if (updReqErr) return NextResponse.json({ error: updReqErr.message }, { status: 500 });
 
-  const res = NextResponse.json({ ok: true });
-  return applyCookies(res);
+  // apply to project
+  const { error: updProjErr } = await admin.from("projects").update({ status: reqRow.to_status }).eq("id", reqRow.project_id);
+  if (updProjErr) return NextResponse.json({ error: updProjErr.message }, { status: 500 });
+
+  await admin.from("project_logs").insert({
+    project_id: reqRow.project_id,
+    action: "STATUS_APPROVED",
+    created_by: user.id,
+    detail: {
+      request_id: id,
+      from_status: reqRow.from_status,
+      to_status: reqRow.to_status,
+      requested_by: reqRow.requested_by,
+    },
+  });
+
+  return NextResponse.json({ ok: true });
 }

@@ -1,27 +1,34 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
-type Dept = "VIDEO" | "GRAPHIC" | "ALL";
-type ReqStatus = "PENDING" | "APPROVED" | "REJECTED";
-
-type ProjectLite = {
+type ProfileMini = {
   id: string;
-  code?: string | null;
-  title?: string | null;
-  department?: Dept | null;
-  assignee?: { id: string; display_name: string | null; department: Dept | null } | null;
+  display_name?: string | null;
+  email?: string | null;
 };
 
 type StatusRequest = {
   id: string;
   project_id: string;
-  status: ReqStatus;
   from_status: string;
   to_status: string;
-  created_at?: string | null; // ✅ ใช้ตัวนี้พอ (processed_at ไม่มี)
-  note?: string | null;
-  project?: ProjectLite | null;
+  request_status: "PENDING" | "APPROVED" | "REJECTED";
+  created_at: string;
+  requested_by: string;
+  approved_by?: string | null;
+
+  project?: {
+    id: string;
+    code?: string | null;
+    title: string | null;
+    department?: "VIDEO" | "GRAPHIC" | "ALL" | null;
+    assignee_id?: string | null;
+  } | null;
+
+  requester?: ProfileMini | null;
+  assignee?: ProfileMini | null;
 };
 
 async function safeJson(res: Response) {
@@ -33,23 +40,21 @@ function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-function DeptPill({ dept }: { dept: Dept }) {
-  const cls =
-    dept === "VIDEO"
-      ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
-      : dept === "GRAPHIC"
-      ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
-      : "border-white/10 bg-white/5 text-white/70";
-  return <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-extrabold", cls)}>{dept}</span>;
+function formatDateTimeTH(iso: string) {
+  try {
+    const d = new Date(iso);
+    const date = d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
+    const time = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false });
+    return `${date} ${time}`;
+  } catch {
+    return iso;
+  }
 }
 
-function fmtTime(iso?: string | null) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return String(iso);
-  const date = d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
-  const time = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false });
-  return `${date} ${time}`;
+function badgeClass(s: StatusRequest["request_status"]) {
+  if (s === "PENDING") return "border-yellow-400/30 bg-yellow-400/10 text-yellow-200";
+  if (s === "APPROVED") return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
+  return "border-red-400/30 bg-red-400/10 text-red-200";
 }
 
 export default function ApprovalsPage() {
@@ -57,78 +62,49 @@ export default function ApprovalsPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  const FILTERS = ["ALL", "VIDEO", "GRAPHIC", "HISTORY"] as const;
-  const [tab, setTab] = useState<(typeof FILTERS)[number]>("ALL");
-
-  async function load() {
+  async function loadAll() {
     setLoading(true);
     setErr("");
     try {
-      const r = await fetch("/api/approvals", { cache: "no-store" });
-      const j = await safeJson(r);
+      const res = await fetch("/api/approvals", { cache: "no-store" });
+      const json = await safeJson(res);
+      if (!res.ok) throw new Error((json && (json.error || json.message)) || "Load approvals failed");
 
-      if (!r.ok) {
-        setItems([]);
-        setErr((j && (j.error || j.message)) || `Load failed (${r.status})`);
-        return;
-      }
+      // รองรับทั้ง 2 รูปแบบ: array ตรงๆ หรือ { pending, history }
+      const data = Array.isArray(json?.data)
+        ? json.data
+        : Array.isArray(json)
+          ? json
+          : json?.data?.pending || json?.data?.history
+            ? [...(json?.data?.pending ?? []), ...(json?.data?.history ?? [])]
+            : [];
 
-      const arr = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
-      setItems(arr as StatusRequest[]);
+      setItems(data as StatusRequest[]);
     } catch (e: any) {
       setItems([]);
-      setErr(e?.message || "Load failed");
+      setErr(e?.message || "Load approvals failed");
     } finally {
       setLoading(false);
     }
   }
 
-  async function approve(id: string) {
+  async function act(id: string, action: "approve" | "reject") {
     try {
-      const r = await fetch(`/api/approvals/${encodeURIComponent(id)}/approve`, { method: "POST" });
-      const j = await safeJson(r);
-      if (!r.ok) throw new Error((j && (j.error || j.message)) || "Approve failed");
-      await load();
+      const res = await fetch(`/api/approvals/${encodeURIComponent(id)}/${action}`, { method: "POST" });
+      const json = await safeJson(res);
+      if (!res.ok) throw new Error((json && (json.error || json.message)) || "Action failed");
+      await loadAll();
     } catch (e: any) {
-      alert(e?.message || "Approve failed");
-    }
-  }
-
-  async function reject(id: string) {
-    try {
-      const r = await fetch(`/api/approvals/${encodeURIComponent(id)}/reject`, { method: "POST" });
-      const j = await safeJson(r);
-      if (!r.ok) throw new Error((j && (j.error || j.message)) || "Reject failed");
-      await load();
-    } catch (e: any) {
-      alert(e?.message || "Reject failed");
+      alert(e?.message || "Action failed");
     }
   }
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadAll();
   }, []);
 
-  const pending = useMemo(() => items.filter((x) => x.status === "PENDING"), [items]);
-  const history = useMemo(() => items.filter((x) => x.status !== "PENDING"), [items]);
-
-  const filtered = useMemo(() => {
-    if (tab === "HISTORY") return history;
-    const base = pending;
-    if (tab === "ALL") return base;
-    return base.filter((x) => (x.project?.department ?? "ALL") === tab);
-  }, [tab, pending, history]);
-
-  const counts = useMemo(() => {
-    const c = {
-      ALL: pending.length,
-      VIDEO: pending.filter((x) => (x.project?.department ?? "ALL") === "VIDEO").length,
-      GRAPHIC: pending.filter((x) => (x.project?.department ?? "ALL") === "GRAPHIC").length,
-      HISTORY: history.length,
-    };
-    return c;
-  }, [pending, history]);
+  const pending = useMemo(() => items.filter((x) => x.request_status === "PENDING"), [items]);
+  const history = useMemo(() => items.filter((x) => x.request_status !== "PENDING"), [items]);
 
   return (
     <div className="w-full bg-black text-white">
@@ -141,7 +117,7 @@ export default function ApprovalsPage() {
           </div>
 
           <button
-            onClick={load}
+            onClick={loadAll}
             disabled={loading}
             className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50"
           >
@@ -149,104 +125,110 @@ export default function ApprovalsPage() {
           </button>
         </div>
 
-        <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            {FILTERS.map((k) => {
-              const active = tab === k;
-              const label =
-                k === "ALL" ? `ALL (${counts.ALL})` : k === "HISTORY" ? `HISTORY (${counts.HISTORY})` : `${k} (${(counts as any)[k]})`;
-
-              return (
-                <button
-                  key={k}
-                  onClick={() => setTab(k)}
-                  className={cn(
-                    "rounded-2xl border px-3 py-2 text-xs font-extrabold transition",
-                    active
-                      ? "border-white/10 bg-white text-black"
-                      : "border-white/10 bg-transparent text-white/70 hover:bg-white/10 hover:text-white"
-                  )}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         {loading ? (
           <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">กำลังโหลด...</div>
         ) : err ? (
           <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">{err}</div>
         ) : (
-          <div className="mt-6 space-y-4">
-            {filtered.length === 0 ? (
-              <div className="rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">
-                {tab === "HISTORY" ? "ยังไม่มีประวัติ" : "ไม่มีคำขอรออนุมัติ"}
+          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            {/* Pending */}
+            <div className="rounded-[30px] border border-white/10 bg-white/5 p-5">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-extrabold text-white/90">PENDING</div>
+                <div className="text-xs text-white/50">{pending.length} รายการ</div>
               </div>
-            ) : null}
 
-            {filtered.map((it) => {
-              const code = it.project?.code || "-";
-              const title = it.project?.title || "-";
-              const dept = (it.project?.department ?? "ALL") as Dept;
-              const assigneeName = it.project?.assignee?.display_name || "-";
+              {pending.length === 0 ? (
+                <div className="mt-4 text-sm text-white/50">ไม่มีคำขอรออนุมัติ</div>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  {pending.map((r) => (
+                    <div key={r.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-white">
+                            <span className="rounded-lg border border-white/10 bg-black/40 px-2 py-0.5 text-[11px] font-extrabold text-white/85">
+                              {r.project?.code || r.project_id.slice(0, 6).toUpperCase()}
+                            </span>
+                            <Link className="min-w-0 truncate underline underline-offset-4" href={`/projects/${r.project_id}`}>
+                              {r.project?.title || "Project"}
+                            </Link>
+                          </div>
 
-              return (
-                <div
-                  key={it.id}
-                  className="rounded-[30px] border border-white/10 bg-white/5 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)]"
-                >
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
-                          {code}
+                          <div className="mt-1 text-xs text-white/60">
+                            {r.from_status} → {r.to_status}
+                            {r.project?.department ? ` · ฝ่าย ${r.project.department}` : ""}
+                            {r.assignee?.display_name ? ` · ผู้รับผิดชอบ ${r.assignee.display_name}` : ""}
+                            {` · โดย ${r.requester?.display_name || "-"} · ${formatDateTimeTH(r.created_at)}`}
+                          </div>
+                        </div>
+
+                        <span className={`shrink-0 rounded-lg border px-2 py-0.5 text-xs ${badgeClass(r.request_status)}`}>
+                          {r.request_status}
                         </span>
-                        <DeptPill dept={dept} />
-                        <span className="text-xs text-white/50">ผู้รับผิดชอบ: {assigneeName}</span>
                       </div>
 
-                      <div className="mt-2 truncate text-lg font-extrabold text-white">{title}</div>
-
-                      <div className="mt-2 text-sm text-white/70">
-                        ขอเปลี่ยนสถานะ: <span className="font-extrabold text-white">{it.from_status}</span> →{" "}
-                        <span className="font-extrabold text-white">{it.to_status}</span>
-                      </div>
-
-                      {/* ✅ ใช้ created_at อย่างเดียว */}
-                      <div className="mt-1 text-xs text-white/40">
-                        {it.status === "PENDING" ? `ส่งคำขอเมื่อ ${fmtTime(it.created_at)}` : `ทำรายการเมื่อ ${fmtTime(it.created_at)}`}
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          onClick={() => act(r.id, "approve")}
+                          className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-black hover:opacity-90"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => act(r.id, "reject")}
+                          className="rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+                        >
+                          Reject
+                        </button>
                       </div>
                     </div>
-
-                    <div className="flex shrink-0 items-center justify-end gap-2">
-                      {it.status === "PENDING" ? (
-                        <>
-                          <button
-                            onClick={() => approve(it.id)}
-                            className="rounded-2xl border border-green-500/30 bg-green-500/15 px-4 py-2 text-sm font-extrabold text-green-200 hover:bg-green-500/25"
-                          >
-                            อนุมัติ
-                          </button>
-
-                          <button
-                            onClick={() => reject(it.id)}
-                            className="rounded-2xl border border-red-500/30 bg-red-500/15 px-4 py-2 text-sm font-extrabold text-red-200 hover:bg-red-500/25"
-                          >
-                            ปฏิเสธ
-                          </button>
-                        </>
-                      ) : (
-                        <span className="rounded-2xl border border-white/10 bg-black/30 px-4 py-2 text-sm font-extrabold text-white/70">
-                          {it.status}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              );
-            })}
+              )}
+            </div>
+
+            {/* History */}
+            <div className="rounded-[30px] border border-white/10 bg-white/5 p-5">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-extrabold text-white/90">HISTORY</div>
+                <div className="text-xs text-white/50">ล่าสุด 20 รายการ</div>
+              </div>
+
+              {history.length === 0 ? (
+                <div className="mt-4 text-sm text-white/50">ยังไม่มีประวัติ</div>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  {history.slice(0, 20).map((r) => (
+                    <div key={r.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-white">
+                            <span className="rounded-lg border border-white/10 bg-black/40 px-2 py-0.5 text-[11px] font-extrabold text-white/85">
+                              {r.project?.code || r.project_id.slice(0, 6).toUpperCase()}
+                            </span>
+                            <Link className="min-w-0 truncate underline underline-offset-4" href={`/projects/${r.project_id}`}>
+                              {r.project?.title || "Project"}
+                            </Link>
+                          </div>
+
+                          <div className="mt-1 text-xs text-white/60">
+                            {r.from_status} → {r.to_status}
+                            {r.project?.department ? ` · ฝ่าย ${r.project.department}` : ""}
+                            {r.assignee?.display_name ? ` · ผู้รับผิดชอบ ${r.assignee.display_name}` : ""}
+                            {` · โดย ${r.requester?.display_name || "-"} · ${formatDateTimeTH(r.created_at)}`}
+                          </div>
+                        </div>
+
+                        <span className={`shrink-0 rounded-lg border px-2 py-0.5 text-xs ${badgeClass(r.request_status)}`}>
+                          {r.request_status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

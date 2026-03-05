@@ -34,7 +34,6 @@ type WorkItem = {
   video_purpose?: string | null;
   graphic_job_type?: string | null;
 
-  // ✅ เพิ่ม: pending request จาก API
   pending_request?: PendingReq | null;
 };
 
@@ -50,16 +49,45 @@ function cn(...xs: Array<string | false | null | undefined>) {
 /** ✅ เฉพาะหน้า My Work: UI <-> DB mapping */
 type DbStatus = "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED" | "REVIEW";
 function toDbStatus(s: Status): DbStatus {
-  // UI -> DB
   if (s === "COMPLETED") return "DONE";
   if (s === "BLOCKED") return "CANCELLED";
   return s as unknown as DbStatus;
 }
 function toUiStatus(s: any): Status {
-  // DB -> UI
   if (s === "DONE") return "COMPLETED";
   if (s === "CANCELLED") return "BLOCKED";
   return s as Status;
+}
+
+/** ✅ localStorage: กันรีเฟรชแล้ว pending หาย */
+const PENDING_KEY = "woffu_mywork_pending_v1";
+
+function readPendingStore(): Record<string, PendingReq> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    if (!raw) return {};
+    const obj = JSON.parse(raw);
+    return obj && typeof obj === "object" ? obj : {};
+  } catch {
+    return {};
+  }
+}
+function writePendingStore(next: Record<string, PendingReq>) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(PENDING_KEY, JSON.stringify(next));
+  } catch {}
+}
+function setPendingForProject(projectId: string, req: PendingReq) {
+  const store = readPendingStore();
+  store[projectId] = req;
+  writePendingStore(store);
+}
+function removePendingForProject(projectId: string) {
+  const store = readPendingStore();
+  delete store[projectId];
+  writePendingStore(store);
 }
 
 function DeptPill({ dept }: { dept: WorkItem["department"] }) {
@@ -115,7 +143,6 @@ function secondLine(w: WorkItem) {
 }
 
 function uiLabelFromDb(db: string) {
-  // แสดงให้ตรง UI
   if (db === "DONE") return "COMPLETED";
   if (db === "CANCELLED") return "BLOCKED";
   return db;
@@ -140,9 +167,11 @@ export default function MyWorkPage() {
   async function load() {
     setLoading(true);
     setErr("");
+
     try {
       const r = await fetch("/api/my-work", { cache: "no-store" });
       const j = await safeJson(r);
+
       if (!r.ok) {
         setItems([]);
         setErr((j && (j.error || j.message)) || `Load failed (${r.status})`);
@@ -151,13 +180,40 @@ export default function MyWorkPage() {
 
       const arr = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
 
-      // ✅ map DB -> UI (DONE/CANCELLED -> COMPLETED/BLOCKED)
-      const normalized = (arr as WorkItem[]).map((x: any) => ({
+      // ✅ map DB -> UI + (ถ้า API ส่ง pending_request มา ก็รับด้วย)
+      const normalized = (arr as any[]).map((x) => ({
         ...x,
         status: toUiStatus(x.status),
-      }));
+        pending_request: x.pending_request ?? null,
+      })) as WorkItem[];
 
-      setItems(normalized);
+      // ✅ merge pending จาก localStorage เพื่อกัน F5 แล้วหาย
+      const store = readPendingStore();
+
+      const merged = normalized.map((x) => {
+        const apiPending = x.pending_request?.status === "PENDING" ? x.pending_request : null;
+
+        // ถ้า API มี pending -> sync ลง store
+        if (apiPending) {
+          setPendingForProject(x.id, apiPending);
+          return x;
+        }
+
+        // ถ้า API ไม่มี -> ใช้ store
+        const localPending = store[x.id];
+        if (localPending?.status === "PENDING") {
+          return { ...x, pending_request: localPending };
+        }
+
+        return x;
+      });
+
+      // cleanup: ถ้า store มี key ที่ไม่มีในรายการแล้ว ลบทิ้ง
+      for (const pid of Object.keys(store)) {
+        if (!merged.find((x) => x.id === pid)) removePendingForProject(pid);
+      }
+
+      setItems(merged);
     } catch (e: any) {
       setItems([]);
       setErr(e?.message || "Load failed");
@@ -166,87 +222,77 @@ export default function MyWorkPage() {
     }
   }
 
- // ✅ ส่งคำขอเปลี่ยนสถานะ (ไม่แก้ projects ตรงๆ) -> request-status
-async function requestStatusChange(projectId: string, nextUi: Status) {
-  const prev = items;
+  // ✅ ส่งคำขอเปลี่ยนสถานะ -> request-status
+  async function requestStatusChange(projectId: string, nextUi: Status) {
+    const prev = items;
 
-  const target = items.find((x) => x.id === projectId);
-  if (!target) return;
+    const target = items.find((x) => x.id === projectId);
+    if (!target) return;
 
-  // ถ้ามี pending อยู่แล้ว ห้ามส่งซ้ำ
-  if (target.pending_request?.status === "PENDING") {
-    showToast("มีคำขอรออนุมัติอยู่แล้ว");
-    return;
-  }
-
-  const fromDb = toDbStatus(target.status);
-  const toDb = toDbStatus(nextUi);
-
-  // optimistic: ใส่ pending_request ให้เห็นทันที
-  setItems((xs) =>
-    xs.map((x) =>
-      x.id === projectId
-        ? {
-            ...x,
-            pending_request: {
-              id: "temp",
-              from_status: fromDb,
-              to_status: toDb,
-              status: "PENDING",
-              created_at: new Date().toISOString(),
-            },
-          }
-        : x
-    )
-  );
-
-  try {
-    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/request-status`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      // ✅ FIX: endpoint ต้องการ from_status/to_status
-      body: JSON.stringify({
-        from_status: fromDb,
-        to_status: toDb,
-      }),
-    });
-
-    const j = await safeJson(res);
-
-    if (!res.ok) {
-      setItems(prev);
-      const msg = (j && (j.error || j.message)) || "Update failed";
-      showToast(msg);
+    // ถ้ามี pending อยู่แล้ว ห้ามส่งซ้ำ
+    if (target.pending_request?.status === "PENDING") {
+      showToast("มีคำขอรออนุมัติอยู่แล้ว");
       return;
     }
 
-    // ถ้า API ส่ง request กลับมา ก็เอามาแทน temp
-    const reqRow = j?.request ?? null;
-    if (reqRow?.id) {
-      setItems((xs) =>
-        xs.map((x) =>
-          x.id === projectId
-            ? {
-                ...x,
-                pending_request: {
-                  id: reqRow.id,
-                  from_status: reqRow.from_status,
-                  to_status: reqRow.to_status,
-                  status: reqRow.status,
-                  created_at: reqRow.created_at ?? null,
-                },
-              }
-            : x
-        )
-      );
-    }
+    const fromDb = toDbStatus(target.status);
+    const toDb = toDbStatus(nextUi);
 
-    showToast("ส่งคำขอสำเร็จแล้ว");
-  } catch (e: any) {
-    setItems(prev);
-    showToast(e?.message || "Update failed");
+    const optimisticPending: PendingReq = {
+      id: "temp",
+      from_status: fromDb,
+      to_status: toDb,
+      status: "PENDING",
+      created_at: new Date().toISOString(),
+    };
+
+    // optimistic: ใส่ pending_request ให้เห็นทันที + เก็บลง localStorage
+    setItems((xs) => xs.map((x) => (x.id === projectId ? { ...x, pending_request: optimisticPending } : x)));
+    setPendingForProject(projectId, optimisticPending);
+
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/request-status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from_status: fromDb,
+          to_status: toDb,
+        }),
+      });
+
+      const j = await safeJson(res);
+
+      if (!res.ok) {
+        setItems(prev);
+        removePendingForProject(projectId);
+        const msg = (j && (j.error || j.message)) || "Update failed";
+        showToast(msg);
+        return;
+      }
+
+      // ถ้า API ส่ง request กลับมา ก็เอามาแทน temp + sync localStorage
+      const reqRow = j?.request ?? null;
+      if (reqRow?.id) {
+        const saved: PendingReq = {
+          id: reqRow.id,
+          from_status: reqRow.from_status,
+          to_status: reqRow.to_status,
+          status: reqRow.status,
+          created_at: reqRow.created_at ?? null,
+        };
+
+        setItems((xs) => xs.map((x) => (x.id === projectId ? { ...x, pending_request: saved } : x)));
+        setPendingForProject(projectId, saved);
+      }
+
+      showToast("ส่งคำขอสำเร็จแล้ว");
+    } catch (e: any) {
+      setItems(prev);
+      removePendingForProject(projectId);
+      showToast(e?.message || "Update failed");
+    }
   }
-}
+
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -348,13 +394,16 @@ async function requestStatusChange(projectId: string, nextUi: Status) {
                             </span>
 
                             <div className="min-w-0">
-                              <Link href={`/projects/${w.id}`} className="block truncate text-base font-extrabold text-white hover:underline">
+                              <Link
+                                href={`/projects/${w.id}`}
+                                className="block truncate text-base font-extrabold text-white hover:underline"
+                              >
                                 {w.title || "-"}
                               </Link>
 
                               {secondLine(w) ? <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div> : null}
 
-                              {/* ✅ รออนุมัติ (คงอยู่หลัง F5 เพราะมาจาก API) */}
+                              {/* ✅ รออนุมัติ (ไม่หายหลัง F5 เพราะ merge จาก localStorage) */}
                               {pending ? (
                                 <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-lime-400/20 bg-lime-400/10 px-4 py-1 text-xs font-extrabold text-lime-200">
                                   <span className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_18px_rgba(163,230,53,0.9)]" />

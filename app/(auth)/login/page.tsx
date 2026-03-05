@@ -41,8 +41,8 @@ export default function LoginPage() {
     <div className="min-h-screen bg-black text-white flex items-center justify-center px-4">
       <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg">
         <div className="mb-5">
-          <div className="text-2xl font-semibold">WOFFU</div>
-          <div className="text-sm text-white/60">Sign in to continue</div>
+          <div className="text-3xl font-black tracking-tighter text-[#e5ff78] text-center">WOFFU OS</div>
+          <div className="text-sm text-white/60 text-center">Sign in to continue</div>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-3">
@@ -77,7 +77,7 @@ export default function LoginPage() {
 
           <button
             disabled={loading}
-            className="w-full rounded-xl bg-white text-black py-2 font-semibold disabled:opacity-60"
+            className="w-full rounded-xl bg-[#e5ff78] tracking-tighter text-black py-2 font-semibold disabled:opacity-60"
           >
             {loading ? "Signing in..." : "Sign in"}
           </button>

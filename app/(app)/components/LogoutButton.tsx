@@ -18,9 +18,9 @@ export default function LogoutButton() {
   return (
     <button
       onClick={logout}
-      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white/85 hover:bg-white/10"
+      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white/85 hover:bg-white/10 items-center"
     >
-      ออกจากระบบ
+      Logout
     </button>
   );
 }

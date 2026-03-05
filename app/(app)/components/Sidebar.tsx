@@ -140,7 +140,7 @@ export default function Sidebar() {
             <LogoutButton />
           </div>
           <div className="mt-6 text-center text-[10px] font-bold tracking-widest text-white/20 uppercase">
-            © 2026 woffu system
+            © 2026 woffu OS
           </div>
         </div>
       </div>

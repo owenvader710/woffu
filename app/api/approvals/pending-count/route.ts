@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/utils/supabase/admin";
 export async function GET(req: NextRequest) {
   try {
     const { supabase, applyCookies } = supabaseFromRequest(req);
+    const admin = supabaseAdmin();
 
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
@@ -26,8 +27,7 @@ export async function GET(req: NextRequest) {
       return applyCookies(res);
     }
 
-    // ✅ admin count
-    const { count, error } = await supabaseAdmin
+    const { count, error } = await admin
       .from("status_change_requests")
       .select("id", { count: "exact", head: true })
       .eq("request_status", "PENDING");

@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/utils/supabase/admin";
 export async function GET(req: NextRequest) {
   try {
     const { supabase, applyCookies } = supabaseFromRequest(req);
+    const admin = supabaseAdmin();
 
     // auth
     const { data: authData, error: authErr } = await supabase.auth.getUser();
@@ -12,7 +13,7 @@ export async function GET(req: NextRequest) {
     const user = authData?.user;
     if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
-    // leader check (ยังใช้ client supabase เพื่อยืนยันตัวตน)
+    // leader check
     const { data: me, error: meErr } = await supabase
       .from("profiles")
       .select("id, role")
@@ -23,14 +24,13 @@ export async function GET(req: NextRequest) {
       const res = NextResponse.json({ error: meErr.message }, { status: 400 });
       return applyCookies(res);
     }
-    const isLeader = me?.role === "LEADER";
-    if (!isLeader) {
+    if (me?.role !== "LEADER") {
       const res = NextResponse.json({ error: "Not allowed" }, { status: 403 });
       return applyCookies(res);
     }
 
-    // ✅ ใช้ admin เพื่อข้าม RLS (หัวหน้าอ่าน pending ได้แน่นอน)
-    const pendingQ = await supabaseAdmin
+    // ✅ admin read
+    const pendingQ = await admin
       .from("status_change_requests")
       .select(
         `
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
       .eq("request_status", "PENDING")
       .order("created_at", { ascending: false });
 
-    const historyQ = await supabaseAdmin
+    const historyQ = await admin
       .from("status_change_requests")
       .select(
         `
@@ -63,10 +63,7 @@ export async function GET(req: NextRequest) {
     }
 
     const res = NextResponse.json(
-      {
-        pending: pendingQ.data ?? [],
-        history: historyQ.data ?? [],
-      },
+      { pending: pendingQ.data ?? [], history: historyQ.data ?? [] },
       { status: 200 }
     );
     return applyCookies(res);

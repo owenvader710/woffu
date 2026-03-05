@@ -176,7 +176,7 @@ function badgeClass(status: StatusRequest["request_status"]) {
 function priorityLabel(p?: Project["video_priority"] | null) {
   if (!p) return "-";
   if (p === "SPECIAL") return "SPECIAL";
-  return `${p} ดาว`;
+  return `${p}`;
 }
 
 // ✅ ดึงรหัสโปรเจกต์ รองรับหลายชื่อ

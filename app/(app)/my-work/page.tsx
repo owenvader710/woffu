@@ -166,85 +166,87 @@ export default function MyWorkPage() {
     }
   }
 
-  // ✅ ส่งคำขอเปลี่ยนสถานะ (ไม่แก้ projects ตรงๆ) -> request-status
-  async function requestStatusChange(projectId: string, nextUi: Status) {
-    const prev = items;
+ // ✅ ส่งคำขอเปลี่ยนสถานะ (ไม่แก้ projects ตรงๆ) -> request-status
+async function requestStatusChange(projectId: string, nextUi: Status) {
+  const prev = items;
 
-    const target = items.find((x) => x.id === projectId);
-    if (!target) return;
+  const target = items.find((x) => x.id === projectId);
+  if (!target) return;
 
-    // ถ้ามี pending อยู่แล้ว ห้ามส่งซ้ำ
-    if (target.pending_request?.status === "PENDING") {
-      showToast("มีคำขอรออนุมัติอยู่แล้ว");
+  // ถ้ามี pending อยู่แล้ว ห้ามส่งซ้ำ
+  if (target.pending_request?.status === "PENDING") {
+    showToast("มีคำขอรออนุมัติอยู่แล้ว");
+    return;
+  }
+
+  const fromDb = toDbStatus(target.status);
+  const toDb = toDbStatus(nextUi);
+
+  // optimistic: ใส่ pending_request ให้เห็นทันที
+  setItems((xs) =>
+    xs.map((x) =>
+      x.id === projectId
+        ? {
+            ...x,
+            pending_request: {
+              id: "temp",
+              from_status: fromDb,
+              to_status: toDb,
+              status: "PENDING",
+              created_at: new Date().toISOString(),
+            },
+          }
+        : x
+    )
+  );
+
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/request-status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // ✅ FIX: endpoint ต้องการ from_status/to_status
+      body: JSON.stringify({
+        from_status: fromDb,
+        to_status: toDb,
+      }),
+    });
+
+    const j = await safeJson(res);
+
+    if (!res.ok) {
+      setItems(prev);
+      const msg = (j && (j.error || j.message)) || "Update failed";
+      showToast(msg);
       return;
     }
 
-    const fromDb = toDbStatus(target.status);
-    const toDb = toDbStatus(nextUi);
-
-    // optimistic: ใส่ pending_request ให้เห็นทันที
-    setItems((xs) =>
-      xs.map((x) =>
-        x.id === projectId
-          ? {
-              ...x,
-              pending_request: {
-                id: "temp",
-                from_status: fromDb,
-                to_status: toDb,
-                status: "PENDING",
-                created_at: new Date().toISOString(),
-              },
-            }
-          : x
-      )
-    );
-
-    try {
-      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/request-status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to_status: toDb }),
-      });
-
-      const j = await safeJson(res);
-
-      if (!res.ok) {
-        // rollback
-        setItems(prev);
-        const msg = (j && (j.error || j.message)) || "Update failed";
-        showToast(msg);
-        return;
-      }
-
-      // ถ้า API ส่ง request กลับมา ก็เอามาแทน temp
-      const reqRow = j?.request ?? null;
-      if (reqRow?.id) {
-        setItems((xs) =>
-          xs.map((x) =>
-            x.id === projectId
-              ? {
-                  ...x,
-                  pending_request: {
-                    id: reqRow.id,
-                    from_status: reqRow.from_status,
-                    to_status: reqRow.to_status,
-                    status: reqRow.status,
-                    created_at: reqRow.created_at ?? null,
-                  },
-                }
-              : x
-          )
-        );
-      }
-
-      showToast("ส่งคำขอสำเร็จแล้ว");
-    } catch (e: any) {
-      setItems(prev);
-      showToast(e?.message || "Update failed");
+    // ถ้า API ส่ง request กลับมา ก็เอามาแทน temp
+    const reqRow = j?.request ?? null;
+    if (reqRow?.id) {
+      setItems((xs) =>
+        xs.map((x) =>
+          x.id === projectId
+            ? {
+                ...x,
+                pending_request: {
+                  id: reqRow.id,
+                  from_status: reqRow.from_status,
+                  to_status: reqRow.to_status,
+                  status: reqRow.status,
+                  created_at: reqRow.created_at ?? null,
+                },
+              }
+            : x
+        )
+      );
     }
-  }
 
+    showToast("ส่งคำขอสำเร็จแล้ว");
+  } catch (e: any) {
+    setItems(prev);
+    showToast(e?.message || "Update failed");
+  }
+}
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps

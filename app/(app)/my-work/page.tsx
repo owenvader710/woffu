@@ -136,36 +136,38 @@ export default function MyWorkPage() {
     }
   }
 
-  async function changeStatus(id: string, nextUi: Status) {
-    const prev = items;
+async function changeStatus(id: string, nextUi: Status) {
+  const prev = items;
 
-    // optimistic
-    setItems((xs) => xs.map((x) => (x.id === id ? { ...x, status: nextUi } : x)));
+  // optimistic (UI)
+  setItems((xs) => xs.map((x) => (x.id === id ? { ...x, status: nextUi } : x)));
 
-    try {
-      const nextDb = toDbStatus(nextUi);
+  try {
+    const nextDb = toDbStatus(nextUi);
 
-      const res = await fetch(`/api/my-work/${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: nextDb }),
-      });
+    const res = await fetch(`/api/my-work/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: nextDb }),
+    });
 
-      const j = await safeJson(res);
+    const j = await safeJson(res);
 
-      // ✅ สำคัญ: โชว์ error จริงจาก API
-      if (!res.ok) {
-        const msg = (j && (j.error || j.message)) || `Update failed (${res.status})`;
-        throw new Error(msg);
-      }
+    if (!res.ok) throw new Error((j && (j.error || j.message)) || "Update failed");
 
-      // ✅ reload กันเคสหลังบ้านเปลี่ยนค่า/trigger อะไรเพิ่ม
-      await load();
-    } catch (e: any) {
+    // ✅ ถ้าไม่ใช่หัวหน้า ระบบจะส่งเป็น REQUESTED -> ให้ rollback แล้วแจ้งเตือน
+    if (j?.mode === "REQUESTED") {
       setItems(prev);
-      alert(e?.message || "Update failed");
+      alert(j?.message || "ต้องให้หัวหน้าอนุมัติ (ส่งคำขอแล้ว)");
+      return;
     }
+
+    // ✅ DIRECT = หัวหน้าเปลี่ยนได้จริง ปล่อยสถานะตามที่กด
+  } catch (e: any) {
+    setItems(prev);
+    alert(e?.message || "Update failed");
   }
+}
 
   useEffect(() => {
     load();

@@ -9,7 +9,11 @@ function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-function useOutsideClick(ref: React.RefObject<HTMLElement>, onOutside: () => void) {
+// ✅ FIX TS: ให้ ref รับ null ได้
+function useOutsideClick(
+  ref: React.RefObject<HTMLElement | null>,
+  onOutside: () => void
+) {
   useEffect(() => {
     function handler(e: MouseEvent) {
       const el = ref.current;
@@ -31,7 +35,9 @@ export default function StatusDropdown({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
+
+  // ✅ FIX TS: ให้ generic เป็น HTMLDivElement | null
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
   useOutsideClick(rootRef, () => setOpen(false));
 

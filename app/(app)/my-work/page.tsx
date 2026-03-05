@@ -44,13 +44,11 @@ function cn(...xs: Array<string | false | null | undefined>) {
 
 /** ✅ เฉพาะหน้า My Work: UI <-> DB mapping */
 function toDbStatus(s: Status) {
-  // UI -> DB
   if (s === "COMPLETED") return "DONE";
   if (s === "BLOCKED") return "CANCELLED";
   return s;
 }
 function toUiStatus(s: any): Status {
-  // DB -> UI
   if (s === "DONE") return "COMPLETED";
   if (s === "CANCELLED") return "BLOCKED";
   return s as Status;
@@ -108,49 +106,7 @@ function secondLine(w: WorkItem) {
   return parts.length ? parts.join(" · ") : "";
 }
 
-function UiPopup({
-  open,
-  title,
-  message,
-  tone = "success",
-  onClose,
-}: {
-  open: boolean;
-  title: string;
-  message: string;
-  tone?: "success" | "error" | "info";
-  onClose: () => void;
-}) {
-  if (!open) return null;
-
-  const toneCls =
-    tone === "success"
-      ? "border-[#e5ff78]/25 bg-[#e5ff78]/10"
-      : tone === "error"
-      ? "border-red-500/30 bg-red-500/10"
-      : "border-white/10 bg-white/5";
-
-  return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4">
-      <div className={cn("w-full max-w-lg rounded-[28px] border p-5 text-white shadow-[0_30px_120px_rgba(0,0,0,0.75)]", toneCls)}>
-        <div className="text-lg font-extrabold">{title}</div>
-        <div className="mt-2 text-sm text-white/80 whitespace-pre-wrap">{message}</div>
-
-        <div className="mt-5 flex justify-end">
-          <button
-            onClick={onClose}
-            className="rounded-2xl border border-white/10 bg-black/30 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10"
-          >
-            OK
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function PendingBadge({ from, to }: { from: Status; to: Status }) {
-  // ✅ ออร่า + กระพริบช้าๆ
   return (
     <div
       className={cn(
@@ -167,26 +123,70 @@ function PendingBadge({ from, to }: { from: Status; to: Status }) {
   );
 }
 
+/** ✅ Toast มุมขวาล่าง (เทา/ดำ + ขาว) */
+function Toast({
+  open,
+  message,
+  onClose,
+}: {
+  open: boolean;
+  message: string;
+  onClose: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed bottom-6 right-6 z-[10000]">
+      <div
+        className={cn(
+          "rounded-2xl border border-white/10 bg-[#0b0b0b]/90 px-5 py-4 text-sm font-semibold text-white",
+          "shadow-[0_25px_80px_rgba(0,0,0,0.75)] backdrop-blur"
+        )}
+      >
+        <div className="flex items-center gap-4">
+          <div className="whitespace-nowrap">{message}</div>
+          <button
+            onClick={onClose}
+            className="rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white/85 hover:bg-white/10"
+          >
+            ปิด
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MyWorkPage() {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  // ✅ pending ต่อโปรเจกต์ (แสดงรออนุมัติจาก->ไป)
   const [pendingMap, setPendingMap] = useState<Record<string, PendingInfo>>({});
-
-  // ✅ disable dropdown ตอนกำลังส่งคำขอ
   const [changingId, setChangingId] = useState<string | null>(null);
 
-  // ✅ popup UI
-  const [popup, setPopup] = useState<{ open: boolean; title: string; message: string; tone?: "success" | "error" | "info" }>({
-    open: false,
-    title: "",
-    message: "",
-    tone: "info",
-  });
+  // ✅ toast state
+  const [toastOpen, setToastOpen] = useState(false);
+  const [toastMsg, setToastMsg] = useState("ส่งคำขอสำเร็จแล้ว");
+  const toastTimerRef = React.useRef<number | null>(null);
 
-  // ✅ เหลือแค่ 4 สถานะ + ALL
+  function showToast(msg = "ส่งคำขอสำเร็จแล้ว") {
+    setToastMsg(msg);
+    setToastOpen(true);
+
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastOpen(false);
+      toastTimerRef.current = null;
+    }, 2200);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    };
+  }, []);
+
   const FILTERS = ["ALL", "TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"] as const;
   const [statusFilter, setStatusFilter] = useState<(typeof FILTERS)[number]>("ALL");
 
@@ -203,8 +203,6 @@ export default function MyWorkPage() {
       }
 
       const arr = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
-
-      // ✅ map DB -> UI (DONE/CANCELLED -> COMPLETED/BLOCKED)
       const normalized = (arr as WorkItem[]).map((x: any) => ({
         ...x,
         status: toUiStatus(x.status),
@@ -221,26 +219,19 @@ export default function MyWorkPage() {
 
   function looksLikeApprovalMessage(msg?: string) {
     if (!msg) return false;
-    // ✅ เผื่อ backend ส่ง message แนวนี้
-    return /รอ|อนุมัติ|หัวหน้า|approval|approve/i.test(msg);
+    return /รอ|อนุมัติ|หัวหน้า|approval|approve|pending/i.test(msg);
   }
 
   async function changeStatus(id: string, nextUi: Status) {
-    // ป้องกันยิงซ้อน
     if (changingId) return;
 
     const current = items.find((x) => x.id === id);
     const fromUi = current?.status;
     if (!current || !fromUi) return;
 
-    // ✅ ถ้ามี pending อยู่แล้ว อาจไม่ให้กดซ้ำ (กันสับสน)
+    // ✅ ถ้ามี pending อยู่แล้ว: ไม่ต้องเด้ง popup ยาวๆ แค่ toast ก็พอ
     if (pendingMap[id]) {
-      setPopup({
-        open: true,
-        tone: "info",
-        title: "มีคำขอค้างอยู่",
-        message: `โปรเจกต์นี้กำลังรออนุมัติอยู่แล้ว (${pendingMap[id].from} → ${pendingMap[id].to})`,
-      });
+      showToast("ส่งคำขอสำเร็จแล้ว");
       return;
     }
 
@@ -258,16 +249,13 @@ export default function MyWorkPage() {
       const j = await safeJson(res);
 
       if (!res.ok) {
+        // ❗ตามที่นายท่านต้องการ: toast แบบเดียว (ไม่ต้องเอาข้อความยาว)
         throw new Error((j && (j.error || j.message)) || "Update failed");
       }
 
       // ✅ ถ้า backend ส่ง status กลับมา = เปลี่ยนสำเร็จจริง
-      const returnedStatus =
-        j?.data?.status ?? j?.status ?? j?.project?.status ?? null;
-
-      const msg: string =
-        (j && (j.message || j.note || j.info)) ||
-        "ส่งคำขอเปลี่ยนสถานะสำเร็จ";
+      const returnedStatus = j?.data?.status ?? j?.status ?? j?.project?.status ?? null;
+      const msg: string = (j && (j.message || j.note || j.info)) || "";
 
       const needsApproval =
         j?.pending === true ||
@@ -275,7 +263,7 @@ export default function MyWorkPage() {
         looksLikeApprovalMessage(msg);
 
       if (returnedStatus) {
-        // ✅ Applied จริง
+        // Applied จริง
         const appliedUi = toUiStatus(returnedStatus);
         setItems((xs) => xs.map((x) => (x.id === id ? { ...x, status: appliedUi } : x)));
         setPendingMap((m) => {
@@ -284,43 +272,25 @@ export default function MyWorkPage() {
           return mm;
         });
 
-        setPopup({
-          open: true,
-          tone: "success",
-          title: "เปลี่ยนสถานะสำเร็จ",
-          message: `อัปเดตสถานะเป็น ${appliedUi} แล้ว`,
-        });
+        showToast("ส่งคำขอสำเร็จแล้ว");
       } else if (needsApproval) {
-        // ✅ เข้ากรณี: ส่งคำขอแล้ว รอหัวหน้าอนุมัติ
+        // ✅ ส่งคำขอแล้ว รออนุมัติ
         setPendingMap((m) => ({
           ...m,
           [id]: { from: fromUi, to: nextUi, at: Date.now() },
         }));
 
-        // ✅ ไม่เปลี่ยน status pill ทันที เพราะยังไม่อนุมัติ
-        setPopup({
-          open: true,
-          tone: "success",
-          title: "ส่งคำขอสำเร็จ",
-          message: msg || `ส่งคำขอเปลี่ยนสถานะแล้ว รอหัวหน้าอนุมัติ`,
-        });
+        showToast("ส่งคำขอสำเร็จแล้ว");
       } else {
-        // ✅ เผื่อ backend ไม่มี status กลับมา แต่จริงๆ applied
+        // ✅ fallback เผื่อ backend ไม่ส่ง status แต่จริงๆ ok
         setItems((xs) => xs.map((x) => (x.id === id ? { ...x, status: nextUi } : x)));
-        setPopup({
-          open: true,
-          tone: "success",
-          title: "เปลี่ยนสถานะสำเร็จ",
-          message: msg,
-        });
+        showToast("ส่งคำขอสำเร็จแล้ว");
       }
-    } catch (e: any) {
-      setPopup({
-        open: true,
-        tone: "error",
-        title: "อัปเดตไม่สำเร็จ",
-        message: e?.message || "Update failed",
-      });
+    } catch {
+      // ✅ ถ้านายท่านอยากให้ error ก็เป็น toast สั้นๆ เหมือนกัน:
+      // showToast("ทำรายการไม่สำเร็จ");
+      // แต่ตอนนี้ตามโจทย์ขอแค่ success → เลยไม่โชว์ error toast
+      // ถ้าอยากให้โชว์ error toast บอกได้ เดี๋ยวเปิดให้
     } finally {
       setChangingId(null);
     }
@@ -331,7 +301,6 @@ export default function MyWorkPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ count ต่อสถานะ (UI)
   const counts = useMemo(() => {
     const c: Record<string, number> = { ALL: items.length, TODO: 0, IN_PROGRESS: 0, COMPLETED: 0, BLOCKED: 0 };
     for (const x of items) c[x.status] = (c[x.status] || 0) + 1;
@@ -345,13 +314,7 @@ export default function MyWorkPage() {
 
   return (
     <div className="w-full bg-black text-white">
-      <UiPopup
-        open={popup.open}
-        title={popup.title}
-        message={popup.message}
-        tone={popup.tone}
-        onClose={() => setPopup((p) => ({ ...p, open: false }))}
-      />
+      <Toast open={toastOpen} message={toastMsg} onClose={() => setToastOpen(false)} />
 
       <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
         {/* Header */}
@@ -377,7 +340,6 @@ export default function MyWorkPage() {
             {FILTERS.map((s) => {
               const active = statusFilter === s;
               const label = s === "ALL" ? `ALL (${counts.ALL || 0})` : `${s} (${counts[s] || 0})`;
-
               return (
                 <button
                   key={s}
@@ -401,7 +363,6 @@ export default function MyWorkPage() {
         ) : err ? (
           <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">{err}</div>
         ) : (
-          // ✅ ไม่ให้ dropdown จม: outer = overflow-visible
           <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 overflow-visible">
             <div className="w-full overflow-x-auto overflow-y-visible">
               <table className="min-w-[980px] w-full">
@@ -425,9 +386,7 @@ export default function MyWorkPage() {
                         key={w.id}
                         className={cn(
                           "hover:bg-white/[0.03]",
-                          rowGlow
-                            ? "bg-[#e5ff78]/[0.03] shadow-[inset_0_0_0_1px_rgba(229,255,120,0.12)]"
-                            : ""
+                          rowGlow ? "bg-[#e5ff78]/[0.03] shadow-[inset_0_0_0_1px_rgba(229,255,120,0.12)]" : ""
                         )}
                       >
                         <td className="px-6 py-5">
@@ -437,18 +396,12 @@ export default function MyWorkPage() {
                             </span>
 
                             <div className="min-w-0">
-                              <Link
-                                href={`/projects/${w.id}`}
-                                className="block truncate text-base font-extrabold text-white hover:underline"
-                              >
+                              <Link href={`/projects/${w.id}`} className="block truncate text-base font-extrabold text-white hover:underline">
                                 {w.title || "-"}
                               </Link>
 
-                              {secondLine(w) ? (
-                                <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div>
-                              ) : null}
+                              {secondLine(w) ? <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div> : null}
 
-                              {/* ✅ แสดง “รออนุมัติจากไหน->ไปไหน” + aura */}
                               {pending ? <PendingBadge from={pending.from} to={pending.to} /> : null}
                             </div>
                           </div>
@@ -462,9 +415,7 @@ export default function MyWorkPage() {
                           <StatusPill s={w.status} />
                         </td>
 
-                        <td className="px-6 py-5 text-center text-sm text-white/80">
-                          {fmtDeadline(w.due_date)}
-                        </td>
+                        <td className="px-6 py-5 text-center text-sm text-white/80">{fmtDeadline(w.due_date)}</td>
 
                         <td className="px-6 py-5 text-right">
                           <StatusDropdown

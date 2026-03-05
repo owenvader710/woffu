@@ -91,7 +91,7 @@ function RolePill({ role }: { role: Role }) {
 function Avatar({
   url,
   name,
-  size =100,
+  size =150,
 }: {
   url?: string | null;
   name?: string | null;

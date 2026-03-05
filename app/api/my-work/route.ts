@@ -10,8 +10,8 @@ export async function GET(req: NextRequest) {
     const user = authData?.user;
     if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
-    // ✅ งานที่ assign ให้ตัวเอง
-    const { data: projects, error: pErr } = await supabase
+    // ✅ เห็นเฉพาะงานที่ assign ให้ตัวเอง
+    const { data: projects, error } = await supabase
       .from("projects")
       .select(
         `
@@ -23,38 +23,42 @@ export async function GET(req: NextRequest) {
       .eq("assignee_id", user.id)
       .order("created_at", { ascending: false });
 
-    if (pErr) {
-      const res = NextResponse.json({ error: pErr.message }, { status: 400 });
+    if (error) {
+      const res = NextResponse.json({ error: error.message }, { status: 400 });
       return applyCookies(res);
     }
 
-    const ids = (projects || []).map((x: any) => x.id).filter(Boolean);
+    const rows = Array.isArray(projects) ? projects : [];
 
-    // ✅ ดึง “คำขอรออนุมัติ” ของ user สำหรับโปรเจกต์ชุดนี้
-    let pendingByProject: Record<string, any> = {};
-    if (ids.length > 0) {
-      const { data: pendings, error: rErr } = await supabase
+    // ✅ แนบ pending request (ถ้ามี) ให้แต่ละโปรเจกต์ เพื่อให้ F5 แล้วยังโชว์ “รออนุมัติ”
+    if (rows.length > 0) {
+      const ids = rows.map((x: any) => x.id);
+
+      const { data: pendingReqs, error: reqErr } = await supabase
         .from("status_change_requests")
-        .select("id, project_id, from_status, to_status, request_status, created_at")
-        .eq("requested_by", user.id)
-        .eq("request_status", "PENDING")
+        .select("id, project_id, from_status, to_status, status, created_at")
         .in("project_id", ids)
+        .eq("status", "PENDING")
         .order("created_at", { ascending: false });
 
-      if (!rErr && Array.isArray(pendings)) {
-        // เลือก “ล่าสุด” ต่อโปรเจกต์
-        for (const r of pendings) {
-          if (!pendingByProject[r.project_id]) pendingByProject[r.project_id] = r;
+      if (!reqErr && Array.isArray(pendingReqs)) {
+        const map = new Map<string, any>();
+        for (const r of pendingReqs) {
+          // เอาอันล่าสุดของแต่ละโปรเจกต์
+          if (!map.has(r.project_id)) map.set(r.project_id, r);
         }
+
+        const merged = rows.map((p: any) => ({
+          ...p,
+          pending_request: map.get(p.id) ?? null,
+        }));
+
+        const res = NextResponse.json({ data: merged }, { status: 200 });
+        return applyCookies(res);
       }
     }
 
-    const merged = (projects || []).map((p: any) => ({
-      ...p,
-      pending_request: pendingByProject[p.id] ?? null,
-    }));
-
-    const res = NextResponse.json({ data: merged }, { status: 200 });
+    const res = NextResponse.json({ data: rows }, { status: 200 });
     return applyCookies(res);
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? "Internal error" }, { status: 500 });

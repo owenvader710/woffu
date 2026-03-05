@@ -3,255 +3,243 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-type MeProfile = {
-  id: string;
-  role: "LEADER" | "MEMBER";
-  is_active: boolean;
-  display_name?: string | null;
-};
+type Dept = "VIDEO" | "GRAPHIC" | "ALL";
 
-type ProfileMini = {
-  id: string;
-  display_name: string | null;
-  department?: "VIDEO" | "GRAPHIC" | "ALL" | null;
-  role?: "LEADER" | "MEMBER" | null;
-  avatar_url?: string | null;
-};
-
-type StatusRequest = {
+type ApprovalItem = {
   id: string;
   project_id: string;
+  requested_by: string;
   from_status: string;
   to_status: string;
-  request_status: "PENDING" | "APPROVED" | "REJECTED";
+  request_status: "PENDING" | "APPROVED" | "REJECTED" | string;
   created_at: string;
-  requested_by: string;
-  approved_by: string | null;
-  approved_at: string | null;
-
+  resolved_at?: string | null;
+  resolved_by?: string | null;
+  reason?: string | null;
   project?: {
     id: string;
-    title: string;
-    type: "VIDEO" | "GRAPHIC";
-    status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
-    brand: string | null;
-  } | null;
-
-  requester?: ProfileMini | null;
-  approver?: ProfileMini | null;
+    code?: string | null;
+    title?: string | null;
+    department?: Dept;
+    status?: string;
+    due_date?: string | null;
+  };
 };
 
 async function safeJson(res: Response) {
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
+  const t = await res.text();
+  return t ? JSON.parse(t) : null;
 }
 
-function formatDateTimeTH(iso?: string | null) {
+function cn(...xs: Array<string | false | null | undefined>) {
+  return xs.filter(Boolean).join(" ");
+}
+
+function fmtDateTime(iso?: string | null) {
   if (!iso) return "-";
   const d = new Date(iso);
-  return d.toLocaleString("th-TH", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function badgeClass(status: StatusRequest["request_status"]) {
-  if (status === "APPROVED") return "border-green-200 bg-green-50 text-green-700";
-  if (status === "REJECTED") return "border-red-200 bg-red-50 text-red-700";
-  return "border-amber-200 bg-amber-50 text-amber-800";
+  if (Number.isNaN(d.getTime())) return iso;
+  const date = d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
+  const time = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${date} ${time}`;
 }
 
 export default function ApprovalsPage() {
-  const [me, setMe] = useState<MeProfile | null>(null);
-  const isLeader = useMemo(() => me?.role === "LEADER" && me?.is_active === true, [me]);
-
-  const [items, setItems] = useState<StatusRequest[]>([]);
+  const [pending, setPending] = useState<ApprovalItem[]>([]);
+  const [history, setHistory] = useState<ApprovalItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  async function loadAll() {
+  const TABS = ["ALL", "VIDEO", "GRAPHIC", "HISTORY"] as const;
+  const [tab, setTab] = useState<(typeof TABS)[number]>("ALL");
+
+  async function load() {
     setLoading(true);
     setErr("");
-
     try {
-      const rMe = await fetch("/api/me-profile", { cache: "no-store" });
-      const jMe = await safeJson(rMe);
-      const m = (jMe?.data ?? jMe) as MeProfile | null;
-      const meObj = rMe.ok && m?.id ? m : null;
-      setMe(meObj);
-
-      const leaderNow = meObj?.role === "LEADER" && meObj?.is_active === true;
-      if (!leaderNow) {
-        setItems([]);
-        setErr("หน้านี้สำหรับหัวหน้าเท่านั้น");
-        return;
-      }
-
       const res = await fetch("/api/approvals", { cache: "no-store" });
-      const json = await safeJson(res);
-
+      const j = await safeJson(res);
       if (!res.ok) {
-        setItems([]);
-        setErr((json && (json.error || json.message)) || `Load approvals failed (${res.status})`);
+        setPending([]);
+        setHistory([]);
+        setErr((j && (j.error || j.message)) || `Load failed (${res.status})`);
         return;
       }
 
-      const data = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-      setItems(data);
+      setPending(Array.isArray(j?.pending) ? j.pending : []);
+      setHistory(Array.isArray(j?.history) ? j.history : []);
     } catch (e: any) {
-      setItems([]);
-      setErr(e?.message || "Load approvals failed");
+      setPending([]);
+      setHistory([]);
+      setErr(e?.message || "Load failed");
     } finally {
       setLoading(false);
     }
   }
 
+  async function approve(id: string) {
+    const res = await fetch(`/api/approvals/${encodeURIComponent(id)}/approve`, { method: "POST" });
+    const j = await safeJson(res);
+    if (!res.ok) throw new Error((j && (j.error || j.message)) || "Approve failed");
+  }
+
+  async function reject(id: string) {
+    const res = await fetch(`/api/approvals/${encodeURIComponent(id)}/reject`, { method: "POST" });
+    const j = await safeJson(res);
+    if (!res.ok) throw new Error((j && (j.error || j.message)) || "Reject failed");
+  }
+
   useEffect(() => {
-    loadAll();
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const pending = useMemo(() => items.filter((x) => x.request_status === "PENDING"), [items]);
-  const history = useMemo(() => items.filter((x) => x.request_status !== "PENDING"), [items]);
+  const pendingFiltered = useMemo(() => {
+    const arr = pending.slice();
+    if (tab === "VIDEO") return arr.filter((x) => x?.project?.department === "VIDEO");
+    if (tab === "GRAPHIC") return arr.filter((x) => x?.project?.department === "GRAPHIC");
+    return arr;
+  }, [pending, tab]);
 
-  async function act(id: string, action: "approve" | "reject") {
-    setErr("");
-    try {
-      const res = await fetch(`/api/approvals/${id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      const json = await safeJson(res);
-      if (!res.ok) {
-        setErr((json && (json.error || json.message)) || `Action failed (${res.status})`);
-        return;
-      }
-      await loadAll();
-    } catch (e: any) {
-      setErr(e?.message || "Action failed");
+  const counts = useMemo(() => {
+    const c = { ALL: pending.length, VIDEO: 0, GRAPHIC: 0, HISTORY: history.length };
+    for (const x of pending) {
+      if (x?.project?.department === "VIDEO") c.VIDEO++;
+      if (x?.project?.department === "GRAPHIC") c.GRAPHIC++;
     }
-  }
+    return c;
+  }, [pending, history.length]);
 
   return (
-    <div>
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
-          <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
-          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-white">Approvals</h1>
-          <div className="mt-2 text-sm text-white/60">Pending: {pending.length}</div>
-        </div>
+    <div className="w-full bg-black text-white">
+      <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
+            <h1 className="mt-2 text-4xl font-extrabold tracking-tight">Approvals</h1>
+            <div className="mt-2 text-sm text-white/50">Pending: {pending.length}</div>
+          </div>
 
-        <div className="flex gap-2">
           <button
-            onClick={loadAll}
-            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
+            onClick={load}
+            disabled={loading}
+            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50"
           >
             รีเฟรช
           </button>
         </div>
-      </div>
 
-      {loading && (
-        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">กำลังโหลด...</div>
-      )}
-
-      {!loading && err && (
-        <div className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{err}</div>
-      )}
-
-      {!loading && !err && (
-        <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="text-sm font-semibold text-white">Pending</div>
-              <div className="text-xs text-white/50">ทั้งหมด: {pending.length}</div>
-            </div>
-
-            {pending.length === 0 ? (
-              <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/50">ไม่มีคำขอรออนุมัติ</div>
-            ) : (
-              <div className="space-y-3">
-                {pending.map((r) => (
-                  <div key={r.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold text-white">
-                          <Link className="underline underline-offset-4" href={`/projects/${r.project_id}`}>
-                            {r.project?.title || "Project"}
-                          </Link>
-                        </div>
-                        <div className="mt-1 text-xs text-white/60">
-                          {r.from_status} → {r.to_status} · โดย {r.requester?.display_name || "-"} · {formatDateTimeTH(r.created_at)}
-                        </div>
-                      </div>
-
-                      <span className={`shrink-0 rounded-lg border px-2 py-0.5 text-xs ${badgeClass(r.request_status)}`}>
-                        {r.request_status}
-                      </span>
-                    </div>
-
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        onClick={() => act(r.id, "approve")}
-                        className="rounded-xl bg-[#e5ff78] px-4 py-2 text-sm font-semibold text-black hover:opacity-90"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => act(r.id, "reject")}
-                        className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-200 hover:bg-red-500/15"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="text-sm font-semibold text-white">History</div>
-              <div className="text-xs text-white/50">ทั้งหมด: {history.length}</div>
-            </div>
-
-            {history.length === 0 ? (
-              <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/50">ยังไม่มีประวัติ</div>
-            ) : (
-              <div className="space-y-3">
-                {history.slice(0, 20).map((r) => (
-                  <div key={r.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold text-white">
-                          <Link className="underline underline-offset-4" href={`/projects/${r.project_id}`}>
-                            {r.project?.title || "Project"}
-                          </Link>
-                        </div>
-                        <div className="mt-1 text-xs text-white/60">
-                          {r.from_status} → {r.to_status} · โดย {r.requester?.display_name || "-"} · {formatDateTimeTH(r.created_at)}
-                        </div>
-                        <div className="mt-1 text-xs text-white/50">
-                          อนุมัติโดย {r.approver?.display_name || "-"} · {formatDateTimeTH(r.approved_at)}
-                        </div>
-                      </div>
-
-                      <span className={`shrink-0 rounded-lg border px-2 py-0.5 text-xs ${badgeClass(r.request_status)}`}>
-                        {r.request_status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* Tabs */}
+        <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {TABS.map((t) => {
+              const active = tab === t;
+              const label = t === "HISTORY" ? `HISTORY (${counts.HISTORY})` : `${t} (${(counts as any)[t] ?? 0})`;
+              return (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={cn(
+                    "rounded-2xl border px-3 py-2 text-xs font-extrabold transition",
+                    active
+                      ? "border-white/10 bg-white text-black"
+                      : "border-white/10 bg-transparent text-white/70 hover:bg-white/10 hover:text-white"
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </div>
-      )}
+
+        {loading ? (
+          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">กำลังโหลด...</div>
+        ) : err ? (
+          <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">{err}</div>
+        ) : tab === "HISTORY" ? (
+          <div className="mt-6 space-y-3">
+            {history.length === 0 ? (
+              <div className="rounded-[30px] border border-white/10 bg-white/5 p-6 text-sm text-white/55">ยังไม่มีประวัติ</div>
+            ) : (
+              history.map((x) => (
+                <div key={x.id} className="rounded-[30px] border border-white/10 bg-white/5 p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-base font-extrabold">
+                        <Link href={`/projects/${x.project_id}`} className="hover:underline">
+                          {(x?.project?.code ? `${x.project.code} ` : "") + (x?.project?.title || "-")}
+                        </Link>
+                      </div>
+                      <div className="mt-1 text-xs text-white/55">
+                        {x.from_status} → {x.to_status} · {String(x.request_status)} · {fmtDateTime(x.resolved_at || x.created_at)}
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 text-xs font-extrabold text-white/70">{String(x.request_status)}</div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="mt-6 space-y-3">
+            {pendingFiltered.length === 0 ? (
+              <div className="rounded-[30px] border border-white/10 bg-white/5 p-6 text-sm text-white/55">ไม่มีคำขอรออนุมัติ</div>
+            ) : (
+              pendingFiltered.map((x) => (
+                <div key={x.id} className="rounded-[30px] border border-white/10 bg-white/5 p-5">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="min-w-0">
+                      <div className="truncate text-base font-extrabold">
+                        <Link href={`/projects/${x.project_id}`} className="hover:underline">
+                          {(x?.project?.code ? `${x.project.code} ` : "") + (x?.project?.title || "-")}
+                        </Link>
+                      </div>
+                      <div className="mt-1 text-xs text-white/55">
+                        ขอเปลี่ยนสถานะ: <span className="font-bold text-white/80">{x.from_status}</span> →{" "}
+                        <span className="font-bold text-white/80">{x.to_status}</span>
+                        {x?.project?.department ? ` · ${x.project.department}` : ""}
+                        {x?.project?.due_date ? ` · Deadline: ${fmtDateTime(x.project.due_date)}` : ""}
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        onClick={async () => {
+                          try {
+                            await approve(x.id);
+                            await load();
+                          } catch (e: any) {
+                            alert(e?.message || "Approve failed");
+                          }
+                        }}
+                        className="rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-xs font-extrabold text-white hover:bg-white/15"
+                      >
+                        อนุมัติ
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await reject(x.id);
+                            await load();
+                          } catch (e: any) {
+                            alert(e?.message || "Reject failed");
+                          }
+                        }}
+                        className="rounded-2xl border border-white/10 bg-transparent px-4 py-2 text-xs font-extrabold text-white/80 hover:bg-white/10 hover:text-white"
+                      >
+                        ปฏิเสธ
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

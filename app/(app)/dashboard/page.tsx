@@ -1,340 +1,278 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-
-type Status = "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
-
-type DashboardData = {
-  me: {
-    id: string;
-    display_name: string | null;
-    role: "LEADER" | "MEMBER";
-    department: "VIDEO" | "GRAPHIC" | "ALL";
-    email: string | null;
-  };
-  totalProjects: number;
-  byStatus: Record<Status, number>;
-  pendingApprovals: number;
-  myWorkDueSoonCount: number;
-  dueSoonWindowDays: number;
-};
+import React, { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 async function safeJson(res: Response) {
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
+  const t = await res.text();
+  return t ? JSON.parse(t) : null;
 }
 
-function StatCard({
-  title,
-  value,
-  icon,
-  onClick,
-  highlight,
-}: {
-  title: string;
-  value: React.ReactNode;
-  icon?: React.ReactNode;
-  onClick?: () => void;
-  highlight?: boolean;
-}) {
-  const clickable = typeof onClick === "function";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={[
-        "w-full rounded-[26px] border p-5 text-left transition",
-        "border-white/10 bg-white/5 shadow-[0_20px_60px_rgba(0,0,0,0.35)]",
-        clickable ? "hover:bg-white/10" : "",
-        highlight ? "bg-gradient-to-b from-white/10 to-white/[0.03]" : "",
-      ].join(" ")}
-      disabled={!clickable}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/30">
-            <span className="text-[#e5ff78]">{icon ?? "•"}</span>
-          </div>
-          <div className="text-xs font-semibold tracking-widest text-white/50">{title}</div>
-        </div>
-
-        <div className="text-3xl font-extrabold tracking-tight text-white">{value}</div>
-      </div>
-    </button>
-  );
-}
-
-function ActionBtn({
-  label,
-  sub,
-  badge,
-  onClick,
-  primary,
-}: {
-  label: string;
-  sub?: string;
-  badge?: number;
-  onClick: () => void;
-  primary?: boolean;
-}) {
-  const base =
-    "w-full rounded-2xl border px-4 py-3 text-left transition flex items-center justify-between gap-3";
-  const normal = "border-white/10 bg-black/20 hover:bg-white/5";
-  const pri = "border-[#e5ff78]/25 bg-[#e5ff78] text-black hover:opacity-90";
-
-  return (
-    <button type="button" onClick={onClick} className={`${base} ${primary ? pri : normal}`}>
-      <div className="min-w-0">
-        <div className={`flex items-center gap-2 ${primary ? "text-black" : "text-white"}`}>
-          <div className="text-sm font-semibold truncate">{label}</div>
-
-          {typeof badge === "number" && badge > 0 ? (
-            <span
-              className={
-                primary
-                  ? "inline-flex items-center rounded-full border border-black/20 bg-black/10 px-2 py-0.5 text-[11px] font-extrabold text-black"
-                  : "inline-flex items-center rounded-full border border-[#e5ff78]/25 bg-[#e5ff78]/10 px-2 py-0.5 text-[11px] font-semibold text-[#e5ff78]"
-              }
-            >
-              {badge}
-            </span>
-          ) : null}
-        </div>
-
-        {sub ? (
-          <div className={`mt-0.5 text-xs ${primary ? "text-black/70" : "text-white/50"}`}>{sub}</div>
-        ) : null}
-      </div>
-
-      <div className={`text-xs ${primary ? "text-black/80" : "text-white/50"}`}>›</div>
-    </button>
-  );
+function cn(...xs: Array<string | false | null | undefined>) {
+  return xs.filter(Boolean).join(" ");
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
-
-  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
+  const [err, setErr] = useState("");
 
+  const [me, setMe] = useState<any>(null);
+  const [stats, setStats] = useState<any>({
+    myWorkCount: 0,
+    myProjectCount: 0,
+    approvalsCount: 0,
+  });
+
+  // ✅ badge บน Quick Actions
   const approvalsRef = useRef<number>(0);
   const [pendingNow, setPendingNow] = useState<number>(0);
 
-  const isLeader = data?.me?.role === "LEADER";
+  // ✅ รายการ pending ไว้โชว์ทางลัดอนุมัติ/ปฏิเสธ
+  const [pendingItems, setPendingItems] = useState<any[]>([]);
 
-  const statusList = useMemo(
-    () =>
-      ([
-        ["TODO", "งานใหม่ (TODO)"],
-        ["IN_PROGRESS", "กำลังทำ (IN_PROGRESS)"],
-        ["BLOCKED", "ติดปัญหา (BLOCKED)"],
-        ["COMPLETED", "เสร็จแล้ว (COMPLETED)"],
-      ] as const),
-    []
-  );
+  const isLeader = String(me?.role || "").toUpperCase() === "LEADER";
 
-  async function loadDashboard() {
+  async function load() {
     setLoading(true);
-    setError("");
+    setErr("");
     try {
-      const res = await fetch("/api/dashboard", { cache: "no-store" });
-      const json = await safeJson(res);
-
-      if (!res.ok) {
-        setData(null);
-        setError((json && (json.error || json.message)) || `Load dashboard failed (${res.status})`);
+      const r = await fetch("/api/dashboard", { cache: "no-store" });
+      const j = await safeJson(r);
+      if (!r.ok) {
+        setErr((j && (j.error || j.message)) || `Load failed (${r.status})`);
         return;
       }
+      setMe(j?.me || null);
+      setStats(j?.stats || stats);
 
-      setData(json);
-
-      const initialPending = Number(json?.pendingApprovals || 0);
-      approvalsRef.current = initialPending;
-      setPendingNow(initialPending);
+      // ให้ badge เริ่มต้นตรงกับ server (กันกะพริบ)
+      const initial = Number(j?.stats?.approvalsCount || 0);
+      approvalsRef.current = initial;
+      setPendingNow(initial);
     } catch (e: any) {
-      setData(null);
-      setError(e?.message || "Load dashboard failed");
+      setErr(e?.message || "Load failed");
     } finally {
       setLoading(false);
     }
   }
 
-  // ✅ poll “pending approvals” ให้หัวหน้า (นับเฉพาะ PENDING)
+  // ✅ poll “pending approvals” ให้หัวหน้า (อ่านให้ถูก: { pending, history })
   async function pollApprovals() {
     try {
       const res = await fetch("/api/approvals", { cache: "no-store" });
       const json = await safeJson(res);
       if (!res.ok) return;
 
-      const arr = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [];
-      const pendingOnly = Array.isArray(arr) ? arr.filter((x: any) => x?.request_status === "PENDING") : [];
+      const pendingOnly = Array.isArray(json?.pending) ? json.pending : [];
+      setPendingItems(pendingOnly);
+
       const nextCount = pendingOnly.length;
 
-      approvalsRef.current = nextCount;
-      setPendingNow(nextCount);
+      if (approvalsRef.current !== nextCount) {
+        approvalsRef.current = nextCount;
+        setPendingNow(nextCount);
+      }
     } catch {}
   }
 
+  async function approveReq(id: string) {
+    const res = await fetch(`/api/approvals/${encodeURIComponent(id)}/approve`, { method: "POST" });
+    const j = await safeJson(res);
+    if (!res.ok) throw new Error((j && (j.error || j.message)) || "Approve failed");
+  }
+
+  async function rejectReq(id: string) {
+    const res = await fetch(`/api/approvals/${encodeURIComponent(id)}/reject`, { method: "POST" });
+    const j = await safeJson(res);
+    if (!res.ok) throw new Error((j && (j.error || j.message)) || "Reject failed");
+  }
+
   useEffect(() => {
-    loadDashboard();
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!isLeader) return;
+
     pollApprovals();
-    const t = window.setInterval(pollApprovals, 15000);
-    return () => window.clearInterval(t);
+    const t = setInterval(() => pollApprovals(), 8000);
+    return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLeader]);
 
   return (
-    <div className="min-h-screen w-full bg-black text-white">
+    <div className="w-full bg-black text-white">
       <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
         {/* Header */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
-            <h1 className="mt-2 text-4xl font-extrabold tracking-tight text-white">Dashboard</h1>
-
-            {data?.me ? (
-              <div className="mt-2 text-sm text-white/60">
-                <span className="font-semibold text-white">{data.me.display_name || data.me.email || "ผู้ใช้งาน"}</span>{" "}
-                <span className="text-white/30">·</span> <span>{data.me.role}</span>{" "}
-                <span className="text-white/30">·</span> <span>{data.me.department}</span>
-              </div>
-            ) : (
-              <div className="mt-2 text-sm text-white/60">-</div>
-            )}
+            <h1 className="mt-2 text-4xl font-extrabold tracking-tight">Dashboard</h1>
+            <div className="mt-2 text-sm text-white/50">
+              {me?.name ? `สวัสดี, ${me.name}` : "สวัสดี"}
+            </div>
           </div>
 
-          <div className="flex gap-2">
-            <button
-              onClick={loadDashboard}
-              disabled={loading}
-              className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50"
-            >
-              รีเฟรช
-            </button>
-          </div>
+          <button
+            onClick={load}
+            disabled={loading}
+            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50"
+          >
+            รีเฟรช
+          </button>
         </div>
 
-        {loading && (
-          <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-5 text-sm text-white/60">
+        {loading ? (
+          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">
             กำลังโหลด...
           </div>
-        )}
-
-        {!loading && error && (
-          <div className="mt-6 rounded-3xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
-            {error}
+        ) : err ? (
+          <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
+            {err}
           </div>
-        )}
+        ) : (
+          <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {/* QUICK ACTIONS */}
+            <div className="rounded-[30px] border border-white/10 bg-white/5 p-6">
+              <div className="text-xs font-semibold tracking-widest text-white/50">QUICK ACTIONS</div>
 
-        {!loading && !error && data && (
-          <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-12">
-            {/* Left */}
-            <div className="xl:col-span-8">
-              {/* Top cards row */}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <StatCard
-                  title="โปรเจกต์ทั้งหมด"
-                  value={data.totalProjects}
-                  icon="▦"
-                  onClick={() => router.push("/projects")}
-                />
-                <StatCard
-                  title={`งานใกล้เดดไลน์ (${data.dueSoonWindowDays} วัน)`}
-                  value={data.myWorkDueSoonCount}
-                  icon="◷"
-                  onClick={() => router.push("/my-work")}
-                />
-                <StatCard title="ความคืบหน้าวันนี้" value="0%" icon="◎" highlight />
-              </div>
-
-              {/* Status cards */}
-              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
-                {statusList.map(([key, label]) => (
-                  <StatCard
-                    key={key}
-                    title={label}
-                    value={data.byStatus[key]}
-                    icon="●"
-                    onClick={() => {
-                      if (key === "COMPLETED") router.push("/completed");
-                      else if (key === "BLOCKED") router.push("/blocked");
-                      else router.push("/projects");
-                    }}
-                  />
-                ))}
-              </div>
-
-              {/* Big panel */}
-              <div className="mt-6 rounded-[36px] border border-white/10 bg-gradient-to-b from-white/5 to-white/[0.03] p-6">
-                <div className="flex items-center justify-between">
+              <div className="mt-4 space-y-3">
+                <Link
+                  href="/projects"
+                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-4 hover:bg-white/[0.04]"
+                >
                   <div>
-                    <div className="text-sm font-semibold tracking-widest text-white/50">PERFORMANCE</div>
-                    <div className="mt-1 text-xl font-extrabold text-white">Performance Analytics Chart</div>
+                    <div className="text-sm font-extrabold">อัปเดตงาน</div>
+                    <div className="text-xs text-white/50">ไปหน้า Projects</div>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/70">
-                    Coming soon
-                  </div>
-                </div>
+                  <div className="text-white/40">›</div>
+                </Link>
 
-                <div className="mt-6 h-[260px] rounded-3xl border border-white/10 bg-black/40" />
+                <Link
+                  href="/my-work"
+                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-4 hover:bg-white/[0.04]"
+                >
+                  <div>
+                    <div className="text-sm font-extrabold">ไปที่งานของฉัน</div>
+                    <div className="text-xs text-white/50">My Work</div>
+                  </div>
+                  <div className="text-white/40">›</div>
+                </Link>
+
+                {isLeader ? (
+                  <Link
+                    href="/approvals"
+                    className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-4 hover:bg-white/[0.04]"
+                  >
+                    <div>
+                      <div className="text-sm font-extrabold">ไปหน้า Approvals</div>
+                      <div className="text-xs text-white/50">รออนุมัติ</div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold",
+                          pendingNow > 0 ? "bg-[#D7FF2F]/90 text-black" : "bg-white/10 text-white/70"
+                        )}
+                      >
+                        {pendingNow}
+                      </span>
+                      <div className="text-white/40">›</div>
+                    </div>
+                  </Link>
+                ) : null}
+
+                <Link
+                  href="/create"
+                  className="flex items-center justify-between rounded-2xl bg-[#D7FF2F] p-4 text-black hover:opacity-95"
+                >
+                  <div>
+                    <div className="text-sm font-extrabold">สั่งงานใหม่</div>
+                    <div className="text-xs opacity-80">Create Project</div>
+                  </div>
+                  <div className="opacity-70">›</div>
+                </Link>
               </div>
             </div>
 
-            {/* Right */}
-            <div className="space-y-6 xl:col-span-4">
-              <div className="rounded-[36px] border border-white/10 bg-white/5 p-6">
-                <div className="text-sm font-semibold tracking-widest text-white/50">QUICK ACTIONS</div>
-                <div className="mt-4 space-y-3">
-                  <ActionBtn label="อัปเดตงาน" sub="ไปหน้า Projects" onClick={() => router.push("/projects")} />
-                  <ActionBtn label="ไปที่งานของฉัน" sub="My Work" onClick={() => router.push("/my-work")} />
+            {/* ACTIVITY LOGS (ใส่ทางลัดอนุมัติ/ปฏิเสธให้หัวหน้า) */}
+            <div className="rounded-[30px] border border-white/10 bg-white/5 p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="text-xs font-semibold tracking-widest text-white/50">ACTIVITY LOGS</div>
 
-                  {isLeader ? (
-                    <>
-                      <ActionBtn
-                        label="ไปหน้า Approvals"
-                        sub="รออนุมัติ"
-                        badge={pendingNow}
-                        onClick={() => router.push("/approvals")}
-                      />
-                      <ActionBtn
-                        label="สั่งงานใหม่"
-                        sub="Create Project"
-                        primary
-                        onClick={() => router.push("/projects")}
-                      />
-                    </>
-                  ) : null}
-                </div>
+                {isLeader ? (
+                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-1.5">
+                    <div className="text-xs font-semibold text-white/70">Approvals</div>
+                    <span
+                      className={cn(
+                        "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-2 text-xs font-extrabold",
+                        pendingNow > 0 ? "bg-[#D7FF2F]/90 text-black" : "bg-white/10 text-white/70"
+                      )}
+                    >
+                      {pendingNow}
+                    </span>
+                  </div>
+                ) : null}
               </div>
 
-              <div className="rounded-[36px] border border-white/10 bg-white/5 p-6">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-semibold tracking-widest text-white/50">ACTIVITY LOGS</div>
+              {isLeader && pendingItems.length > 0 ? (
+                <div className="space-y-3">
+                  {pendingItems.slice(0, 3).map((x: any) => (
+                    <div key={x.id} className="rounded-3xl border border-white/10 bg-black/30 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-extrabold text-white">
+                            {(x?.project?.code ? `${x.project.code} ` : "") + (x?.project?.title || "-")}
+                          </div>
+                          <div className="mt-1 text-xs text-white/55">
+                            ขอเปลี่ยนสถานะ: <span className="font-bold text-white/80">{x.from_status}</span> →{" "}
+                            <span className="font-bold text-white/80">{x.to_status}</span>
+                          </div>
+                        </div>
 
-                  {isLeader ? (
-                    <button
-                      onClick={() => router.push("/approvals")}
-                      className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
-                    >
-                      Approvals{" "}
-                      <span className="ml-1 inline-flex rounded-full bg-[#e5ff78] px-2 py-0.5 text-[10px] font-extrabold text-black">
-                        {pendingNow}
-                      </span>
-                    </button>
-                  ) : null}
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            onClick={async () => {
+                              try {
+                                await approveReq(x.id);
+                                await pollApprovals();
+                              } catch (e: any) {
+                                alert(e?.message || "Approve failed");
+                              }
+                            }}
+                            className="rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-xs font-extrabold text-white hover:bg-white/15"
+                          >
+                            อนุมัติ
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                await rejectReq(x.id);
+                                await pollApprovals();
+                              } catch (e: any) {
+                                alert(e?.message || "Reject failed");
+                              }
+                            }}
+                            className="rounded-2xl border border-white/10 bg-transparent px-3 py-2 text-xs font-extrabold text-white/80 hover:bg-white/10 hover:text-white"
+                          >
+                            ปฏิเสธ
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <Link href="/approvals" className="inline-flex text-xs font-semibold text-white/70 hover:text-white">
+                    ไปหน้า Approvals →
+                  </Link>
                 </div>
-
-                <div className="mt-6 rounded-3xl border border-white/10 bg-black/30 p-6 text-center text-sm text-white/45">
+              ) : (
+                <div className="rounded-3xl border border-white/10 bg-black/30 p-6 text-center text-sm text-white/45">
                   ยังไม่มีความเคลื่อนไหวล่าสุด
                 </div>
-              </div>
+              )}
             </div>
           </div>
         )}

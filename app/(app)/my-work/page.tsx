@@ -27,7 +27,11 @@ type WorkItem = {
   graphic_job_type?: string | null;
 };
 
-type DbStatus = "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED";
+type PendingInfo = {
+  from: Status;
+  to: Status;
+  at: number;
+};
 
 async function safeJson(res: Response) {
   const t = await res.text();
@@ -39,12 +43,14 @@ function cn(...xs: Array<string | false | null | undefined>) {
 }
 
 /** ✅ เฉพาะหน้า My Work: UI <-> DB mapping */
-function toDbStatus(s: Status): DbStatus {
+function toDbStatus(s: Status) {
+  // UI -> DB
   if (s === "COMPLETED") return "DONE";
   if (s === "BLOCKED") return "CANCELLED";
-  return s; // TODO | IN_PROGRESS
+  return s;
 }
 function toUiStatus(s: any): Status {
+  // DB -> UI
   if (s === "DONE") return "COMPLETED";
   if (s === "CANCELLED") return "BLOCKED";
   return s as Status;
@@ -102,10 +108,83 @@ function secondLine(w: WorkItem) {
   return parts.length ? parts.join(" · ") : "";
 }
 
+function UiPopup({
+  open,
+  title,
+  message,
+  tone = "success",
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  message: string;
+  tone?: "success" | "error" | "info";
+  onClose: () => void;
+}) {
+  if (!open) return null;
+
+  const toneCls =
+    tone === "success"
+      ? "border-[#e5ff78]/25 bg-[#e5ff78]/10"
+      : tone === "error"
+      ? "border-red-500/30 bg-red-500/10"
+      : "border-white/10 bg-white/5";
+
+  return (
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4">
+      <div className={cn("w-full max-w-lg rounded-[28px] border p-5 text-white shadow-[0_30px_120px_rgba(0,0,0,0.75)]", toneCls)}>
+        <div className="text-lg font-extrabold">{title}</div>
+        <div className="mt-2 text-sm text-white/80 whitespace-pre-wrap">{message}</div>
+
+        <div className="mt-5 flex justify-end">
+          <button
+            onClick={onClose}
+            className="rounded-2xl border border-white/10 bg-black/30 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PendingBadge({ from, to }: { from: Status; to: Status }) {
+  // ✅ ออร่า + กระพริบช้าๆ
+  return (
+    <div
+      className={cn(
+        "mt-2 inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-extrabold",
+        "border-[#e5ff78]/30 bg-[#e5ff78]/10 text-[#e5ff78]",
+        "shadow-[0_0_0_1px_rgba(229,255,120,0.15),0_0_30px_rgba(229,255,120,0.20)]",
+        "animate-[pulse_2.6s_ease-in-out_infinite]"
+      )}
+      title="กำลังรอหัวหน้าอนุมัติ"
+    >
+      <span className="inline-flex h-2 w-2 rounded-full bg-[#e5ff78] shadow-[0_0_18px_rgba(229,255,120,0.7)]" />
+      รออนุมัติ: {from} → {to}
+    </div>
+  );
+}
+
 export default function MyWorkPage() {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+
+  // ✅ pending ต่อโปรเจกต์ (แสดงรออนุมัติจาก->ไป)
+  const [pendingMap, setPendingMap] = useState<Record<string, PendingInfo>>({});
+
+  // ✅ disable dropdown ตอนกำลังส่งคำขอ
+  const [changingId, setChangingId] = useState<string | null>(null);
+
+  // ✅ popup UI
+  const [popup, setPopup] = useState<{ open: boolean; title: string; message: string; tone?: "success" | "error" | "info" }>({
+    open: false,
+    title: "",
+    message: "",
+    tone: "info",
+  });
 
   // ✅ เหลือแค่ 4 สถานะ + ALL
   const FILTERS = ["ALL", "TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"] as const;
@@ -117,7 +196,6 @@ export default function MyWorkPage() {
     try {
       const r = await fetch("/api/my-work", { cache: "no-store" });
       const j = await safeJson(r);
-
       if (!r.ok) {
         setItems([]);
         setErr((j && (j.error || j.message)) || `Load failed (${r.status})`);
@@ -125,7 +203,13 @@ export default function MyWorkPage() {
       }
 
       const arr = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
-      const normalized = (arr as any[]).map((x) => ({ ...x, status: toUiStatus(x.status) })) as WorkItem[];
+
+      // ✅ map DB -> UI (DONE/CANCELLED -> COMPLETED/BLOCKED)
+      const normalized = (arr as WorkItem[]).map((x: any) => ({
+        ...x,
+        status: toUiStatus(x.status),
+      }));
+
       setItems(normalized);
     } catch (e: any) {
       setItems([]);
@@ -135,11 +219,32 @@ export default function MyWorkPage() {
     }
   }
 
-  async function changeStatus(id: string, nextUi: Status) {
-    const prev = items;
+  function looksLikeApprovalMessage(msg?: string) {
+    if (!msg) return false;
+    // ✅ เผื่อ backend ส่ง message แนวนี้
+    return /รอ|อนุมัติ|หัวหน้า|approval|approve/i.test(msg);
+  }
 
-    // optimistic (ให้ UI เปลี่ยนทันที)
-    setItems((xs) => xs.map((x) => (x.id === id ? { ...x, status: nextUi } : x)));
+  async function changeStatus(id: string, nextUi: Status) {
+    // ป้องกันยิงซ้อน
+    if (changingId) return;
+
+    const current = items.find((x) => x.id === id);
+    const fromUi = current?.status;
+    if (!current || !fromUi) return;
+
+    // ✅ ถ้ามี pending อยู่แล้ว อาจไม่ให้กดซ้ำ (กันสับสน)
+    if (pendingMap[id]) {
+      setPopup({
+        open: true,
+        tone: "info",
+        title: "มีคำขอค้างอยู่",
+        message: `โปรเจกต์นี้กำลังรออนุมัติอยู่แล้ว (${pendingMap[id].from} → ${pendingMap[id].to})`,
+      });
+      return;
+    }
+
+    setChangingId(id);
 
     try {
       const nextDb = toDbStatus(nextUi);
@@ -153,28 +258,71 @@ export default function MyWorkPage() {
       const j = await safeJson(res);
 
       if (!res.ok) {
-        // ❌ fail → rollback + แจ้ง error
-        setItems(prev);
-        alert((j && (j.error || j.message)) || "Update failed");
-        return;
+        throw new Error((j && (j.error || j.message)) || "Update failed");
       }
 
-      // ✅ ถ้าไม่ใช่หัวหน้า ระบบจะตอบกลับว่า REQUESTED
-      if (j?.mode === "REQUESTED") {
-        setItems(prev); // rollback เพราะยังไม่เปลี่ยนจริง
-        alert("ส่งคำขอเปลี่ยนสถานะแล้ว รอหัวหน้าอนุมัติ");
-        return;
-      }
+      // ✅ ถ้า backend ส่ง status กลับมา = เปลี่ยนสำเร็จจริง
+      const returnedStatus =
+        j?.data?.status ?? j?.status ?? j?.project?.status ?? null;
 
-      // ✅ ถ้า UPDATED (หัวหน้า) แล้ว API ส่ง status ใหม่กลับมา
-      const newDbStatus = j?.data?.status;
-      if (newDbStatus) {
-        const ui = toUiStatus(newDbStatus);
-        setItems((xs) => xs.map((x) => (x.id === id ? { ...x, status: ui } : x)));
+      const msg: string =
+        (j && (j.message || j.note || j.info)) ||
+        "ส่งคำขอเปลี่ยนสถานะสำเร็จ";
+
+      const needsApproval =
+        j?.pending === true ||
+        j?.requires_approval === true ||
+        looksLikeApprovalMessage(msg);
+
+      if (returnedStatus) {
+        // ✅ Applied จริง
+        const appliedUi = toUiStatus(returnedStatus);
+        setItems((xs) => xs.map((x) => (x.id === id ? { ...x, status: appliedUi } : x)));
+        setPendingMap((m) => {
+          const mm = { ...m };
+          delete mm[id];
+          return mm;
+        });
+
+        setPopup({
+          open: true,
+          tone: "success",
+          title: "เปลี่ยนสถานะสำเร็จ",
+          message: `อัปเดตสถานะเป็น ${appliedUi} แล้ว`,
+        });
+      } else if (needsApproval) {
+        // ✅ เข้ากรณี: ส่งคำขอแล้ว รอหัวหน้าอนุมัติ
+        setPendingMap((m) => ({
+          ...m,
+          [id]: { from: fromUi, to: nextUi, at: Date.now() },
+        }));
+
+        // ✅ ไม่เปลี่ยน status pill ทันที เพราะยังไม่อนุมัติ
+        setPopup({
+          open: true,
+          tone: "success",
+          title: "ส่งคำขอสำเร็จ",
+          message: msg || `ส่งคำขอเปลี่ยนสถานะแล้ว รอหัวหน้าอนุมัติ`,
+        });
+      } else {
+        // ✅ เผื่อ backend ไม่มี status กลับมา แต่จริงๆ applied
+        setItems((xs) => xs.map((x) => (x.id === id ? { ...x, status: nextUi } : x)));
+        setPopup({
+          open: true,
+          tone: "success",
+          title: "เปลี่ยนสถานะสำเร็จ",
+          message: msg,
+        });
       }
     } catch (e: any) {
-      setItems(prev);
-      alert(e?.message || "Update failed");
+      setPopup({
+        open: true,
+        tone: "error",
+        title: "อัปเดตไม่สำเร็จ",
+        message: e?.message || "Update failed",
+      });
+    } finally {
+      setChangingId(null);
     }
   }
 
@@ -183,6 +331,7 @@ export default function MyWorkPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ✅ count ต่อสถานะ (UI)
   const counts = useMemo(() => {
     const c: Record<string, number> = { ALL: items.length, TODO: 0, IN_PROGRESS: 0, COMPLETED: 0, BLOCKED: 0 };
     for (const x of items) c[x.status] = (c[x.status] || 0) + 1;
@@ -196,7 +345,16 @@ export default function MyWorkPage() {
 
   return (
     <div className="w-full bg-black text-white">
+      <UiPopup
+        open={popup.open}
+        title={popup.title}
+        message={popup.message}
+        tone={popup.tone}
+        onClose={() => setPopup((p) => ({ ...p, open: false }))}
+      />
+
       <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
+        {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
@@ -243,9 +401,8 @@ export default function MyWorkPage() {
         ) : err ? (
           <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">{err}</div>
         ) : (
-          // ✅ กัน dropdown จม: outer ไม่ใช้ overflow-hidden
+          // ✅ ไม่ให้ dropdown จม: outer = overflow-visible
           <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 overflow-visible">
-            {/* ✅ overflow-x-auto จะชอบทำ overflow-y hidden → override เป็น visible */}
             <div className="w-full overflow-x-auto overflow-y-visible">
               <table className="min-w-[980px] w-full">
                 <thead>
@@ -259,38 +416,66 @@ export default function MyWorkPage() {
                 </thead>
 
                 <tbody className="divide-y divide-white/10">
-                  {filtered.map((w) => (
-                    <tr key={w.id} className="hover:bg-white/[0.03]">
-                      <td className="px-6 py-5">
-                        <div className="flex items-start gap-3">
-                          <span className="mt-[2px] inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
-                            {makeCode(w)}
-                          </span>
+                  {filtered.map((w) => {
+                    const pending = pendingMap[w.id];
+                    const rowGlow = !!pending;
 
-                          <div className="min-w-0">
-                            <Link href={`/projects/${w.id}`} className="block truncate text-base font-extrabold text-white hover:underline">
-                              {w.title || "-"}
-                            </Link>
-                            {secondLine(w) ? <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div> : null}
+                    return (
+                      <tr
+                        key={w.id}
+                        className={cn(
+                          "hover:bg-white/[0.03]",
+                          rowGlow
+                            ? "bg-[#e5ff78]/[0.03] shadow-[inset_0_0_0_1px_rgba(229,255,120,0.12)]"
+                            : ""
+                        )}
+                      >
+                        <td className="px-6 py-5">
+                          <div className="flex items-start gap-3">
+                            <span className="mt-[2px] inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
+                              {makeCode(w)}
+                            </span>
+
+                            <div className="min-w-0">
+                              <Link
+                                href={`/projects/${w.id}`}
+                                className="block truncate text-base font-extrabold text-white hover:underline"
+                              >
+                                {w.title || "-"}
+                              </Link>
+
+                              {secondLine(w) ? (
+                                <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div>
+                              ) : null}
+
+                              {/* ✅ แสดง “รออนุมัติจากไหน->ไปไหน” + aura */}
+                              {pending ? <PendingBadge from={pending.from} to={pending.to} /> : null}
+                            </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      <td className="px-6 py-5 text-center">
-                        <DeptPill dept={w.department} />
-                      </td>
+                        <td className="px-6 py-5 text-center">
+                          <DeptPill dept={w.department} />
+                        </td>
 
-                      <td className="px-6 py-5 text-center">
-                        <StatusPill s={w.status} />
-                      </td>
+                        <td className="px-6 py-5 text-center">
+                          <StatusPill s={w.status} />
+                        </td>
 
-                      <td className="px-6 py-5 text-center text-sm text-white/80">{fmtDeadline(w.due_date)}</td>
+                        <td className="px-6 py-5 text-center text-sm text-white/80">
+                          {fmtDeadline(w.due_date)}
+                        </td>
 
-                      <td className="px-6 py-5 text-right">
-                        <StatusDropdown value={w.status} onChange={(s) => changeStatus(w.id, s)} />
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="px-6 py-5 text-right">
+                          <StatusDropdown
+                            value={w.status}
+                            onChange={(s) => changeStatus(w.id, s)}
+                            disabled={changingId === w.id || !!pending}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
 
                   {filtered.length === 0 ? (
                     <tr>

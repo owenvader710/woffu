@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     const user = authData?.user;
     if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
-    // ✅ งานของฉัน (assignee = ตัวเอง)
+    // ✅ งานที่ assign ให้ตัวเอง
     const { data: projects, error: pErr } = await supabase
       .from("projects")
       .select(
@@ -28,27 +28,31 @@ export async function GET(req: NextRequest) {
       return applyCookies(res);
     }
 
-    // ✅ ดึง pending request ของ “ฉัน” เพื่อให้ F5 แล้วไม่หาย
-    const { data: reqs, error: rErr } = await supabase
-      .from("status_change_requests")
-      .select("id, project_id, from_status, to_status, status, created_at")
-      .eq("requester_id", user.id)
-      .eq("status", "PENDING");
+    const ids = (projects || []).map((x: any) => x.id).filter(Boolean);
 
-    if (rErr) {
-      // ถ้าตาราง/คอลัมน์ยังไม่พร้อม จะไม่พังหน้า (แค่ไม่โชว์ pending)
-      const res = NextResponse.json({ data: projects ?? [] }, { status: 200 });
-      return applyCookies(res);
+    // ✅ ดึง “คำขอรออนุมัติ” ของ user สำหรับโปรเจกต์ชุดนี้
+    let pendingByProject: Record<string, any> = {};
+    if (ids.length > 0) {
+      const { data: pendings, error: rErr } = await supabase
+        .from("status_change_requests")
+        .select("id, project_id, from_status, to_status, request_status, created_at")
+        .eq("requested_by", user.id)
+        .eq("request_status", "PENDING")
+        .in("project_id", ids)
+        .order("created_at", { ascending: false });
+
+      if (!rErr && Array.isArray(pendings)) {
+        // เลือก “ล่าสุด” ต่อโปรเจกต์
+        for (const r of pendings) {
+          if (!pendingByProject[r.project_id]) pendingByProject[r.project_id] = r;
+        }
+      }
     }
 
-    const pendingByProject = new Map<string, any>();
-    for (const r of reqs ?? []) pendingByProject.set(r.project_id, r);
-
-    const merged =
-      (projects ?? []).map((p: any) => ({
-        ...p,
-        pending_request: pendingByProject.get(p.id) ?? null,
-      })) ?? [];
+    const merged = (projects || []).map((p: any) => ({
+      ...p,
+      pending_request: pendingByProject[p.id] ?? null,
+    }));
 
     const res = NextResponse.json({ data: merged }, { status: 200 });
     return applyCookies(res);

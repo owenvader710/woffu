@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { createPortal } from "react-dom";
 
 export type Status = "TODO" | "IN_PROGRESS" | "COMPLETED" | "BLOCKED";
 
@@ -9,118 +9,101 @@ function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
+function useOutsideClick(ref: React.RefObject<HTMLElement | null>, onOutside: () => void) {
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      const el = ref.current;
+      if (!el) return;
+      if (e.target instanceof Node && !el.contains(e.target)) onOutside();
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [ref, onOutside]);
+}
+
 export default function StatusDropdown({
   value,
   onChange,
-  disabled,
+  disabled = false,
 }: {
   value: Status;
-  onChange: (s: Status) => void;
+  onChange: (v: Status) => void;
   disabled?: boolean;
 }) {
-  const btnRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
 
-  const options = useMemo(() => ["TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"] as const, []);
+  useOutsideClick(rootRef as React.RefObject<HTMLElement | null>, () => setOpen(false));
 
-  function updatePos() {
-    const el = btnRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    setPos({
-      top: r.bottom + 8,
-      left: r.right,
-      width: Math.max(200, r.width),
-    });
-  }
+  const options: Status[] = ["TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"];
 
-  useEffect(() => {
-    if (!open) return;
-    updatePos();
-
-    const onResize = () => updatePos();
-    const onScroll = () => updatePos();
-
-    window.addEventListener("resize", onResize);
-    window.addEventListener("scroll", onScroll, true);
-
-    return () => {
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("scroll", onScroll, true);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    if (open) window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+  const pos = useMemo(() => {
+    const b = btnRef.current?.getBoundingClientRect();
+    if (!b) return null;
+    return { left: b.left, top: b.bottom + 8, width: b.width };
   }, [open]);
 
   return (
-    <div className="relative inline-flex">
+    <div ref={rootRef} className="inline-block">
       <button
         ref={btnRef}
         type="button"
+        disabled={disabled}
         onClick={() => {
           if (disabled) return;
           setOpen((v) => !v);
         }}
         className={cn(
-          "inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-black/30 px-4 py-2 text-xs font-extrabold text-white/90 hover:bg-white/10",
-          disabled ? "cursor-not-allowed opacity-50 hover:bg-black/30" : ""
+          "inline-flex items-center justify-center gap-2 rounded-2xl border px-4 py-2 text-xs font-extrabold transition",
+          disabled
+            ? "border-white/10 bg-white/5 text-white/40 cursor-not-allowed"
+            : "border-white/10 bg-black/30 text-white/85 hover:bg-white/10"
         )}
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         {value}
-        <ChevronDown size={14} className={cn("transition", open ? "rotate-180" : "")} />
+        <span className="text-white/60">▾</span>
       </button>
 
-      {open ? (
-        <button
-          type="button"
-          aria-label="close"
-          className="fixed inset-0 z-[9998] cursor-default"
-          onClick={() => setOpen(false)}
-        />
-      ) : null}
+      {open && pos
+        ? createPortal(
+            <div
+              className="fixed z-[9999]"
+              style={{ left: pos.left, top: pos.top, minWidth: Math.max(220, pos.width) }}
+            >
+              <div className="rounded-2xl border border-white/10 bg-black/90 p-2 shadow-[0_25px_80px_rgba(0,0,0,0.65)] backdrop-blur">
+                <div className="px-3 py-2 text-[11px] font-extrabold tracking-widest text-white/45">
+                  CHANGE STATUS
+                </div>
 
-      {open ? (
-        <div
-          className="fixed z-[9999] overflow-hidden rounded-2xl border border-white/10 bg-[#0b0b0b] shadow-[0_30px_120px_rgba(0,0,0,0.75)]"
-          style={{
-            top: pos.top,
-            left: Math.max(12, pos.left - pos.width),
-            width: pos.width,
-          }}
-        >
-          <div className="px-3 py-2 text-[11px] font-extrabold tracking-widest text-white/45">CHANGE STATUS</div>
-          <div className="h-px bg-white/10" />
-          <div className="p-2">
-            {options.map((s) => {
-              const active = value === s;
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => {
-                    onChange(s);
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-extrabold transition",
-                    active ? "bg-white text-black" : "text-white/85 hover:bg-white/10"
-                  )}
-                >
-                  <span>{s}</span>
-                  {active ? <span className="text-[10px] font-black">CURRENT</span> : null}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
+                <div className="mt-1 space-y-1">
+                  {options.map((s) => {
+                    const active = s === value;
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => {
+                          setOpen(false);
+                          onChange(s);
+                        }}
+                        className={cn(
+                          "w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition",
+                          active ? "bg-white text-black" : "text-white/85 hover:bg-white/10"
+                        )}
+                      >
+                        {s}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }

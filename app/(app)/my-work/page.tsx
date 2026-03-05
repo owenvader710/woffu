@@ -6,7 +6,6 @@ import StatusDropdown, { Status } from "./StatusDropdown";
 
 type WorkItem = {
   id: string;
-
   code?: string | null;
 
   title: string | null;
@@ -28,6 +27,8 @@ type WorkItem = {
   graphic_job_type?: string | null;
 };
 
+type DbStatus = "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED";
+
 async function safeJson(res: Response) {
   const t = await res.text();
   return t ? JSON.parse(t) : null;
@@ -37,22 +38,16 @@ function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-/** ✅ แยก type ของ DB ออกไป ไม่ปนกับ UI Status */
-type DbStatus = "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED";
-
 /** ✅ เฉพาะหน้า My Work: UI <-> DB mapping */
 function toDbStatus(s: Status): DbStatus {
-  // UI -> DB
   if (s === "COMPLETED") return "DONE";
   if (s === "BLOCKED") return "CANCELLED";
-  return s; // TODO / IN_PROGRESS
+  return s; // TODO | IN_PROGRESS
 }
-
 function toUiStatus(s: any): Status {
-  // DB -> UI
   if (s === "DONE") return "COMPLETED";
   if (s === "CANCELLED") return "BLOCKED";
-  return s as Status; // TODO / IN_PROGRESS
+  return s as Status;
 }
 
 function DeptPill({ dept }: { dept: WorkItem["department"] }) {
@@ -122,6 +117,7 @@ export default function MyWorkPage() {
     try {
       const r = await fetch("/api/my-work", { cache: "no-store" });
       const j = await safeJson(r);
+
       if (!r.ok) {
         setItems([]);
         setErr((j && (j.error || j.message)) || `Load failed (${r.status})`);
@@ -129,13 +125,7 @@ export default function MyWorkPage() {
       }
 
       const arr = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
-
-      // ✅ map DB -> UI (DONE/CANCELLED -> COMPLETED/BLOCKED)
-      const normalized = (arr as any[]).map((x) => ({
-        ...x,
-        status: toUiStatus(x.status),
-      })) as WorkItem[];
-
+      const normalized = (arr as any[]).map((x) => ({ ...x, status: toUiStatus(x.status) })) as WorkItem[];
       setItems(normalized);
     } catch (e: any) {
       setItems([]);
@@ -148,7 +138,7 @@ export default function MyWorkPage() {
   async function changeStatus(id: string, nextUi: Status) {
     const prev = items;
 
-    // optimistic (เก็บเป็น UI status)
+    // optimistic (ให้ UI เปลี่ยนทันที)
     setItems((xs) => xs.map((x) => (x.id === id ? { ...x, status: nextUi } : x)));
 
     try {
@@ -161,10 +151,30 @@ export default function MyWorkPage() {
       });
 
       const j = await safeJson(res);
-      if (!res.ok) throw new Error((j && (j.error || j.message)) || "Update failed");
-    } catch {
+
+      if (!res.ok) {
+        // ❌ fail → rollback + แจ้ง error
+        setItems(prev);
+        alert((j && (j.error || j.message)) || "Update failed");
+        return;
+      }
+
+      // ✅ ถ้าไม่ใช่หัวหน้า ระบบจะตอบกลับว่า REQUESTED
+      if (j?.mode === "REQUESTED") {
+        setItems(prev); // rollback เพราะยังไม่เปลี่ยนจริง
+        alert("ส่งคำขอเปลี่ยนสถานะแล้ว รอหัวหน้าอนุมัติ");
+        return;
+      }
+
+      // ✅ ถ้า UPDATED (หัวหน้า) แล้ว API ส่ง status ใหม่กลับมา
+      const newDbStatus = j?.data?.status;
+      if (newDbStatus) {
+        const ui = toUiStatus(newDbStatus);
+        setItems((xs) => xs.map((x) => (x.id === id ? { ...x, status: ui } : x)));
+      }
+    } catch (e: any) {
       setItems(prev);
-      alert("Update failed");
+      alert(e?.message || "Update failed");
     }
   }
 
@@ -173,7 +183,6 @@ export default function MyWorkPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ count ต่อสถานะ (UI)
   const counts = useMemo(() => {
     const c: Record<string, number> = { ALL: items.length, TODO: 0, IN_PROGRESS: 0, COMPLETED: 0, BLOCKED: 0 };
     for (const x of items) c[x.status] = (c[x.status] || 0) + 1;
@@ -188,7 +197,6 @@ export default function MyWorkPage() {
   return (
     <div className="w-full bg-black text-white">
       <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
-        {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
@@ -231,14 +239,13 @@ export default function MyWorkPage() {
         </div>
 
         {loading ? (
-          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">
-            กำลังโหลด...
-          </div>
+          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">กำลังโหลด...</div>
         ) : err ? (
           <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">{err}</div>
         ) : (
-          // ✅ ไม่ให้ dropdown จม: outer = overflow-visible
+          // ✅ กัน dropdown จม: outer ไม่ใช้ overflow-hidden
           <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 overflow-visible">
+            {/* ✅ overflow-x-auto จะชอบทำ overflow-y hidden → override เป็น visible */}
             <div className="w-full overflow-x-auto overflow-y-visible">
               <table className="min-w-[980px] w-full">
                 <thead>
@@ -261,10 +268,7 @@ export default function MyWorkPage() {
                           </span>
 
                           <div className="min-w-0">
-                            <Link
-                              href={`/projects/${w.id}`}
-                              className="block truncate text-base font-extrabold text-white hover:underline"
-                            >
+                            <Link href={`/projects/${w.id}`} className="block truncate text-base font-extrabold text-white hover:underline">
                               {w.title || "-"}
                             </Link>
                             {secondLine(w) ? <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div> : null}
@@ -283,7 +287,6 @@ export default function MyWorkPage() {
                       <td className="px-6 py-5 text-center text-sm text-white/80">{fmtDeadline(w.due_date)}</td>
 
                       <td className="px-6 py-5 text-right">
-                        {/* ✅ Dropdown ใช้ UI status แต่ยิง PATCH เป็น DB status ด้วย mapping */}
                         <StatusDropdown value={w.status} onChange={(s) => changeStatus(w.id, s)} />
                       </td>
                     </tr>

@@ -1,74 +1,88 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseFromRequest } from "@/utils/supabase/api";
-
-function badId(id?: string) {
-  return !id || id === "undefined" || id === "null";
-}
+import { supabaseAdmin } from "@/utils/supabase/admin";
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const { id } = await ctx.params;
-  if (badId(id)) return NextResponse.json({ error: "Invalid approval id" }, { status: 400 });
+  try {
+    const { id } = await ctx.params;
+    const { supabase, applyCookies } = supabaseFromRequest(req);
 
-  const { supabase } = await supabaseFromRequest(req);
+    // auth
+    const { data: authData, error: authErr } = await supabase.auth.getUser();
+    if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
+    const user = authData?.user;
+    if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
-  const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
-  const user = authData?.user;
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // leader check
+    const { data: me, error: meErr } = await supabase
+      .from("profiles")
+      .select("id, role")
+      .eq("id", user.id)
+      .maybeSingle();
 
-  const { data: me, error: meErr } = await supabase
-    .from("profiles")
-    .select("id, role, is_active")
-    .eq("id", user.id)
-    .single();
-  if (meErr) return NextResponse.json({ error: meErr.message }, { status: 500 });
-  if (!me || String(me.role).toUpperCase() !== "LEADER" || me.is_active === false) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (meErr) {
+      const res = NextResponse.json({ error: meErr.message }, { status: 400 });
+      return applyCookies(res);
+    }
+    if (me?.role !== "LEADER") {
+      const res = NextResponse.json({ error: "Not allowed" }, { status: 403 });
+      return applyCookies(res);
+    }
+
+    // ✅ admin: load request (ข้าม RLS)
+    const { data: reqRow, error: reqErr } = await supabaseAdmin
+      .from("status_change_requests")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (reqErr) {
+      const res = NextResponse.json({ error: reqErr.message }, { status: 400 });
+      return applyCookies(res);
+    }
+    if (!reqRow) {
+      const res = NextResponse.json({ error: "Not found" }, { status: 404 });
+      return applyCookies(res);
+    }
+
+    if (reqRow.request_status !== "PENDING") {
+      const res = NextResponse.json({ error: "Already processed" }, { status: 400 });
+      return applyCookies(res);
+    }
+
+    // ✅ admin: update project status
+    const { error: updProjErr } = await supabaseAdmin
+      .from("projects")
+      .update({ status: reqRow.to_status })
+      .eq("id", reqRow.project_id);
+
+    if (updProjErr) {
+      const res = NextResponse.json({ error: updProjErr.message }, { status: 400 });
+      return applyCookies(res);
+    }
+
+    // ✅ admin: mark request approved
+    const { error: updReqErr } = await supabaseAdmin
+      .from("status_change_requests")
+      .update({ request_status: "APPROVED", approved_by: user.id })
+      .eq("id", id);
+
+    if (updReqErr) {
+      const res = NextResponse.json({ error: updReqErr.message }, { status: 400 });
+      return applyCookies(res);
+    }
+
+    // log (ถ้ามีตาราง activity_logs)
+    await supabaseAdmin.from("activity_logs").insert({
+      action: "STATUS_CHANGE_APPROVED",
+      project_id: reqRow.project_id,
+      meta: { from: reqRow.from_status, to: reqRow.to_status, request_id: id },
+      created_by: user.id,
+    });
+
+    const res = NextResponse.json({ ok: true }, { status: 200 });
+    return applyCookies(res);
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message ?? "Internal error" }, { status: 500 });
   }
-
-  // ✅ แก้ไข: เลือกคอลัมน์ request_status
-  const { data: reqRow, error: reqErr } = await supabase
-    .from("status_change_requests")
-    .select("id, project_id, from_status, to_status, request_status, requested_by") 
-    .eq("id", id)
-    .single();
-
-  if (reqErr) return NextResponse.json({ error: reqErr.message }, { status: 500 });
-  if (!reqRow) return NextResponse.json({ error: "Request not found" }, { status: 404 });
-
-  // ✅ แก้ไข: เช็คแบบ Case-insensitive และรองรับค่า NULL
-  const currentStatus = String(reqRow.request_status || "PENDING").toUpperCase();
-  if (currentStatus !== "PENDING") {
-    return NextResponse.json({ error: `Request is not pending (Current: ${currentStatus})` }, { status: 400 });
-  }
-
-  const now = new Date().toISOString();
-
-  // ✅ แก้ไข: Update คอลัมน์ request_status
-  const { error: updReqErr } = await supabase
-    .from("status_change_requests")
-    .update({ request_status: "APPROVED", approved_by: user.id, approved_at: now })
-    .eq("id", id);
-    
-  if (updReqErr) return NextResponse.json({ error: updReqErr.message }, { status: 500 });
-
-  const { error: updProjErr } = await supabase
-    .from("projects")
-    .update({ status: reqRow.to_status })
-    .eq("id", reqRow.project_id);
-  if (updProjErr) return NextResponse.json({ error: updProjErr.message }, { status: 500 });
-
-  await supabase.from("project_logs").insert({
-    project_id: reqRow.project_id,
-    action: "STATUS_APPROVED",
-    created_by: user.id,
-    detail: {
-      request_id: id,
-      from_status: reqRow.from_status,
-      to_status: reqRow.to_status,
-      requested_by: reqRow.requested_by,
-    },
-  });
-
-  return NextResponse.json({ ok: true });
 }

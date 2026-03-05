@@ -1,72 +1,76 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseFromRequest } from "@/utils/supabase/api";
+import { supabaseAdmin } from "@/utils/supabase/admin";
 
-function isLeaderRole(role?: string | null) {
-  return String(role || "").toUpperCase() === "LEADER";
-}
-
-// NOTE:
-// - ตาราง `status_change_requests` ใช้คอลัมน์ `request_status` (ไม่ใช่ `status`)
-// - หน้านี้ใช้สำหรับหัวหน้าเท่านั้น
-// - ส่งกลับ 2 กลุ่ม: pending + history
 export async function GET(req: NextRequest) {
-  const { supabase } = await supabaseFromRequest(req);
+  try {
+    const { supabase, applyCookies } = supabaseFromRequest(req);
 
-  // ต้อง login
-  const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
-  if (!authData?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // auth
+    const { data: authData, error: authErr } = await supabase.auth.getUser();
+    if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
+    const user = authData?.user;
+    if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
-  // ต้องเป็นหัวหน้า
-  const { data: me, error: meErr } = await supabase
-    .from("profiles")
-    .select("id, role, is_active")
-    .eq("id", authData.user.id)
-    .single();
+    // leader check (ยังใช้ client supabase เพื่อยืนยันตัวตน)
+    const { data: me, error: meErr } = await supabase
+      .from("profiles")
+      .select("id, role")
+      .eq("id", user.id)
+      .maybeSingle();
 
-  if (meErr) return NextResponse.json({ error: meErr.message }, { status: 500 });
-  if (!me || !isLeaderRole(me.role) || me.is_active === false) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (meErr) {
+      const res = NextResponse.json({ error: meErr.message }, { status: 400 });
+      return applyCookies(res);
+    }
+    const isLeader = me?.role === "LEADER";
+    if (!isLeader) {
+      const res = NextResponse.json({ error: "Not allowed" }, { status: 403 });
+      return applyCookies(res);
+    }
+
+    // ✅ ใช้ admin เพื่อข้าม RLS (หัวหน้าอ่าน pending ได้แน่นอน)
+    const pendingQ = await supabaseAdmin
+      .from("status_change_requests")
+      .select(
+        `
+        id, project_id, requested_by, from_status, to_status, request_status, created_at, updated_at,
+        projects:projects(id, title, code)
+      `
+      )
+      .eq("request_status", "PENDING")
+      .order("created_at", { ascending: false });
+
+    const historyQ = await supabaseAdmin
+      .from("status_change_requests")
+      .select(
+        `
+        id, project_id, requested_by, from_status, to_status, request_status, created_at, updated_at,
+        projects:projects(id, title, code)
+      `
+      )
+      .neq("request_status", "PENDING")
+      .order("updated_at", { ascending: false })
+      .limit(50);
+
+    if (pendingQ.error) {
+      const res = NextResponse.json({ error: pendingQ.error.message }, { status: 400 });
+      return applyCookies(res);
+    }
+    if (historyQ.error) {
+      const res = NextResponse.json({ error: historyQ.error.message }, { status: 400 });
+      return applyCookies(res);
+    }
+
+    const res = NextResponse.json(
+      {
+        pending: pendingQ.data ?? [],
+        history: historyQ.data ?? [],
+      },
+      { status: 200 }
+    );
+    return applyCookies(res);
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message ?? "Internal error" }, { status: 500 });
   }
-
-  const select = [
-    "id",
-    "project_id",
-    "from_status",
-    "to_status",
-    "note",
-    "request_status",
-    "created_at",
-    "requested_by",
-    "approved_by",
-    "approved_at",
-    // project (ต้องมี department เพื่อ filter VIDEO/GRAPHIC)
-    "project:projects(id,title,brand,type,department)",
-    // requester (ชื่อผู้ขอ)
-    "requester:profiles!status_change_requests_requested_by_fkey(id,display_name)",
-    // approver (คนอนุมัติ/ปฏิเสธ)
-    "approver:profiles!status_change_requests_approved_by_fkey(id,display_name)",
-  ].join(",");
-
-  const pendingQ = supabase
-    .from("status_change_requests")
-    .select(select)
-    .eq("request_status", "PENDING")
-    .order("created_at", { ascending: false });
-
-  const historyQ = supabase
-    .from("status_change_requests")
-    .select(select)
-    .neq("request_status", "PENDING")
-    .order("created_at", { ascending: false });
-
-  const [{ data: pending, error: pErr }, { data: history, error: hErr }] = await Promise.all([
-    pendingQ,
-    historyQ,
-  ]);
-
-  if (pErr) return NextResponse.json({ error: pErr.message }, { status: 500 });
-  if (hErr) return NextResponse.json({ error: hErr.message }, { status: 500 });
-
-  return NextResponse.json({ data: { pending: pending ?? [], history: history ?? [] } });
 }

@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseFromRequest } from "@/utils/supabase/api";
 import { supabaseAdmin } from "@/utils/supabase/admin";
 
-export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
+    const { id } = await params;
+
     const { supabase, applyCookies } = supabaseFromRequest(req);
 
     // auth
@@ -29,7 +34,6 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
       return applyCookies(res);
     }
 
-    const id = ctx.params.id;
     const admin = supabaseAdmin();
 
     // load request

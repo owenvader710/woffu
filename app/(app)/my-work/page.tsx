@@ -6,7 +6,6 @@ import StatusDropdown, { Status } from "./StatusDropdown";
 
 type WorkItem = {
   id: string;
-
   code?: string | null;
 
   title: string | null;
@@ -37,15 +36,16 @@ function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-/** ✅ เฉพาะหน้า My Work: UI <-> DB mapping */
+/** ✅ เฉพาะหน้า My Work: UI <-> DB mapping (ไม่แตะระบบอื่น)
+ *  - COMPLETED (UI) -> DONE (DB)
+ *  - BLOCKED   (UI) -> CANCELLED (DB)
+ */
 function toDbStatus(s: Status): Status {
-  // UI -> DB
   if (s === "COMPLETED") return "DONE";
   if (s === "BLOCKED") return "CANCELLED";
   return s;
 }
 function toUiStatus(s: any): Status {
-  // DB -> UI
   if (s === "DONE") return "COMPLETED";
   if (s === "CANCELLED") return "BLOCKED";
   return s as Status;
@@ -108,7 +108,7 @@ export default function MyWorkPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  // ✅ เหลือแค่ 4 สถานะ + ALL
+  // ✅ เหลือแค่ 4 สถานะ + ALL ตามที่กำหนด
   const FILTERS = ["ALL", "TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"] as const;
   const [statusFilter, setStatusFilter] = useState<(typeof FILTERS)[number]>("ALL");
 
@@ -118,6 +118,7 @@ export default function MyWorkPage() {
     try {
       const r = await fetch("/api/my-work", { cache: "no-store" });
       const j = await safeJson(r);
+
       if (!r.ok) {
         setItems([]);
         setErr((j && (j.error || j.message)) || `Load failed (${r.status})`);
@@ -125,13 +126,7 @@ export default function MyWorkPage() {
       }
 
       const arr = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
-
-      // ✅ map DB -> UI (DONE/CANCELLED -> COMPLETED/BLOCKED)
-      const normalized = (arr as WorkItem[]).map((x: any) => ({
-        ...x,
-        status: toUiStatus(x.status),
-      }));
-
+      const normalized = (arr as any[]).map((x) => ({ ...x, status: toUiStatus(x.status) })) as WorkItem[];
       setItems(normalized);
     } catch (e: any) {
       setItems([]);
@@ -144,7 +139,7 @@ export default function MyWorkPage() {
   async function changeStatus(id: string, nextUi: Status) {
     const prev = items;
 
-    // optimistic (เก็บเป็น UI status)
+    // optimistic
     setItems((xs) => xs.map((x) => (x.id === id ? { ...x, status: nextUi } : x)));
 
     try {
@@ -157,10 +152,18 @@ export default function MyWorkPage() {
       });
 
       const j = await safeJson(res);
-      if (!res.ok) throw new Error((j && (j.error || j.message)) || "Update failed");
-    } catch {
+
+      // ✅ สำคัญ: โชว์ error จริงจาก API
+      if (!res.ok) {
+        const msg = (j && (j.error || j.message)) || `Update failed (${res.status})`;
+        throw new Error(msg);
+      }
+
+      // ✅ reload กันเคสหลังบ้านเปลี่ยนค่า/trigger อะไรเพิ่ม
+      await load();
+    } catch (e: any) {
       setItems(prev);
-      alert("Update failed");
+      alert(e?.message || "Update failed");
     }
   }
 
@@ -207,7 +210,6 @@ export default function MyWorkPage() {
             {FILTERS.map((s) => {
               const active = statusFilter === s;
               const label = s === "ALL" ? `ALL (${counts.ALL || 0})` : `${s} (${counts[s] || 0})`;
-
               return (
                 <button
                   key={s}
@@ -227,68 +229,83 @@ export default function MyWorkPage() {
         </div>
 
         {loading ? (
-          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">กำลังโหลด...</div>
+          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">
+            กำลังโหลด...
+          </div>
         ) : err ? (
-          <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">{err}</div>
+          <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
+            {err}
+          </div>
         ) : (
-          // ✅ ไม่ให้ dropdown จม: outer = overflow-visible
-          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 overflow-visible">
-            <div className="w-full overflow-x-auto overflow-y-visible">
-              <table className="min-w-[980px] w-full">
-                <thead>
-                  <tr className="text-left text-xs font-semibold tracking-widest text-white/45">
-                    <th className="px-6 py-4">งาน</th>
-                    <th className="px-6 py-4 text-center">ฝ่าย</th>
-                    <th className="px-6 py-4 text-center">สถานะ</th>
-                    <th className="px-6 py-4 text-center">Deadline</th>
-                    <th className="px-6 py-4 text-right">จัดการ</th>
-                  </tr>
-                </thead>
+          // ✅ FIX dropdown จม:
+          // - ห้ามใช้ overflow-hidden ที่กล่องหลัก
+          // - แยกชั้น scroll แนวนอน (อันนี้ยัง clip บางเคส) แต่ "ชั้น table wrapper" ให้ overflow-visible
+          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5">
+            <div className="w-full overflow-x-auto">
+              <div className="min-w-[980px] overflow-visible">
+                <table className="w-full overflow-visible">
+                  <thead>
+                    <tr className="text-left text-xs font-semibold tracking-widest text-white/45">
+                      <th className="px-6 py-4">งาน</th>
+                      <th className="px-6 py-4 text-center">ฝ่าย</th>
+                      <th className="px-6 py-4 text-center">สถานะ</th>
+                      <th className="px-6 py-4 text-center">Deadline</th>
+                      <th className="px-6 py-4 text-right">จัดการ</th>
+                    </tr>
+                  </thead>
 
-                <tbody className="divide-y divide-white/10">
-                  {filtered.map((w) => (
-                    <tr key={w.id} className="hover:bg-white/[0.03]">
-                      <td className="px-6 py-5">
-                        <div className="flex items-start gap-3">
-                          <span className="mt-[2px] inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
-                            {makeCode(w)}
-                          </span>
+                  <tbody className="divide-y divide-white/10">
+                    {filtered.map((w) => (
+                      <tr key={w.id} className="hover:bg-white/[0.03]">
+                        <td className="px-6 py-5">
+                          <div className="flex items-start gap-3">
+                            <span className="mt-[2px] inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
+                              {makeCode(w)}
+                            </span>
 
-                          <div className="min-w-0">
-                            <Link href={`/projects/${w.id}`} className="block truncate text-base font-extrabold text-white hover:underline">
-                              {w.title || "-"}
-                            </Link>
-                            {secondLine(w) ? <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div> : null}
+                            <div className="min-w-0">
+                              <Link
+                                href={`/projects/${w.id}`}
+                                className="block truncate text-base font-extrabold text-white hover:underline"
+                              >
+                                {w.title || "-"}
+                              </Link>
+                              {secondLine(w) ? (
+                                <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div>
+                              ) : null}
+                            </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      <td className="px-6 py-5 text-center">
-                        <DeptPill dept={w.department} />
-                      </td>
+                        <td className="px-6 py-5 text-center">
+                          <DeptPill dept={w.department} />
+                        </td>
 
-                      <td className="px-6 py-5 text-center">
-                        <StatusPill s={w.status} />
-                      </td>
+                        <td className="px-6 py-5 text-center">
+                          <StatusPill s={w.status} />
+                        </td>
 
-                      <td className="px-6 py-5 text-center text-sm text-white/80">{fmtDeadline(w.due_date)}</td>
+                        <td className="px-6 py-5 text-center text-sm text-white/80">{fmtDeadline(w.due_date)}</td>
 
-                      <td className="px-6 py-5 text-right">
-                        {/* ✅ Dropdown ใช้ UI status แต่ยิง PATCH เป็น DB status ด้วย mapping */}
-                        <StatusDropdown value={w.status} onChange={(s) => changeStatus(w.id, s)} />
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="px-6 py-5 text-right">
+                          {/* ✅ Dropdown ใช้ UI status แต่ยิง PATCH เป็น DB status ด้วย mapping */}
+                          <div className="inline-block overflow-visible">
+                            <StatusDropdown value={w.status} onChange={(s) => changeStatus(w.id, s)} />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
 
-                  {filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-10 text-center text-sm text-white/50">
-                        ไม่พบงานในสถานะนี้
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
+                    {filtered.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-10 text-center text-sm text-white/50">
+                          ไม่พบงานในสถานะนี้
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}

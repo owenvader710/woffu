@@ -625,7 +625,7 @@ export default function MyWorkPage() {
           </div>
         ) : (
           <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 overflow-visible">
-  <div className="w-full overflow-x-auto overflow-y-visible rounded-[30px]">
+            <div className="w-full overflow-x-auto overflow-y-visible rounded-[30px]">
               <table className="min-w-[980px] w-full overflow-visible">
                 <thead>
                   <tr className="text-left text-xs font-semibold tracking-widest text-white/45">
@@ -684,19 +684,24 @@ export default function MyWorkPage() {
                         </td>
 
                         <td className="relative z-20 overflow-visible px-6 py-5 text-right">
-  <div className={cn("relative z-30 overflow-visible", pending ? "opacity-60 pointer-events-none" : "")}>
+                          <div
+                            className={cn(
+                              "relative z-30 overflow-visible",
+                              pending ? "opacity-60 pointer-events-none" : ""
+                            )}
+                          >
                             <div className="relative z-40 inline-block overflow-visible">
-  <StatusDropdown
-    value={w.status}
-    onChange={(s) => {
-      if (s === "BLOCKED") {
-        openBlockedModal(w.id, w.title || "-");
-        return;
-      }
-      requestStatusChange(w.id, s);
-    }}
-  />
-</div>
+                              <StatusDropdown
+                                value={w.status}
+                                onChange={(s) => {
+                                  if (s === "BLOCKED") {
+                                    openBlockedModal(w.id, w.title || "-");
+                                    return;
+                                  }
+                                  requestStatusChange(w.id, s);
+                                }}
+                              />
+                            </div>
                           </div>
                         </td>
                       </tr>

@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { supabaseBrowser } from "@/utils/supabase/client";
+import { urlBase64ToUint8Array } from "./push";
 
 type AppNotification = {
   id: string;
@@ -69,9 +70,7 @@ function playBeep() {
 
     oscillator.start(ctx.currentTime);
     oscillator.stop(ctx.currentTime + 0.22);
-  } catch {
-    // ignore
-  }
+  } catch {}
 }
 
 function showDesktopNotification(n: AppNotification) {
@@ -90,9 +89,7 @@ function showDesktopNotification(n: AppNotification) {
       if (n.link) window.location.href = n.link;
       notice.close();
     };
-  } catch {
-    // ignore
-  }
+  } catch {}
 }
 
 export default function NotificationCenter() {
@@ -103,6 +100,9 @@ export default function NotificationCenter() {
   const [open, setOpen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [desktopPermission, setDesktopPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
 
   const initializedRef = useRef(false);
   const channelRef = useRef<any>(null);
@@ -140,9 +140,7 @@ export default function NotificationCenter() {
 
   async function readOne(id: string) {
     await fetch(`/api/notifications/read/${id}`, { method: "POST" });
-    setItems((prev) =>
-      prev.map((x) => (x.id === id ? { ...x, is_read: true } : x))
-    );
+    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, is_read: true } : x)));
     setUnread((prev) => Math.max(prev - 1, 0));
   }
 
@@ -152,11 +150,124 @@ export default function NotificationCenter() {
         setDesktopPermission("unsupported");
         return;
       }
-
       const result = await Notification.requestPermission();
       setDesktopPermission(result);
     } catch {
       setDesktopPermission("denied");
+    }
+  }
+
+  async function checkPushStatus() {
+    try {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+        setPushSupported(false);
+        setPushEnabled(false);
+        return;
+      }
+
+      setPushSupported(true);
+
+      const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+      if (!registration) {
+        setPushEnabled(false);
+        return;
+      }
+
+      const sub = await registration.pushManager.getSubscription();
+      setPushEnabled(!!sub);
+    } catch {
+      setPushEnabled(false);
+    }
+  }
+
+  async function enablePush() {
+    try {
+      setPushBusy(true);
+
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+        setPushSupported(false);
+        return;
+      }
+
+      if (!("Notification" in window)) {
+        setDesktopPermission("unsupported");
+        return;
+      }
+
+      let permission = Notification.permission;
+      if (permission !== "granted") {
+        permission = await Notification.requestPermission();
+      }
+      setDesktopPermission(permission);
+
+      if (permission !== "granted") return;
+
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      const readyReg = await navigator.serviceWorker.ready;
+
+      const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!publicKey) {
+        alert("Missing NEXT_PUBLIC_VAPID_PUBLIC_KEY");
+        return;
+      }
+
+      let sub = await readyReg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await readyReg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        });
+      }
+
+      const res = await fetch("/api/push-subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sub),
+      });
+
+      const json = await safeJson(res);
+      if (!res.ok) {
+        throw new Error((json && (json.error || json.message)) || "Push subscribe failed");
+      }
+
+      setPushEnabled(true);
+    } catch (e: any) {
+      alert(e?.message || "Push subscribe failed");
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+  async function disablePush() {
+    try {
+      setPushBusy(true);
+
+      const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+      if (!registration) {
+        setPushEnabled(false);
+        return;
+      }
+
+      const sub = await registration.pushManager.getSubscription();
+      if (!sub) {
+        setPushEnabled(false);
+        return;
+      }
+
+      const endpoint = sub.endpoint;
+
+      await fetch("/api/push-subscriptions/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint }),
+      });
+
+      await sub.unsubscribe();
+      setPushEnabled(false);
+    } catch (e: any) {
+      alert(e?.message || "Push unsubscribe failed");
+    } finally {
+      setPushBusy(false);
     }
   }
 
@@ -186,6 +297,7 @@ export default function NotificationCenter() {
   useEffect(() => {
     loadMe();
     loadInitial();
+    checkPushStatus();
   }, []);
 
   useEffect(() => {
@@ -255,7 +367,7 @@ export default function NotificationCenter() {
 
   return (
     <>
-      <div className="fixed right-6 top-6 z-[9998]">
+      <div className="fixed bottom-6 right-6 z-[9998]">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
@@ -271,7 +383,7 @@ export default function NotificationCenter() {
         </button>
 
         {open ? (
-          <div className="absolute right-0 mt-3 w-[360px] rounded-3xl border border-white/10 bg-[#0b0b0b] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+          <div className="absolute bottom-14 right-0 w-[360px] rounded-3xl border border-white/10 bg-[#0b0b0b] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
             <div className="flex items-center justify-between">
               <div className="text-sm font-extrabold text-white">แจ้งเตือน</div>
               <button
@@ -283,25 +395,55 @@ export default function NotificationCenter() {
               </button>
             </div>
 
-            <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-              <div className="text-[11px] text-white/50">
-                realtime {me?.id ? "connected" : "waiting"}
-                {desktopPermission === "granted" ? " · desktop on" : ""}
+            <div className="mt-2 space-y-2">
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+                <div className="text-[11px] text-white/50">
+                  realtime {me?.id ? "connected" : "waiting"}
+                  {desktopPermission === "granted" ? " · desktop on" : ""}
+                </div>
+
+                {desktopPermission === "default" ? (
+                  <button
+                    type="button"
+                    onClick={enableDesktopNotifications}
+                    className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white/80 hover:bg-white/10"
+                  >
+                    desktop alert
+                  </button>
+                ) : desktopPermission === "denied" ? (
+                  <div className="text-[11px] text-red-300/70">desktop blocked</div>
+                ) : desktopPermission === "unsupported" ? (
+                  <div className="text-[11px] text-white/35">unsupported</div>
+                ) : null}
               </div>
 
-              {desktopPermission === "default" ? (
-                <button
-                  type="button"
-                  onClick={enableDesktopNotifications}
-                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white/80 hover:bg-white/10"
-                >
-                  เปิด desktop alert
-                </button>
-              ) : desktopPermission === "denied" ? (
-                <div className="text-[11px] text-red-300/70">desktop blocked</div>
-              ) : desktopPermission === "unsupported" ? (
-                <div className="text-[11px] text-white/35">unsupported</div>
-              ) : null}
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+                <div className="text-[11px] text-white/50">
+                  push {pushEnabled ? "enabled" : "disabled"}
+                </div>
+
+                {!pushSupported ? (
+                  <div className="text-[11px] text-white/35">unsupported</div>
+                ) : pushEnabled ? (
+                  <button
+                    type="button"
+                    onClick={disablePush}
+                    disabled={pushBusy}
+                    className="rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-1.5 text-[11px] font-semibold text-red-200 hover:bg-red-500/15 disabled:opacity-50"
+                  >
+                    {pushBusy ? "..." : "ปิด push"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={enablePush}
+                    disabled={pushBusy}
+                    className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white/80 hover:bg-white/10 disabled:opacity-50"
+                  >
+                    {pushBusy ? "..." : "เปิด push"}
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="mt-3 space-y-2">
@@ -347,7 +489,7 @@ export default function NotificationCenter() {
         ) : null}
       </div>
 
-      <div className="pointer-events-none fixed bottom-6 right-6 z-[9999] flex w-[360px] max-w-[calc(100vw-32px)] flex-col gap-3">
+      <div className="pointer-events-none fixed bottom-24 right-6 z-[9999] flex w-[360px] max-w-[calc(100vw-32px)] flex-col gap-3">
         {toasts.slice(-3).map((n) => (
           <div
             key={n.id}

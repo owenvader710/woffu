@@ -636,33 +636,106 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <DashboardCard
-        title="ภาพรวมงาน"
-        desc="จำนวนงานทั้งหมด จำนวนของแต่ละสถานะ และเปอร์เซ็นต์งานที่ทำเสร็จแล้ว"
-        className="mt-6"
-      >
-        <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <StatusDonut
-            total={projects.length}
-            counts={{
-              preOrder: projectCounts.preOrder,
-              todo: projectCounts.todo,
-              inProgress: projectCounts.inProgress,
-              blocked: projectCounts.blocked,
-              completed: projectCounts.completed,
-            }}
-          />
+<DashboardCard
+  title="ภาพรวมงาน"
+  desc="จำนวนงานทั้งหมด จำนวนของแต่ละสถานะ และเปอร์เซ็นต์งานที่ทำเสร็จแล้ว"
+  className="mt-6"
+>
+  <div className="grid gap-8 lg:grid-cols-[260px_minmax(0,1fr)]">
 
-          <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
-            <SummaryStat label="ALL ACTIVE" value={projectCounts.total} hint="งานที่ยังไม่ปิด" onClick={() => router.push("/projects")} />
-            <SummaryStat label="PRE_ORDER" value={projectCounts.preOrder} hint="งานสั่งล่วงหน้า" onClick={() => router.push("/projects")} />
-            <SummaryStat label="TODO" value={projectCounts.todo} hint="งานที่ต้องทำ" onClick={() => router.push("/projects")} />
-            <SummaryStat label="IN_PROGRESS" value={projectCounts.inProgress} hint="งานที่กำลังทำ" onClick={() => router.push("/my-work")} />
-            <SummaryStat label="BLOCKED" value={projectCounts.blocked} hint="งานติดปัญหา" onClick={() => router.push("/blocked")} />
-            <SummaryStat label="DONE %" value={projectCounts.progressPercent} hint={`${projectCounts.completed} งานที่ปิดแล้ว`} onClick={() => router.push("/completed")} />
-          </div>
+    {/* donut */}
+    <div className="flex flex-col items-center">
+
+      <StatusDonut
+        total={projects.length}
+        counts={{
+          preOrder: projectCounts.preOrder,
+          todo: projectCounts.todo,
+          inProgress: projectCounts.inProgress,
+          blocked: projectCounts.blocked,
+          completed: projectCounts.completed,
+        }}
+      />
+
+      {/* legend */}
+      <div className="mt-6 grid grid-cols-2 gap-2 text-xs text-white/70">
+
+        <div className="flex items-center gap-2">
+          <div className="h-3 w-3 rounded-full bg-violet-400"/>
+          PRE_ORDER
         </div>
-      </DashboardCard>
+
+        <div className="flex items-center gap-2">
+          <div className="h-3 w-3 rounded-full bg-gray-400"/>
+          TODO
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="h-3 w-3 rounded-full bg-blue-400"/>
+          IN_PROGRESS
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="h-3 w-3 rounded-full bg-red-400"/>
+          BLOCKED
+        </div>
+
+        <div className="flex items-center gap-2 col-span-2">
+          <div className="h-3 w-3 rounded-full bg-green-400"/>
+          COMPLETED
+        </div>
+
+      </div>
+    </div>
+
+    {/* stat cards */}
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+
+      <SummaryStat
+        label="ALL ACTIVE"
+        value={projectCounts.total}
+        hint="งานที่ยังไม่ปิด"
+        onClick={() => router.push("/projects")}
+      />
+
+      <SummaryStat
+        label="PRE_ORDER"
+        value={projectCounts.preOrder}
+        hint="งานสั่งล่วงหน้า"
+        onClick={() => router.push("/projects")}
+      />
+
+      <SummaryStat
+        label="TODO"
+        value={projectCounts.todo}
+        hint="งานที่ต้องทำ"
+        onClick={() => router.push("/projects")}
+      />
+
+      <SummaryStat
+        label="IN_PROGRESS"
+        value={projectCounts.inProgress}
+        hint="งานที่กำลังทำ"
+        onClick={() => router.push("/my-work")}
+      />
+
+      <SummaryStat
+        label="BLOCKED"
+        value={projectCounts.blocked}
+        hint="งานติดปัญหา"
+        onClick={() => router.push("/blocked")}
+      />
+
+      <SummaryStat
+        label="DONE %"
+        value={projectCounts.progressPercent}
+        hint={`${projectCounts.completed} งานที่ปิดแล้ว`}
+        onClick={() => router.push("/completed")}
+      />
+
+    </div>
+  </div>
+</DashboardCard>
 
       {!isLeader ? (
         <div className="mt-6 grid gap-6 xl:grid-cols-2">

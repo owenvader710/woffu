@@ -146,7 +146,7 @@ export async function POST(req: Request) {
 
   insertRow.status = getInitialStatus(insertRow.start_date);
 
-  const { data, error } = await supabase
+  const { data: insertedRaw, error } = await supabase
     .from("projects")
     .insert(insertRow)
     .select(SELECT_FIELDS)
@@ -156,23 +156,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (data?.assignee_id) {
+  const insertedData = (insertedRaw ?? null) as unknown as ProjectRow | null;
+
+  if (insertedData?.assignee_id) {
     const notifTitle =
       insertRow.status === "PRE_ORDER"
         ? "คุณได้รับงานล่วงหน้าใหม่"
         : "คุณได้รับงานใหม่";
 
-    const notifMessage = data.title || "มีงานใหม่ถูกมอบหมายให้คุณ";
+    const notifMessage = insertedData.title || "มีงานใหม่ถูกมอบหมายให้คุณ";
 
-    await admin.from("notifications").insert({
-      user_id: data.assignee_id,
-      type: "JOB_ASSIGNED",
-      title: notifTitle,
-      message: notifMessage,
-      link: "/my-work",
-      is_read: false,
-    });
+    try {
+      await admin.from("notifications").insert({
+        user_id: insertedData.assignee_id,
+        type: "JOB_ASSIGNED",
+        title: notifTitle,
+        message: notifMessage,
+        link: "/my-work",
+        is_read: false,
+      });
+    } catch {
+      // ไม่ให้ notification พลาดแล้วทำให้การสร้างงานล้ม
+    }
   }
 
-  return NextResponse.json({ data }, { status: 201 });
+  return NextResponse.json({ data: insertedData }, { status: 201 });
 }

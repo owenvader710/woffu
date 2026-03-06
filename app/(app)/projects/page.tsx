@@ -10,7 +10,6 @@ type Project = {
   id: string;
   title: string;
 
-  // ✅ รองรับหลายชื่อคอลัมน์รหัส (เผื่อ DB ไม่ได้ใช้ชื่อ code)
   code?: string | null;
   project_code?: string | null;
   projectCode?: string | null;
@@ -21,7 +20,7 @@ type Project = {
   ref?: string | null;
 
   type: "VIDEO" | "GRAPHIC";
-  status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
+  status: "PRE_ORDER" | "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
   created_at: string;
   start_date: string | null;
   due_date: string | null;
@@ -55,7 +54,6 @@ function formatDateTH(iso?: string | null) {
   return d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
 }
 
-// ✅ Deadline ต้องมีเวลา
 function formatDateTimeTH(iso?: string | null) {
   if (!iso) return "-";
   const d = new Date(iso);
@@ -64,7 +62,6 @@ function formatDateTimeTH(iso?: string | null) {
   return `${date} ${time}`;
 }
 
-// ✅ ดึง “รหัสโปรเจกต์” แบบรองรับหลายชื่อคอลัมน์
 function getProjectCode(p: Project) {
   return (
     p.code ??
@@ -79,7 +76,6 @@ function getProjectCode(p: Project) {
   );
 }
 
-// ✅ บรรทัดรอง: โชว์เนื้อหาเหมือนเดิม แต่ "ไม่โชว์หัวข้อ"
 function secondLine(p: Project) {
   const brand = p.brand ? `${p.brand}` : null;
 
@@ -101,6 +97,7 @@ function secondLine(p: Project) {
 }
 
 function statusTone(status: Project["status"]) {
+  if (status === "PRE_ORDER") return "violet";
   if (status === "TODO") return "neutral";
   if (status === "IN_PROGRESS") return "blue";
   if (status === "BLOCKED") return "red";
@@ -108,7 +105,6 @@ function statusTone(status: Project["status"]) {
   return "neutral";
 }
 
-// ✅ ค้นหาได้ถึงชื่อผู้รับผิดชอบด้วย
 function matchQuery(p: Project, q: string, assigneeName?: string) {
   const needle = q.trim().toLowerCase();
   if (!needle) return true;
@@ -125,18 +121,20 @@ function Pill({
   tone = "neutral",
 }: {
   children: React.ReactNode;
-  tone?: "neutral" | "green" | "amber" | "red" | "blue";
+  tone?: "neutral" | "green" | "amber" | "red" | "blue" | "violet";
 }) {
   const cls =
     tone === "green"
       ? "border-green-500/30 bg-green-500/10 text-green-200"
       : tone === "amber"
-      ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
-      : tone === "red"
-      ? "border-red-500/30 bg-red-500/10 text-red-200"
-      : tone === "blue"
-      ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
-      : "border-white/10 bg-white/5 text-white/70";
+        ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+        : tone === "red"
+          ? "border-red-500/30 bg-red-500/10 text-red-200"
+          : tone === "blue"
+            ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
+            : tone === "violet"
+              ? "border-violet-500/30 bg-violet-500/10 text-violet-200"
+              : "border-white/10 bg-white/5 text-white/70";
 
   return <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs ${cls}`}>{children}</span>;
 }
@@ -163,8 +161,7 @@ export default function ProjectsPage() {
 
   const [isLeader, setIsLeader] = useState(false);
 
-  // filters
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "TODO" | "IN_PROGRESS">("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "PRE_ORDER" | "TODO" | "IN_PROGRESS">("ALL");
   const [typeFilter, setTypeFilter] = useState<"ALL" | "VIDEO" | "GRAPHIC">("ALL");
   const [q, setQ] = useState("");
 
@@ -233,14 +230,11 @@ export default function ProjectsPage() {
       await loadMe();
       await Promise.all([loadProjects(), loadMembers()]);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ baseList: ตัด COMPLETED/BLOCKED ออกเสมอในหน้า /projects + filter ฝ่าย + search
   const baseList = useMemo(() => {
     let list = items;
 
-    // หน้า /projects ไม่โชว์ COMPLETED/BLOCKED
     list = list.filter((p) => p.status !== "COMPLETED" && p.status !== "BLOCKED");
 
     if (typeFilter !== "ALL") list = list.filter((p) => p.type === typeFilter);
@@ -256,11 +250,19 @@ export default function ProjectsPage() {
   }, [items, typeFilter, q, memberMap]);
 
   const counts = useMemo(() => {
-    const base = { ALL: baseList.length, TODO: 0, IN_PROGRESS: 0 } as Record<"ALL" | "TODO" | "IN_PROGRESS", number>;
+    const base = {
+      ALL: baseList.length,
+      PRE_ORDER: 0,
+      TODO: 0,
+      IN_PROGRESS: 0,
+    } as Record<"ALL" | "PRE_ORDER" | "TODO" | "IN_PROGRESS", number>;
+
     for (const p of baseList) {
+      if (p.status === "PRE_ORDER") base.PRE_ORDER += 1;
       if (p.status === "TODO") base.TODO += 1;
       if (p.status === "IN_PROGRESS") base.IN_PROGRESS += 1;
     }
+
     return base;
   }, [baseList]);
 
@@ -322,8 +324,8 @@ export default function ProjectsPage() {
       variant === "edit"
         ? "border-[#e5ff78]/20 bg-[#e5ff78] text-black hover:opacity-90"
         : variant === "danger"
-        ? "border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/15"
-        : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10";
+          ? "border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/15"
+          : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10";
 
     return (
       <button
@@ -339,7 +341,6 @@ export default function ProjectsPage() {
 
   return (
     <div>
-      {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
@@ -370,10 +371,9 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
         <div className="flex flex-wrap gap-2">
-          {(["ALL", "TODO", "IN_PROGRESS"] as const).map((s) => {
+          {(["ALL", "PRE_ORDER", "TODO", "IN_PROGRESS"] as const).map((s) => {
             const active = statusFilter === s;
             return (
               <button
@@ -438,7 +438,7 @@ export default function ProjectsPage() {
                 <th className="p-4">ฝ่าย</th>
                 <th className="p-4">ผู้รับผิดชอบ</th>
                 <th className="p-4">สถานะ</th>
-                <th className="p-4">วันที่สั่ง</th>
+                <th className="p-4">วันที่เริ่มงาน</th>
                 <th className="p-4">Deadline</th>
                 <th className="p-4 text-right">จัดการ</th>
               </tr>
@@ -460,7 +460,6 @@ export default function ProjectsPage() {
                     <tr key={p.id} className="border-t border-white/10 hover:bg-white/[0.06]">
                       <td className="p-4">
                         <div className="flex items-center gap-2">
-                          {/* ✅ รหัสโปรเจกต์หน้าชื่อ */}
                           <CodeBadge code={code} />
 
                           <Link className="font-semibold text-white underline underline-offset-4" href={`/projects/${p.id}`}>
@@ -470,7 +469,6 @@ export default function ProjectsPage() {
                           {p.brand ? <Pill tone="neutral">{p.brand}</Pill> : null}
                         </div>
 
-                        {/* ✅ โชว์เนื้อหาเหมือนเดิม แต่ไม่โชว์หัวข้อ */}
                         {secondLine(p) ? <div className="mt-1 text-xs text-white/45">{secondLine(p)}</div> : null}
                       </td>
 
@@ -483,10 +481,10 @@ export default function ProjectsPage() {
                       </td>
 
                       <td className="p-4">
-                        <Pill tone={statusTone(p.status) as any}>{p.status}</Pill>
+                        <Pill tone={statusTone(p.status)}>{p.status}</Pill>
                       </td>
 
-                      <td className="p-4 text-white/60">{formatDateTH(p.created_at)}</td>
+                      <td className="p-4 text-white/60">{formatDateTH(p.start_date)}</td>
                       <td className="p-4 text-white/60">{formatDateTimeTH(p.due_date)}</td>
 
                       <td className="p-4">
@@ -514,19 +512,17 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* ✅ Create Modal */}
       <CreateProjectModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={async () => {
-          await loadProjects(); // ✅ เดิมเรียก fetchProjects() ซึ่งไม่มีอยู่
+          await loadProjects();
           await loadMembers();
           await loadMe();
         }}
         members={members}
       />
 
-      {/* ✅ Edit Modal */}
       {isLeader && editingProject && (
         <EditProjectModal
           open={editOpen}

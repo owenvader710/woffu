@@ -406,7 +406,7 @@ async function confirmBlockedModal() {
 
                 <button
                   type="button"
-                  onClick={closeBlockedModal}
+                  onClick={() => closeBlockedModal()}
                   className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white"
                 >
                   ✕
@@ -427,7 +427,7 @@ async function confirmBlockedModal() {
               <div className="mt-6 flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={closeBlockedModal}
+                  onClick={() => closeBlockedModal()}
                   disabled={blockedSubmitting}
                   className="rounded-2xl border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-extrabold text-white/80 transition hover:bg-white/10 disabled:opacity-50"
                 >

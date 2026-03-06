@@ -147,7 +147,7 @@ export default function StatusDropdown({ value, onChange }: Props) {
                     active
                       ? "bg-white text-black"
                       : "bg-white/5 text-white hover:bg-white/10",
-                    opt.disabled && "cursor-not-allowed opacity-40"
+                    opt.disabled && "cursor-not-allowed opacity100"
                   )}
                 >
                   <span>{opt.label}</span>

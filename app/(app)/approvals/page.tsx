@@ -71,7 +71,9 @@ function badgeClass(s: StatusRequest["request_status"]) {
   return "border-red-400/40 bg-red-400/10 text-red-200 shadow-[0_0_18px_rgba(239,68,68,0.18)]";
 }
 
-function normalizeDepartment(dep?: string | null): "VIDEO" | "GRAPHIC" | "ALL" | "UNKNOWN" {
+function normalizeDepartment(
+  dep?: string | null
+): "VIDEO" | "GRAPHIC" | "ALL" | "UNKNOWN" {
   if (dep === "VIDEO" || dep === "GRAPHIC" || dep === "ALL") return dep;
   return "UNKNOWN";
 }
@@ -149,7 +151,9 @@ function ApprovalCard({
           </div>
 
           <div className="mt-2 text-xs leading-6 text-white/55">
-            {item.assignee?.display_name ? `ผู้รับผิดชอบ ${item.assignee.display_name}` : "ยังไม่ระบุผู้รับผิดชอบ"}
+            {item.assignee?.display_name
+              ? `ผู้รับผิดชอบ ${item.assignee.display_name}`
+              : "ยังไม่ระบุผู้รับผิดชอบ"}
             {` · โดย ${item.requester?.display_name || "-"}`}
             {` · ${formatDateTimeTH(item.created_at)}`}
           </div>
@@ -252,48 +256,53 @@ export default function ApprovalsPage() {
 
   const filterOptions: DepartmentFilter[] = ["ALL", "VIDEO", "GRAPHIC", "HISTORY"];
 
+  const filterCount = (option: DepartmentFilter) => {
+    if (option === "HISTORY") return history.length;
+    if (option === "ALL") return pending.length;
+    return pending.filter(
+      (item) => normalizeDepartment(item.project?.department) === option
+    ).length;
+  };
+
   return (
     <div className="w-full bg-black text-white">
       <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-xs font-semibold tracking-[0.22em] text-white/45">WOFFU</div>
             <h1 className="mt-2 text-4xl font-extrabold tracking-tight text-white">Approvals</h1>
             <div className="mt-2 text-sm text-white/50">Pending: {pending.length}</div>
           </div>
 
-          <div className="flex flex-col items-start gap-3 lg:items-end">
-            <div>
-              <div className="mb-2 text-[11px] font-extrabold tracking-[0.22em] text-white/45">FILTER</div>
-              <div className="flex flex-wrap gap-2">
-                {filterOptions.map((option) => {
-                  const active = filter === option;
+          <button
+            onClick={loadAll}
+            disabled={loading}
+            className="w-fit rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 transition hover:bg-white/10 disabled:opacity-50"
+          >
+            รีเฟรช
+          </button>
+        </div>
 
-                  return (
-                    <button
-                      key={option}
-                      onClick={() => setFilter(option)}
-                      className={cn(
-                        "rounded-full border px-4 py-2 text-xs font-extrabold tracking-wide transition duration-200",
-                        active
-                          ? "border-cyan-300/40 bg-cyan-400/15 text-white shadow-[0_0_18px_rgba(34,211,238,0.26)]"
-                          : "border-white/10 bg-white/5 text-white/70 hover:border-white/20 hover:bg-white/10 hover:text-white"
-                      )}
-                    >
-                      {option}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+        <div className="mt-6 rounded-[28px] border border-white/10 bg-white/[0.03] p-3 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+          <div className="flex flex-wrap gap-2">
+            {filterOptions.map((option) => {
+              const active = filter === option;
 
-            <button
-              onClick={loadAll}
-              disabled={loading}
-              className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 transition hover:bg-white/10 disabled:opacity-50"
-            >
-              รีเฟรช
-            </button>
+              return (
+                <button
+                  key={option}
+                  onClick={() => setFilter(option)}
+                  className={cn(
+                    "rounded-full border px-4 py-3 text-sm font-extrabold tracking-wide transition duration-200",
+                    active
+                      ? "border-white/10 bg-white text-black shadow-[0_0_24px_rgba(255,255,255,0.14)]"
+                      : "border-white/10 bg-transparent text-white/80 hover:border-white/20 hover:bg-white/5 hover:text-white"
+                  )}
+                >
+                  {option} ({filterCount(option)})
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -323,45 +332,26 @@ export default function ApprovalsPage() {
             )}
           </div>
         ) : (
-          <div className="mt-6 grid gap-6 lg:grid-cols-2">
-            <div className="rounded-[30px] border border-white/10 bg-white/5 p-5">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-extrabold tracking-wide text-white/90">PENDING</div>
-                <div className="text-xs text-white/50">{filteredPending.length} รายการ</div>
-              </div>
-
-              {filteredPending.length === 0 ? (
-                <div className="mt-4 text-sm text-white/50">ไม่มีคำขอรออนุมัติ</div>
-              ) : (
-                <div className="mt-4 space-y-3">
-                  {filteredPending.map((r) => (
-                    <ApprovalCard
-                      key={r.id}
-                      item={r}
-                      onApprove={() => act(r.id, "approve")}
-                      onReject={() => act(r.id, "reject")}
-                    />
-                  ))}
-                </div>
-              )}
+          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-extrabold tracking-wide text-white/90">PENDING</div>
+              <div className="text-xs text-white/50">{filteredPending.length} รายการ</div>
             </div>
 
-            <div className="rounded-[30px] border border-white/10 bg-white/5 p-5">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-extrabold tracking-wide text-white/90">HISTORY</div>
-                <div className="text-xs text-white/50">ล่าสุด 20 รายการ</div>
+            {filteredPending.length === 0 ? (
+              <div className="mt-4 text-sm text-white/50">ไม่มีคำขอรออนุมัติ</div>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {filteredPending.map((r) => (
+                  <ApprovalCard
+                    key={r.id}
+                    item={r}
+                    onApprove={() => act(r.id, "approve")}
+                    onReject={() => act(r.id, "reject")}
+                  />
+                ))}
               </div>
-
-              {filteredHistory.length === 0 ? (
-                <div className="mt-4 text-sm text-white/50">ยังไม่มีประวัติ</div>
-              ) : (
-                <div className="mt-4 space-y-3">
-                  {filteredHistory.slice(0, 20).map((r) => (
-                    <ApprovalCard key={r.id} item={r} />
-                  ))}
-                </div>
-              )}
-            </div>
+            )}
           </div>
         )}
       </div>

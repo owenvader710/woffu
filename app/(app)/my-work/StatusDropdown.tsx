@@ -18,19 +18,6 @@ function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-const OPTIONS: Array<{
-  value: Status;
-  label: string;
-  disabled?: boolean;
-  note?: string;
-}> = [
-  { value: "PRE_ORDER", label: "PRE_ORDER", note: "AUTO" },
-  { value: "TODO", label: "TODO" },
-  { value: "IN_PROGRESS", label: "IN_PROGRESS" },
-  { value: "COMPLETED", label: "COMPLETED" },
-  { value: "BLOCKED", label: "BLOCKED" },
-];
-
 export default function StatusDropdown({ value, onChange }: Props) {
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
@@ -38,9 +25,36 @@ export default function StatusDropdown({ value, onChange }: Props) {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
+  const options = useMemo(() => {
+    return [
+      {
+        value: "PRE_ORDER" as Status,
+        label: "PRE_ORDER",
+        note: "AUTO",
+        disabled: true,
+      },
+      {
+        value: "TODO" as Status,
+        label: "TODO",
+      },
+      {
+        value: "IN_PROGRESS" as Status,
+        label: "IN_PROGRESS",
+      },
+      {
+        value: "COMPLETED" as Status,
+        label: "COMPLETED",
+      },
+      {
+        value: "BLOCKED" as Status,
+        label: "BLOCKED",
+      },
+    ];
+  }, []);
+
   const current = useMemo(
-    () => OPTIONS.find((x) => x.value === value) ?? OPTIONS[0],
-    [value]
+    () => options.find((x) => x.value === value) ?? options[0],
+    [options, value]
   );
 
   function updateMenuPosition() {
@@ -48,8 +62,9 @@ export default function StatusDropdown({ value, onChange }: Props) {
     if (!btn) return;
 
     const rect = btn.getBoundingClientRect();
-    const menuWidth = 220;
+    const menuWidth = 240;
     const gap = 8;
+    const estimatedHeight = 320;
 
     let left = rect.right - menuWidth;
     let top = rect.bottom + gap;
@@ -59,7 +74,6 @@ export default function StatusDropdown({ value, onChange }: Props) {
       left = window.innerWidth - menuWidth - 12;
     }
 
-    const estimatedHeight = 260;
     if (top + estimatedHeight > window.innerHeight - 12) {
       top = rect.top - estimatedHeight - gap;
     }
@@ -116,7 +130,7 @@ export default function StatusDropdown({ value, onChange }: Props) {
           ref={buttonRef}
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="inline-flex min-w-[170px] items-center justify-between rounded-[18px] border border-white/35 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0.04))] px-5 py-3 text-sm font-extrabold text-white shadow-[0_8px_24px_rgba(0,0,0,0.28)] transition hover:bg-white/10"
+          className="inline-flex min-w-[170px] items-center justify-between rounded-[18px] border border-white/35 bg-[linear-gradient(180deg,#3a3a3a,#202020)] px-5 py-3 text-sm font-extrabold text-white shadow-[0_8px_24px_rgba(0,0,0,0.28)] transition hover:brightness-110"
         >
           <span>{current.label}</span>
           <span className="ml-4 text-xs text-[#9eb3d1]">▼</span>
@@ -127,18 +141,20 @@ export default function StatusDropdown({ value, onChange }: Props) {
         <div
           ref={menuRef}
           style={menuStyle}
-          className="rounded-[20px] border border-white/10 bg-[#0a0a0a] p-3 shadow-[0_24px_80px_rgba(0,0,0,0.58)]"
+          className="rounded-[22px] border border-white/10 bg-[#0b0b0b] p-3 shadow-[0_24px_80px_rgba(0,0,0,0.60)]"
         >
           <div className="space-y-2">
-            {OPTIONS.map((opt) => {
+            {options.map((opt) => {
               const active = opt.value === value;
+              const disabled = !!opt.disabled;
 
               return (
                 <button
                   key={opt.value}
                   type="button"
-                  disabled={opt.disabled}
+                  disabled={disabled}
                   onClick={() => {
+                    if (disabled) return;
                     setOpen(false);
                     if (opt.value !== value) onChange(opt.value);
                   }}
@@ -146,13 +162,20 @@ export default function StatusDropdown({ value, onChange }: Props) {
                     "flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-extrabold transition",
                     active
                       ? "bg-white text-black"
-                      : "bg-white/5 text-white hover:bg-white/10",
-                    opt.disabled && "cursor-not-allowed opacity100"
+                      : disabled
+                        ? "bg-white/5 text-white/35"
+                        : "bg-[#171717] text-white hover:bg-[#222222]",
+                    disabled && "cursor-not-allowed"
                   )}
                 >
                   <span>{opt.label}</span>
                   {opt.note ? (
-                    <span className="ml-4 text-[11px] font-black tracking-widest text-white/35">
+                    <span
+                      className={cn(
+                        "ml-4 text-[11px] font-black tracking-widest",
+                        disabled ? "text-white/25" : "text-white/35"
+                      )}
+                    >
                       {opt.note}
                     </span>
                   ) : null}

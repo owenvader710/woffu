@@ -46,17 +46,25 @@ function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-type DbStatus = "TODO" | "IN_PROGRESS" | "DONE" | "BLOCKED" | "REVIEW";
+type DbStatus =
+  | "PRE_ORDER"
+  | "TODO"
+  | "IN_PROGRESS"
+  | "DONE"
+  | "BLOCKED"
+  | "REVIEW";
 
 function toDbStatus(s: Status): DbStatus {
   if (s === "COMPLETED") return "DONE";
   if (s === "BLOCKED") return "BLOCKED";
+  if (s === "PRE_ORDER") return "PRE_ORDER";
   return s as DbStatus;
 }
 
 function toUiStatus(s: any): Status {
   if (s === "DONE") return "COMPLETED";
   if (s === "BLOCKED") return "BLOCKED";
+  if (s === "PRE_ORDER") return "PRE_ORDER";
   return s as Status;
 }
 
@@ -93,13 +101,43 @@ function removePendingForProject(projectId: string) {
   writePendingStore(store);
 }
 
+function startOfToday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function shouldMovePreOrderToTodo(startDate?: string | null) {
+  if (!startDate) return false;
+  const start = new Date(startDate);
+  if (Number.isNaN(start.getTime())) return false;
+
+  start.setHours(0, 0, 0, 0);
+  return start.getTime() <= startOfToday().getTime();
+}
+
+async function autoActivatePreOrder(projectId: string) {
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/auto-activate`, {
+    method: "POST",
+  });
+
+  const text = await res.text();
+  const json = text ? JSON.parse(text) : null;
+
+  if (!res.ok) {
+    throw new Error((json && (json.error || json.message)) || "Auto activate failed");
+  }
+
+  return json;
+}
+
 function DeptPill({ dept }: { dept: WorkItem["department"] }) {
   const cls =
     dept === "VIDEO"
       ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
       : dept === "GRAPHIC"
-      ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
-      : "border-white/10 bg-white/5 text-white/70";
+        ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+        : "border-white/10 bg-white/5 text-white/70";
 
   return (
     <span className={cn("inline-flex items-center rounded-full border px-3 py-1 text-xs font-extrabold", cls)}>
@@ -109,8 +147,13 @@ function DeptPill({ dept }: { dept: WorkItem["department"] }) {
 }
 
 function StatusPill({ s }: { s: Status }) {
+  const tone =
+    s === "PRE_ORDER"
+      ? "border-violet-500/30 bg-violet-500/10 text-violet-200"
+      : "border-white/10 bg-white/5 text-white/85";
+
   return (
-    <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-extrabold text-white/85">
+    <span className={cn("inline-flex items-center rounded-full border px-3 py-1 text-xs font-extrabold", tone)}>
       {s}
     </span>
   );
@@ -157,7 +200,57 @@ function secondLine(w: WorkItem) {
 function uiLabelFromDb(db: string) {
   if (db === "DONE") return "COMPLETED";
   if (db === "BLOCKED") return "BLOCKED";
+  if (db === "PRE_ORDER") return "PRE_ORDER";
   return db;
+}
+
+function mergePendingState(
+  sourceItems: WorkItem[],
+  store: Record<string, PendingReq>
+): WorkItem[] {
+  const merged = sourceItems.map((x) => {
+    const apiPending = x.pending_request?.status === "PENDING" ? x.pending_request : null;
+
+    if (apiPending) {
+      setPendingForProject(x.id, apiPending);
+      return x;
+    }
+
+    const localPending = store[x.id];
+
+    if (localPending?.status === "PENDING") {
+      const targetUiStatus = toUiStatus(localPending.to_status);
+
+      if (x.status === targetUiStatus) {
+        removePendingForProject(x.id);
+        return { ...x, pending_request: null };
+      }
+
+      return { ...x, pending_request: localPending };
+    }
+
+    return { ...x, pending_request: null };
+  });
+
+  for (const pid of Object.keys(store)) {
+    const stillExists = merged.find((x) => x.id === pid);
+
+    if (!stillExists) {
+      removePendingForProject(pid);
+      continue;
+    }
+
+    const localPending = store[pid];
+    if (localPending?.status === "PENDING") {
+      const targetUiStatus = toUiStatus(localPending.to_status);
+
+      if (stillExists.status === targetUiStatus) {
+        removePendingForProject(pid);
+      }
+    }
+  }
+
+  return merged;
 }
 
 type BlockedModalState = {
@@ -177,7 +270,15 @@ export default function MyWorkPage() {
     window.setTimeout(() => setToast(null), 2500);
   }
 
-  const FILTERS = ["ALL", "TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"] as const;
+  const FILTERS = [
+    "ALL",
+    "PRE_ORDER",
+    "TODO",
+    "IN_PROGRESS",
+    "COMPLETED",
+    "BLOCKED",
+  ] as const;
+
   const [statusFilter, setStatusFilter] = useState<(typeof FILTERS)[number]>("ALL");
 
   const [blockedModal, setBlockedModal] = useState<BlockedModalState>({
@@ -210,49 +311,39 @@ export default function MyWorkPage() {
         pending_request: x.pending_request ?? null,
       })) as WorkItem[];
 
-      const store = readPendingStore();
+      const preOrderToActivate = normalized.filter(
+        (x) => x.status === "PRE_ORDER" && shouldMovePreOrderToTodo(x.start_date)
+      );
 
-      const merged = normalized.map((x) => {
-        const apiPending = x.pending_request?.status === "PENDING" ? x.pending_request : null;
+      if (preOrderToActivate.length > 0) {
+        await Promise.allSettled(preOrderToActivate.map((x) => autoActivatePreOrder(x.id)));
 
-        if (apiPending) {
-          setPendingForProject(x.id, apiPending);
-          return x;
-        }
+        const retry = await fetch("/api/my-work", { cache: "no-store" });
+        const retryJson = await safeJson(retry);
 
-        const localPending = store[x.id];
+        if (retry.ok) {
+          const retryArr = Array.isArray(retryJson?.data)
+            ? retryJson.data
+            : Array.isArray(retryJson)
+              ? retryJson
+              : [];
 
-        if (localPending?.status === "PENDING") {
-          const targetUiStatus = toUiStatus(localPending.to_status);
+          const retryNormalized = (retryArr as any[]).map((x) => ({
+            ...x,
+            status: toUiStatus(x.status),
+            pending_request: x.pending_request ?? null,
+          })) as WorkItem[];
 
-          if (x.status === targetUiStatus) {
-            removePendingForProject(x.id);
-            return { ...x, pending_request: null };
-          }
+          const retryStore = readPendingStore();
+          const retryMerged = mergePendingState(retryNormalized, retryStore);
 
-          return { ...x, pending_request: localPending };
-        }
-
-        return { ...x, pending_request: null };
-      });
-
-      for (const pid of Object.keys(store)) {
-        const stillExists = merged.find((x) => x.id === pid);
-
-        if (!stillExists) {
-          removePendingForProject(pid);
-          continue;
-        }
-
-        const localPending = store[pid];
-        if (localPending?.status === "PENDING") {
-          const targetUiStatus = toUiStatus(localPending.to_status);
-
-          if (stillExists.status === targetUiStatus) {
-            removePendingForProject(pid);
-          }
+          setItems(retryMerged);
+          return;
         }
       }
+
+      const store = readPendingStore();
+      const merged = mergePendingState(normalized, store);
 
       setItems(merged);
     } catch (e: any) {
@@ -400,6 +491,7 @@ export default function MyWorkPage() {
   const counts = useMemo(() => {
     const c: Record<string, number> = {
       ALL: items.length,
+      PRE_ORDER: 0,
       TODO: 0,
       IN_PROGRESS: 0,
       COMPLETED: 0,
@@ -524,9 +616,13 @@ export default function MyWorkPage() {
         </div>
 
         {loading ? (
-          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">กำลังโหลด...</div>
+          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">
+            กำลังโหลด...
+          </div>
         ) : err ? (
-          <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">{err}</div>
+          <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
+            {err}
+          </div>
         ) : (
           <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 overflow-visible">
             <div className="w-full overflow-x-auto overflow-y-visible">
@@ -561,7 +657,9 @@ export default function MyWorkPage() {
                                 {w.title || "-"}
                               </Link>
 
-                              {secondLine(w) ? <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div> : null}
+                              {secondLine(w) ? (
+                                <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div>
+                              ) : null}
 
                               {pending ? (
                                 <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-lime-400/20 bg-lime-400/10 px-4 py-1 text-xs font-extrabold text-lime-200">
@@ -581,17 +679,22 @@ export default function MyWorkPage() {
                           <StatusPill s={w.status} />
                         </td>
 
-                        <td className="px-6 py-5 text-center text-sm text-white/80">{fmtDeadline(w.due_date)}</td>
+                        <td className="px-6 py-5 text-center text-sm text-white/80">
+                          {fmtDeadline(w.due_date)}
+                        </td>
 
                         <td className="px-6 py-5 text-right">
                           <div className={cn(pending ? "opacity-60 pointer-events-none" : "")}>
                             <StatusDropdown
                               value={w.status}
                               onChange={(s) => {
+                                if (s === "PRE_ORDER") return;
+
                                 if (s === "BLOCKED") {
                                   openBlockedModal(w.id, w.title || "-");
                                   return;
                                 }
+
                                 requestStatusChange(w.id, s);
                               }}
                             />

@@ -4,7 +4,7 @@ import { createSupabaseServer } from "../_supabase";
 
 const SELECT_FIELDS = [
   "id",
-  "code", // ✅ เพิ่ม code
+  "code",
   "title",
   "type",
   "status",
@@ -21,16 +21,71 @@ const SELECT_FIELDS = [
   "created_by",
 ].join(",");
 
+function startOfToday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getInitialStatus(startDate?: string | null) {
+  if (!startDate) return "TODO";
+
+  const start = new Date(startDate);
+  if (Number.isNaN(start.getTime())) return "TODO";
+
+  start.setHours(0, 0, 0, 0);
+
+  return start.getTime() > startOfToday().getTime() ? "PRE_ORDER" : "TODO";
+}
+
+function shouldMovePreOrderToTodo(startDate?: string | null) {
+  if (!startDate) return false;
+
+  const start = new Date(startDate);
+  if (Number.isNaN(start.getTime())) return false;
+
+  start.setHours(0, 0, 0, 0);
+  return start.getTime() <= startOfToday().getTime();
+}
+
 export async function GET() {
   const supabase = await createSupabaseServer();
 
-  const { data, error } = await supabase
+  const { data: rawData, error } = await supabase
     .from("projects")
     .select(SELECT_FIELDS)
     .order("created_at", { ascending: false });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const data = Array.isArray(rawData) ? rawData : [];
+
+  const preOrderIdsToActivate = data
+    .filter((item) => item?.status === "PRE_ORDER" && shouldMovePreOrderToTodo(item?.start_date))
+    .map((item) => item.id)
+    .filter(Boolean);
+
+  if (preOrderIdsToActivate.length > 0) {
+    const { error: updateErr } = await supabase
+      .from("projects")
+      .update({ status: "TODO" })
+      .in("id", preOrderIdsToActivate)
+      .eq("status", "PRE_ORDER");
+
+    if (updateErr) {
+      return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    }
+
+    const refreshed = data.map((item) => {
+      if (preOrderIdsToActivate.includes(item.id) && item.status === "PRE_ORDER") {
+        return { ...item, status: "TODO" };
+      }
+      return item;
+    });
+
+    return NextResponse.json({ data: refreshed });
   }
 
   return NextResponse.json({ data });
@@ -48,23 +103,26 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
 
-  // ✅ กัน undefined/empty บาง field แล้วค่อยส่งเข้า DB
   const insertRow: Record<string, any> = {
     ...body,
     created_by: user.id,
   };
 
-  // ล้างค่า empty string บางตัวเพื่อไม่ให้ DB งอแง
   for (const k of Object.keys(insertRow)) {
     if (insertRow[k] === "") insertRow[k] = null;
   }
 
-  // ✅ ถ้า frontend ส่ง type มา แต่ไม่ส่ง department ให้ default = type
   if (!insertRow.department && (insertRow.type === "VIDEO" || insertRow.type === "GRAPHIC")) {
     insertRow.department = insertRow.type;
   }
 
-  const { data, error } = await supabase.from("projects").insert(insertRow).select(SELECT_FIELDS).single();
+  insertRow.status = getInitialStatus(insertRow.start_date);
+
+  const { data, error } = await supabase
+    .from("projects")
+    .insert(insertRow)
+    .select(SELECT_FIELDS)
+    .single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

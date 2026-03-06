@@ -152,11 +152,10 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
 
     setSubmitting(true);
     try {
-      const payload: any = {
-        type,
-        department: type,
-        status: "TODO",
-        title: title.trim(),
+const payload: any = {
+  type,
+  department: type,
+  title: title.trim(),
         code: code.trim() || null,
 
         product_group: productGroup || null,

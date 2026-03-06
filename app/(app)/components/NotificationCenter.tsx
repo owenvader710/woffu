@@ -2,15 +2,23 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { supabaseBrowser } from "@/utils/supabase/client";
 
 type AppNotification = {
   id: string;
+  user_id: string;
   type: string;
   title: string;
   message?: string | null;
   link?: string | null;
   is_read: boolean;
   created_at: string;
+};
+
+type MeProfile = {
+  id: string;
+  display_name?: string | null;
+  role?: string | null;
 };
 
 async function safeJson(res: Response) {
@@ -22,8 +30,15 @@ function formatDateTimeTH(iso?: string | null) {
   if (!iso) return "-";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "-";
-  const date = d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
-  const time = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+  const date = d.toLocaleDateString("th-TH", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+  const time = d.toLocaleTimeString("th-TH", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   return `${date} ${time}`;
 }
 
@@ -59,70 +74,61 @@ function playBeep() {
   }
 }
 
+function showDesktopNotification(n: AppNotification) {
+  try {
+    if (!("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+
+    const notice = new Notification(n.title, {
+      body: n.message || "",
+      tag: n.id,
+      silent: true,
+    });
+
+    notice.onclick = () => {
+      window.focus();
+      if (n.link) window.location.href = n.link;
+      notice.close();
+    };
+  } catch {
+    // ignore
+  }
+}
+
 export default function NotificationCenter() {
+  const [me, setMe] = useState<MeProfile | null>(null);
   const [items, setItems] = useState<AppNotification[]>([]);
   const [toasts, setToasts] = useState<AppNotification[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(false);
+  const [desktopPermission, setDesktopPermission] = useState<NotificationPermission | "unsupported">("default");
 
-  const lastSeenRef = useRef<string | null>(null);
   const initializedRef = useRef(false);
+  const channelRef = useRef<any>(null);
 
-  useEffect(() => {
-    const enable = () => setSoundEnabled(true);
-    window.addEventListener("click", enable, { once: true });
-    window.addEventListener("keydown", enable, { once: true });
-    return () => {
-      window.removeEventListener("click", enable);
-      window.removeEventListener("keydown", enable);
-    };
-  }, []);
-
-  async function loadInitial() {
-    const res = await fetch("/api/notifications?limit=20", { cache: "no-store" });
-    const json = await safeJson(res);
-    const rows = Array.isArray(json?.data) ? (json.data as AppNotification[]) : [];
-    setItems(rows);
-    setUnread(Number(json?.unread || 0));
-
-    if (rows.length > 0) {
-      lastSeenRef.current = rows[0].created_at;
+  async function loadMe() {
+    try {
+      const res = await fetch("/api/me-profile", { cache: "no-store" });
+      const json = await safeJson(res);
+      const data = (json?.data ?? json ?? null) as MeProfile | null;
+      setMe(data?.id ? data : null);
+    } catch {
+      setMe(null);
     }
-    initializedRef.current = true;
   }
 
-  async function pollNew() {
-    const since = lastSeenRef.current;
-    const url = since
-      ? `/api/notifications?since=${encodeURIComponent(since)}&limit=20`
-      : "/api/notifications?limit=20";
-
-    const res = await fetch(url, { cache: "no-store" });
-    const json = await safeJson(res);
-    const rows = Array.isArray(json?.data) ? (json.data as AppNotification[]) : [];
-
-    setUnread(Number(json?.unread || 0));
-
-    if (rows.length > 0) {
-      const sorted = [...rows].sort(
-        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      );
-
-      setItems((prev) => {
-        const map = new Map<string, AppNotification>();
-        [...sorted.reverse(), ...prev].forEach((x) => map.set(x.id, x));
-        return Array.from(map.values()).sort(
-          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-      });
-
-      if (initializedRef.current) {
-        setToasts((prev) => [...prev, ...sorted]);
-        if (soundEnabled) playBeep();
-      }
-
-      lastSeenRef.current = rows[0].created_at;
+  async function loadInitial() {
+    try {
+      const res = await fetch("/api/notifications?limit=20", { cache: "no-store" });
+      const json = await safeJson(res);
+      const rows = Array.isArray(json?.data) ? (json.data as AppNotification[]) : [];
+      setItems(rows);
+      setUnread(Number(json?.unread || 0));
+      initializedRef.current = true;
+    } catch {
+      setItems([]);
+      setUnread(0);
     }
   }
 
@@ -140,14 +146,102 @@ export default function NotificationCenter() {
     setUnread((prev) => Math.max(prev - 1, 0));
   }
 
-  useEffect(() => {
-    loadInitial();
-    const t = window.setInterval(() => {
-      pollNew();
-    }, 10000);
+  async function enableDesktopNotifications() {
+    try {
+      if (!("Notification" in window)) {
+        setDesktopPermission("unsupported");
+        return;
+      }
 
-    return () => window.clearInterval(t);
-  }, [soundEnabled]);
+      const result = await Notification.requestPermission();
+      setDesktopPermission(result);
+    } catch {
+      setDesktopPermission("denied");
+    }
+  }
+
+  function pushIncoming(n: AppNotification) {
+    setItems((prev) => {
+      const exists = prev.some((x) => x.id === n.id);
+      if (exists) return prev;
+      return [n, ...prev].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    });
+
+    setUnread((prev) => prev + (n.is_read ? 0 : 1));
+
+    if (initializedRef.current) {
+      setToasts((prev) => [...prev, n]);
+
+      if (soundEnabled) playBeep();
+
+      const pageHidden = document.visibilityState === "hidden";
+      if (pageHidden && desktopPermission === "granted") {
+        showDesktopNotification(n);
+      }
+    }
+  }
+
+  useEffect(() => {
+    loadMe();
+    loadInitial();
+  }, []);
+
+  useEffect(() => {
+    if (!("Notification" in window)) {
+      setDesktopPermission("unsupported");
+      return;
+    }
+    setDesktopPermission(Notification.permission);
+  }, []);
+
+  useEffect(() => {
+    const enable = () => setSoundEnabled(true);
+    window.addEventListener("click", enable, { once: true });
+    window.addEventListener("keydown", enable, { once: true });
+    return () => {
+      window.removeEventListener("click", enable);
+      window.removeEventListener("keydown", enable);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!me?.id) return;
+
+    const supabase = supabaseBrowser;
+
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
+    const channel = supabase
+      .channel(`notifications-user-${me.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${me.id}`,
+        },
+        (payload) => {
+          const row = payload.new as AppNotification;
+          pushIncoming(row);
+        }
+      )
+      .subscribe();
+
+    channelRef.current = channel;
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [me?.id, soundEnabled, desktopPermission]);
 
   useEffect(() => {
     if (toasts.length === 0) return;
@@ -157,7 +251,7 @@ export default function NotificationCenter() {
     return () => window.clearTimeout(timer);
   }, [toasts]);
 
-  const latestFive = useMemo(() => items.slice(0, 8), [items]);
+  const latestEight = useMemo(() => items.slice(0, 8), [items]);
 
   return (
     <>
@@ -189,13 +283,34 @@ export default function NotificationCenter() {
               </button>
             </div>
 
+            <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+              <div className="text-[11px] text-white/50">
+                realtime {me?.id ? "connected" : "waiting"}
+                {desktopPermission === "granted" ? " · desktop on" : ""}
+              </div>
+
+              {desktopPermission === "default" ? (
+                <button
+                  type="button"
+                  onClick={enableDesktopNotifications}
+                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white/80 hover:bg-white/10"
+                >
+                  เปิด desktop alert
+                </button>
+              ) : desktopPermission === "denied" ? (
+                <div className="text-[11px] text-red-300/70">desktop blocked</div>
+              ) : desktopPermission === "unsupported" ? (
+                <div className="text-[11px] text-white/35">unsupported</div>
+              ) : null}
+            </div>
+
             <div className="mt-3 space-y-2">
-              {latestFive.length === 0 ? (
+              {latestEight.length === 0 ? (
                 <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-white/45">
                   ยังไม่มีแจ้งเตือน
                 </div>
               ) : (
-                latestFive.map((n) => {
+                latestEight.map((n) => {
                   const body = (
                     <div
                       className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 transition hover:bg-white/10"

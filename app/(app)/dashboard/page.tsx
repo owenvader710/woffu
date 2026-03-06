@@ -1,4 +1,3 @@
-// app/(app)/dashboard/page.tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -171,7 +170,7 @@ function DashboardCard({
     >
       <div className="mb-4">
         <div className="text-xl font-extrabold tracking-tight text-white">{title}</div>
-        {desc ? <div className="mt-1 text-sm text-white/45">{desc}</div> : null}
+        {desc ? <div className="mt-1 text-sm leading-6 text-white/45">{desc}</div> : null}
       </div>
       {children}
     </section>
@@ -193,11 +192,11 @@ function SummaryStat({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-left transition hover:bg-white/10"
+      className="min-h-[116px] rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-left transition hover:bg-white/10"
     >
-      <div className="text-xs font-semibold tracking-widest text-white/45">{label}</div>
-      <div className="mt-2 text-3xl font-extrabold text-white">{value}</div>
-      {hint ? <div className="mt-1 text-xs text-white/45">{hint}</div> : null}
+      <div className="text-[11px] font-semibold tracking-widest text-white/45">{label}</div>
+      <div className="mt-3 text-3xl font-extrabold leading-none text-white">{value}</div>
+      <div className="mt-3 text-xs leading-5 text-white/45">{hint || "-"}</div>
     </button>
   );
 }
@@ -327,7 +326,7 @@ function StatusDonut({
   };
 
   return (
-    <div className="flex flex-col items-center gap-4 lg:flex-row lg:gap-6">
+    <div className="flex flex-col items-center gap-4 lg:flex-row lg:items-start lg:gap-6">
       <div className="relative h-44 w-44 shrink-0 rounded-full" style={style}>
         <div className="absolute inset-[18px] flex items-center justify-center rounded-full border border-white/10 bg-[#090909]">
           <div className="text-center">
@@ -447,24 +446,21 @@ export default function DashboardPage() {
     setError("");
 
     try {
-      const [meRes, projectsRes, membersRes, approvalsRes] = await Promise.all([
+      const [meRes, projectsRes, membersRes] = await Promise.all([
         fetch("/api/me-profile", { cache: "no-store" }),
         fetch("/api/projects", { cache: "no-store" }),
         fetch("/api/members", { cache: "no-store" }),
-        fetch("/api/approvals", { cache: "no-store" }),
       ]);
 
-      const [meJson, projectsJson, membersJson, approvalsJson] = await Promise.all([
+      const [meJson, projectsJson, membersJson] = await Promise.all([
         safeJson(meRes),
         safeJson(projectsRes),
         safeJson(membersRes),
-        safeJson(approvalsRes),
       ]);
 
       if (!meRes.ok) throw new Error((meJson && (meJson.error || meJson.message)) || "Load profile failed");
       if (!projectsRes.ok) throw new Error((projectsJson && (projectsJson.error || projectsJson.message)) || "Load projects failed");
       if (!membersRes.ok) throw new Error((membersJson && (membersJson.error || membersJson.message)) || "Load members failed");
-      if (!approvalsRes.ok) throw new Error((approvalsJson && (approvalsJson.error || approvalsJson.message)) || "Load approvals failed");
 
       const meData = (meJson?.data ?? meJson ?? null) as MeProfile | null;
       const projectData = Array.isArray(projectsJson?.data)
@@ -477,18 +473,39 @@ export default function DashboardPage() {
         : Array.isArray(membersJson)
           ? (membersJson as Member[])
           : [];
-      const approvalData = Array.isArray(approvalsJson?.data)
-        ? (approvalsJson.data as ApprovalItem[])
-        : Array.isArray(approvalsJson)
-          ? (approvalsJson as ApprovalItem[])
-          : approvalsJson?.data?.pending
-            ? (approvalsJson.data.pending as ApprovalItem[])
-            : [];
 
       setMe(meData);
       setProjects(projectData);
       setMembers(memberData.filter((m) => m.is_active !== false));
-      setApprovals(approvalData.filter((a) => a.request_status === "PENDING"));
+
+      const leaderLike = meData?.role === "LEADER" || meData?.role === "ADMIN";
+
+      if (leaderLike) {
+        try {
+          const approvalsRes = await fetch("/api/approvals", { cache: "no-store" });
+          const approvalsJson = await safeJson(approvalsRes);
+
+          if (approvalsRes.ok) {
+            const approvalData = Array.isArray(approvalsJson?.data)
+              ? (approvalsJson.data as ApprovalItem[])
+              : Array.isArray(approvalsJson)
+                ? (approvalsJson as ApprovalItem[])
+                : approvalsJson?.data?.pending
+                  ? (approvalsJson.data.pending as ApprovalItem[])
+                  : [];
+
+            setApprovals(approvalData.filter((a) => a.request_status === "PENDING"));
+          } else if (approvalsRes.status === 403) {
+            setApprovals([]);
+          } else {
+            throw new Error((approvalsJson && (approvalsJson.error || approvalsJson.message)) || "Load approvals failed");
+          }
+        } catch {
+          setApprovals([]);
+        }
+      } else {
+        setApprovals([]);
+      }
     } catch (e: any) {
       setError(e?.message || "Load dashboard failed");
     } finally {
@@ -636,7 +653,7 @@ export default function DashboardPage() {
             }}
           />
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
             <SummaryStat label="ALL ACTIVE" value={projectCounts.total} hint="งานที่ยังไม่ปิด" onClick={() => router.push("/projects")} />
             <SummaryStat label="PRE_ORDER" value={projectCounts.preOrder} hint="งานสั่งล่วงหน้า" onClick={() => router.push("/projects")} />
             <SummaryStat label="TODO" value={projectCounts.todo} hint="งานที่ต้องทำ" onClick={() => router.push("/projects")} />

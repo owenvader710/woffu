@@ -1,3 +1,4 @@
+// app/(app)/dashboard/page.tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -33,7 +34,7 @@ type Member = {
   id: string;
   display_name?: string | null;
   department?: "VIDEO" | "GRAPHIC" | "ALL" | string | null;
-  role?: "LEADER" | "MEMBER" | string | null;
+  role?: "LEADER" | "MEMBER" | "ADMIN" | string | null;
   is_active?: boolean;
 };
 
@@ -265,7 +266,15 @@ function ApprovalMiniList({
           </div>
 
           <div className="mt-2 flex items-center gap-2">
-            <Pill tone={item.project?.department === "VIDEO" ? "blue" : item.project?.department === "GRAPHIC" ? "amber" : "neutral"}>
+            <Pill
+              tone={
+                item.project?.department === "VIDEO"
+                  ? "blue"
+                  : item.project?.department === "GRAPHIC"
+                    ? "amber"
+                    : "neutral"
+              }
+            >
               {item.project?.department || "-"}
             </Pill>
             <Pill tone="violet">PENDING</Pill>
@@ -273,6 +282,152 @@ function ApprovalMiniList({
           </div>
         </Link>
       ))}
+    </div>
+  );
+}
+
+function StatusDonut({
+  total,
+  counts,
+}: {
+  total: number;
+  counts: {
+    preOrder: number;
+    todo: number;
+    inProgress: number;
+    blocked: number;
+    completed: number;
+  };
+}) {
+  const safeTotal = Math.max(
+    total,
+    counts.preOrder + counts.todo + counts.inProgress + counts.blocked + counts.completed,
+    1
+  );
+
+  const pre = (counts.preOrder / safeTotal) * 100;
+  const todo = (counts.todo / safeTotal) * 100;
+  const progress = (counts.inProgress / safeTotal) * 100;
+  const blocked = (counts.blocked / safeTotal) * 100;
+  const done = (counts.completed / safeTotal) * 100;
+
+  const s1 = pre;
+  const s2 = s1 + todo;
+  const s3 = s2 + progress;
+  const s4 = s3 + blocked;
+
+  const style = {
+    background: `conic-gradient(
+      rgb(167 139 250) 0% ${s1}%,
+      rgb(148 163 184) ${s1}% ${s2}%,
+      rgb(96 165 250) ${s2}% ${s3}%,
+      rgb(248 113 113) ${s3}% ${s4}%,
+      rgb(74 222 128) ${s4}% 100%
+    )`,
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-4 lg:flex-row lg:gap-6">
+      <div className="relative h-44 w-44 shrink-0 rounded-full" style={style}>
+        <div className="absolute inset-[18px] flex items-center justify-center rounded-full border border-white/10 bg-[#090909]">
+          <div className="text-center">
+            <div className="text-3xl font-extrabold text-white">{total}</div>
+            <div className="mt-1 text-xs tracking-widest text-white/45">TOTAL</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid w-full gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+          <div className="text-xs tracking-widest text-white/45">PRE_ORDER</div>
+          <div className="mt-2 flex items-center justify-between">
+            <Pill tone="violet">PRE_ORDER</Pill>
+            <div className="text-lg font-bold text-white">{counts.preOrder}</div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+          <div className="text-xs tracking-widest text-white/45">TODO</div>
+          <div className="mt-2 flex items-center justify-between">
+            <Pill tone="neutral">TODO</Pill>
+            <div className="text-lg font-bold text-white">{counts.todo}</div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+          <div className="text-xs tracking-widest text-white/45">IN_PROGRESS</div>
+          <div className="mt-2 flex items-center justify-between">
+            <Pill tone="blue">IN_PROGRESS</Pill>
+            <div className="text-lg font-bold text-white">{counts.inProgress}</div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+          <div className="text-xs tracking-widest text-white/45">BLOCKED</div>
+          <div className="mt-2 flex items-center justify-between">
+            <Pill tone="red">BLOCKED</Pill>
+            <div className="text-lg font-bold text-white">{counts.blocked}</div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 sm:col-span-2">
+          <div className="text-xs tracking-widest text-white/45">COMPLETED</div>
+          <div className="mt-2 flex items-center justify-between">
+            <Pill tone="green">COMPLETED</Pill>
+            <div className="text-lg font-bold text-white">{counts.completed}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WorkloadBars({
+  items,
+}: {
+  items: Array<{
+    id: string;
+    name: string;
+    department: string;
+    count: number;
+  }>;
+}) {
+  if (items.length === 0) {
+    return <div className="text-sm text-white/40">ยังไม่มีข้อมูล workload</div>;
+  }
+
+  const maxCount = Math.max(...items.map((x) => x.count), 1);
+
+  return (
+    <div className="space-y-3">
+      {items.map((w) => {
+        const width = `${Math.max((w.count / maxCount) * 100, w.count > 0 ? 8 : 0)}%`;
+
+        return (
+          <div
+            key={w.id}
+            className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3"
+          >
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate font-semibold text-white">{w.name}</div>
+                <div className="mt-1 text-xs text-white/45">{w.department}</div>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-sm font-bold text-white">
+                {w.count} งาน
+              </div>
+            </div>
+
+            <div className="h-2.5 rounded-full bg-white/5">
+              <div
+                className="h-2.5 rounded-full bg-[linear-gradient(90deg,#e5ff78,#a3e635)]"
+                style={{ width }}
+              />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -322,7 +477,6 @@ export default function DashboardPage() {
         : Array.isArray(membersJson)
           ? (membersJson as Member[])
           : [];
-
       const approvalData = Array.isArray(approvalsJson?.data)
         ? (approvalsJson.data as ApprovalItem[])
         : Array.isArray(approvalsJson)
@@ -360,7 +514,6 @@ export default function DashboardPage() {
     const inProgress = activeProjects.filter((p) => p.status === "IN_PROGRESS").length;
     const blocked = activeProjects.filter((p) => p.status === "BLOCKED").length;
     const completed = projects.filter((p) => p.status === "COMPLETED").length;
-
     const progressPercent = projects.length > 0 ? Math.round((completed / projects.length) * 100) : 0;
 
     return {
@@ -406,11 +559,10 @@ export default function DashboardPage() {
 
   const workload = useMemo(() => {
     return members
+      .filter((m) => m.role !== "LEADER" && m.role !== "ADMIN")
       .map((m) => {
         const count = projects.filter(
-          (p) =>
-            p.assignee_id === m.id &&
-            p.status !== "COMPLETED"
+          (p) => p.assignee_id === m.id && p.status !== "COMPLETED"
         ).length;
 
         return {
@@ -461,9 +613,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="mt-4 max-w-xl rounded-2xl border border-white/10 bg-white/5 px-5 py-4">
-        <div className="text-sm font-semibold text-white">
-          {me?.display_name || "-"}
-        </div>
+        <div className="text-sm font-semibold text-white">{me?.display_name || "-"}</div>
         <div className="mt-1 text-sm text-white/45">
           {isLeader ? "หัวหน้าทีม" : "สมาชิกทีม"} · {me?.department || "-"}
         </div>
@@ -474,13 +624,26 @@ export default function DashboardPage() {
         desc="จำนวนงานทั้งหมด จำนวนของแต่ละสถานะ และเปอร์เซ็นต์งานที่ทำเสร็จแล้ว"
         className="mt-6"
       >
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-          <SummaryStat label="ALL ACTIVE" value={projectCounts.total} hint="งานที่ยังไม่ปิด" onClick={() => router.push("/projects")} />
-          <SummaryStat label="PRE_ORDER" value={projectCounts.preOrder} hint="งานสั่งล่วงหน้า" onClick={() => router.push("/projects")} />
-          <SummaryStat label="TODO" value={projectCounts.todo} hint="งานที่ต้องทำ" onClick={() => router.push("/projects")} />
-          <SummaryStat label="IN_PROGRESS" value={projectCounts.inProgress} hint="งานที่กำลังทำ" onClick={() => router.push("/my-work")} />
-          <SummaryStat label="BLOCKED" value={projectCounts.blocked} hint="งานติดปัญหา" onClick={() => router.push("/blocked")} />
-          <SummaryStat label="DONE %" value={projectCounts.progressPercent} hint={`${projectCounts.completed} งานที่ปิดแล้ว`} onClick={() => router.push("/completed")} />
+        <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <StatusDonut
+            total={projects.length}
+            counts={{
+              preOrder: projectCounts.preOrder,
+              todo: projectCounts.todo,
+              inProgress: projectCounts.inProgress,
+              blocked: projectCounts.blocked,
+              completed: projectCounts.completed,
+            }}
+          />
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <SummaryStat label="ALL ACTIVE" value={projectCounts.total} hint="งานที่ยังไม่ปิด" onClick={() => router.push("/projects")} />
+            <SummaryStat label="PRE_ORDER" value={projectCounts.preOrder} hint="งานสั่งล่วงหน้า" onClick={() => router.push("/projects")} />
+            <SummaryStat label="TODO" value={projectCounts.todo} hint="งานที่ต้องทำ" onClick={() => router.push("/projects")} />
+            <SummaryStat label="IN_PROGRESS" value={projectCounts.inProgress} hint="งานที่กำลังทำ" onClick={() => router.push("/my-work")} />
+            <SummaryStat label="BLOCKED" value={projectCounts.blocked} hint="งานติดปัญหา" onClick={() => router.push("/blocked")} />
+            <SummaryStat label="DONE %" value={projectCounts.progressPercent} hint={`${projectCounts.completed} งานที่ปิดแล้ว`} onClick={() => router.push("/completed")} />
+          </div>
         </div>
       </DashboardCard>
 
@@ -560,31 +723,11 @@ export default function DashboardPage() {
 
           <DashboardCard
             title="Workload"
-            desc="ดูว่าใครกำลังถือจำนวนงานอยู่เท่าไร"
+            desc="ดูว่าใครกำลังถือจำนวนงานอยู่เท่าไร (ไม่รวมหัวหน้า)"
             onClick={() => router.push("/members")}
             className="xl:col-span-6"
           >
-            {workload.length === 0 ? (
-              <div className="text-sm text-white/40">ยังไม่มีข้อมูล workload</div>
-            ) : (
-              <div className="space-y-3">
-                {workload.map((w) => (
-                  <div
-                    key={w.id}
-                    className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-semibold text-white">{w.name}</div>
-                      <div className="mt-1 text-xs text-white/45">{w.department}</div>
-                    </div>
-
-                    <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-sm font-bold text-white">
-                      {w.count} งาน
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <WorkloadBars items={workload} />
           </DashboardCard>
 
           <DashboardCard

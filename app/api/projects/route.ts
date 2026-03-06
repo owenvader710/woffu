@@ -21,6 +21,25 @@ const SELECT_FIELDS = [
   "created_by",
 ].join(",");
 
+type ProjectRow = {
+  id: string;
+  code?: string | null;
+  title?: string | null;
+  type?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+  start_date?: string | null;
+  due_date?: string | null;
+  brand?: string | null;
+  video_priority?: string | null;
+  video_purpose?: string | null;
+  graphic_job_type?: string | null;
+  assignee_id?: string | null;
+  description?: string | null;
+  department?: string | null;
+  created_by?: string | null;
+};
+
 function startOfToday() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -60,10 +79,10 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const data = Array.isArray(rawData) ? rawData : [];
+  const data: ProjectRow[] = Array.isArray(rawData) ? (rawData as ProjectRow[]) : [];
 
   const preOrderIdsToActivate = data
-    .filter((item) => item?.status === "PRE_ORDER" && shouldMovePreOrderToTodo(item?.start_date))
+    .filter((item) => item.status === "PRE_ORDER" && shouldMovePreOrderToTodo(item.start_date))
     .map((item) => item.id)
     .filter(Boolean);
 
@@ -78,7 +97,7 @@ export async function GET() {
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
     }
 
-    const refreshed = data.map((item) => {
+    const refreshed: ProjectRow[] = data.map((item) => {
       if (preOrderIdsToActivate.includes(item.id) && item.status === "PRE_ORDER") {
         return { ...item, status: "TODO" };
       }

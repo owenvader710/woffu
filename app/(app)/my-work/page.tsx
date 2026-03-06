@@ -233,38 +233,48 @@ export default function MyWorkPage() {
     }
   }
 
-  async function requestStatusChange(projectId: string, nextUi: Status, blocked_reason?: string) {
-    const prev = items;
+async function requestStatusChange(
+  projectId: string,
+  nextUi: Status,
+  blocked_reason?: string
+): Promise<boolean> {
+  const prev = items;
 
-    const target = items.find((x) => x.id === projectId);
-    if (!target) return;
+  const target = items.find((x) => x.id === projectId);
+  if (!target) return false;
 
-    if (target.pending_request?.status === "PENDING") {
-      showToast("มีคำขอรออนุมัติอยู่แล้ว");
-      return;
-    }
+  if (target.pending_request?.status === "PENDING") {
+    showToast("มีคำขอรออนุมัติอยู่แล้ว");
+    return false;
+  }
 
-    const fromDb = toDbStatus(target.status);
-    const toDb = toDbStatus(nextUi);
+  const fromDb = toDbStatus(target.status);
+  const toDb = toDbStatus(nextUi);
 
-    if (nextUi === "BLOCKED" && !blocked_reason?.trim()) {
-      showToast("กรุณาระบุปัญหาของงานก่อน");
-      return;
-    }
+  if (nextUi === "BLOCKED" && !blocked_reason?.trim()) {
+    showToast("กรุณาระบุปัญหาของงานก่อน");
+    return false;
+  }
 
-    const optimisticPending: PendingReq = {
-      id: "temp",
-      from_status: fromDb,
-      to_status: toDb,
-      status: "PENDING",
-      created_at: new Date().toISOString(),
-    };
+  const optimisticPending: PendingReq = {
+    id: "temp",
+    from_status: fromDb,
+    to_status: toDb,
+    status: "PENDING",
+    created_at: new Date().toISOString(),
+  };
 
-    setItems((xs) => xs.map((x) => (x.id === projectId ? { ...x, pending_request: optimisticPending } : x)));
-    setPendingForProject(projectId, optimisticPending);
+  setItems((xs) =>
+    xs.map((x) =>
+      x.id === projectId ? { ...x, pending_request: optimisticPending } : x
+    )
+  );
+  setPendingForProject(projectId, optimisticPending);
 
-    try {
-      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/request-status`, {
+  try {
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/request-status`,
+      {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -272,39 +282,46 @@ export default function MyWorkPage() {
           to_status: toDb,
           blocked_reason: nextUi === "BLOCKED" ? blocked_reason?.trim() : null,
         }),
-      });
-
-      const j = await safeJson(res);
-
-      if (!res.ok) {
-        setItems(prev);
-        removePendingForProject(projectId);
-        const msg = (j && (j.error || j.message)) || "Update failed";
-        showToast(msg);
-        return;
       }
+    );
 
-      const reqRow = j?.request ?? null;
-      if (reqRow?.id) {
-        const saved: PendingReq = {
-          id: reqRow.id,
-          from_status: reqRow.from_status,
-          to_status: reqRow.to_status,
-          status: reqRow.status,
-          created_at: reqRow.created_at ?? null,
-        };
+    const j = await safeJson(res);
 
-        setItems((xs) => xs.map((x) => (x.id === projectId ? { ...x, pending_request: saved } : x)));
-        setPendingForProject(projectId, saved);
-      }
-
-      showToast("ส่งคำขอสำเร็จแล้ว");
-    } catch (e: any) {
+    if (!res.ok) {
       setItems(prev);
       removePendingForProject(projectId);
-      showToast(e?.message || "Update failed");
+      const msg = (j && (j.error || j.message)) || "Update failed";
+      showToast(msg);
+      return false;
     }
+
+    const reqRow = j?.request ?? null;
+    if (reqRow?.id) {
+      const saved: PendingReq = {
+        id: reqRow.id,
+        from_status: reqRow.from_status,
+        to_status: reqRow.to_status,
+        status: reqRow.status,
+        created_at: reqRow.created_at ?? null,
+      };
+
+      setItems((xs) =>
+        xs.map((x) =>
+          x.id === projectId ? { ...x, pending_request: saved } : x
+        )
+      );
+      setPendingForProject(projectId, saved);
+    }
+
+    showToast("ส่งคำขอสำเร็จแล้ว และกำลังรออนุมัติ");
+    return true;
+  } catch (e: any) {
+    setItems(prev);
+    removePendingForProject(projectId);
+    showToast(e?.message || "Update failed");
+    return false;
   }
+}
 
   function openBlockedModal(projectId: string, projectTitle: string) {
     setBlockedModal({
@@ -315,33 +332,36 @@ export default function MyWorkPage() {
     setBlockedNote("");
   }
 
-  function closeBlockedModal() {
-    if (blockedSubmitting) return;
-    setBlockedModal({
-      open: false,
-      projectId: "",
-      projectTitle: "",
-    });
-    setBlockedNote("");
+function closeBlockedModal(force = false) {
+  if (blockedSubmitting && !force) return;
+  setBlockedModal({
+    open: false,
+    projectId: "",
+    projectTitle: "",
+  });
+  setBlockedNote("");
+}
+
+async function confirmBlockedModal() {
+  if (!blockedModal.projectId) return;
+
+  const note = blockedNote.trim();
+  if (!note) {
+    showToast("กรุณาระบุปัญหาของงานก่อน");
+    return;
   }
 
-  async function confirmBlockedModal() {
-    if (!blockedModal.projectId) return;
+  try {
+    setBlockedSubmitting(true);
+    const ok = await requestStatusChange(blockedModal.projectId, "BLOCKED", note);
 
-    const note = blockedNote.trim();
-    if (!note) {
-      showToast("กรุณาระบุปัญหาของงานก่อน");
-      return;
+    if (ok) {
+      closeBlockedModal(true);
     }
-
-    try {
-      setBlockedSubmitting(true);
-      await requestStatusChange(blockedModal.projectId, "BLOCKED", note);
-      closeBlockedModal();
-    } finally {
-      setBlockedSubmitting(false);
-    }
+  } finally {
+    setBlockedSubmitting(false);
   }
+}
 
   useEffect(() => {
     load();

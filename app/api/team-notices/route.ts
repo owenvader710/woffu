@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
   const notices = Array.isArray(data) ? data : [];
   const creatorIds = [...new Set(notices.map((x) => x.created_by).filter(Boolean))];
 
-  let profileMap = new Map<string, { display_name: string | null; role: string | null }>();
+  const profileMap = new Map<string, { display_name: string | null; role: string | null }>();
 
   if (creatorIds.length > 0) {
     const { data: profiles } = await admin
@@ -118,27 +118,7 @@ export async function POST(req: NextRequest) {
     is_active: true,
     created_by: user.id,
   };
-const { data: profiles } = await admin
-  .from("profiles")
-  .select("id")
-  .eq("is_active", true);
 
-const targetUsers = (profiles || [])
-  .map((x) => x.id)
-  .filter((id) => id && id !== user.id);
-
-if (targetUsers.length > 0) {
-  await admin.from("notifications").insert(
-    targetUsers.map((uid) => ({
-      user_id: uid,
-      type: "TEAM_NOTICE",
-      title: "มีประกาศทีมใหม่",
-      message: title,
-      link: "/team-notices",
-      is_read: false,
-    }))
-  );
-}
   const { data, error } = await admin
     .from("team_notices")
     .insert(insertRow)
@@ -146,6 +126,32 @@ if (targetUsers.length > 0) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  try {
+    const { data: profiles } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("is_active", true);
+
+    const targetUsers = (profiles || [])
+      .map((x) => x.id)
+      .filter((id) => id && id !== user.id);
+
+    if (targetUsers.length > 0) {
+      await admin.from("notifications").insert(
+        targetUsers.map((uid) => ({
+          user_id: uid,
+          type: "TEAM_NOTICE",
+          title: "มีประกาศทีมใหม่",
+          message: title,
+          link: "/team-notices",
+          is_read: false,
+        }))
+      );
+    }
+  } catch {
+    // ไม่ให้ notification ทำให้การสร้างประกาศล้ม
+  }
 
   return NextResponse.json({ data }, { status: 201 });
 }

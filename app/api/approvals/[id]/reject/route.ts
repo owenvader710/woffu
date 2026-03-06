@@ -64,7 +64,7 @@ export async function POST(
     .from("status_change_requests")
     .update({
       request_status: "REJECTED",
-      approved_by: user.id,
+      rejected_by: user.id,
     })
     .eq("id", id);
 
@@ -72,32 +72,35 @@ export async function POST(
     return NextResponse.json({ error: updReqErr.message }, { status: 500 });
   }
 
-  const { error: logErr } = await admin.from("project_logs").insert({
-    project_id: reqRow.project_id,
-    actor_id: user.id,
-    action: "STATUS_REJECTED",
-    message: `Rejected status change: ${reqRow.from_status} -> ${reqRow.to_status}`,
-    detail: {
-      request_id: id,
-      from_status: reqRow.from_status,
-      to_status: reqRow.to_status,
-      requested_by: reqRow.requested_by,
-      reviewed_by: user.id,
-      result: "REJECTED",
-    },
-  });
+  try {
+    await admin.from("project_logs").insert({
+      project_id: reqRow.project_id,
+      created_by: user.id,
+      action: "STATUS_REJECTED",
+      detail: {
+        request_id: id,
+        from_status: reqRow.from_status,
+        to_status: reqRow.to_status,
+        requested_by: reqRow.requested_by,
+        reviewed_by: user.id,
+        result: "REJECTED",
+      },
+    });
+  } catch {
+    // ไม่ให้ log พลาดแล้วทำให้ reject ล้ม
+  }
 
-  await admin.from("notifications").insert({
-  user_id: reqRow.requested_by,
-  type: "JOB_STATUS_CHANGED",
-  title: "คำขอเปลี่ยนสถานะงานถูกปฏิเสธ",
-  message: `${reqRow.from_status} → ${reqRow.to_status}`,
-  link: "/my-work",
-  is_read: false,
-});
-
-  if (logErr) {
-    return NextResponse.json({ error: logErr.message }, { status: 500 });
+  try {
+    await admin.from("notifications").insert({
+      user_id: reqRow.requested_by,
+      type: "JOB_STATUS_CHANGED",
+      title: "คำขอเปลี่ยนสถานะงานถูกปฏิเสธ",
+      message: `${reqRow.from_status} → ${reqRow.to_status}`,
+      link: "/my-work",
+      is_read: false,
+    });
+  } catch {
+    // ไม่ให้ notification พลาดแล้วทำให้ reject ล้ม
   }
 
   return NextResponse.json({ ok: true });

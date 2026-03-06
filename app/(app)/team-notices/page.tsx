@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 
-type NoticeType = "GENERAL" | "LEAVE" | "MEETING" | "ISSUE" | "URGENT";
+type NoticeType = "ทั่วไป" | "ลางาน" | "ประชุม" | "ปัญหา" | "เร่งด่วน";
 
 type TeamNotice = {
   id: string;
@@ -47,16 +47,16 @@ function formatDateTimeTH(iso?: string | null) {
 }
 
 function NoticeTypePill({ type }: { type?: string | null }) {
-  const t = type || "GENERAL";
+  const t = type || "ทั่วไป";
 
   const cls =
-    t === "URGENT"
+    t === "เร่งด่วน"
       ? "border-red-500/30 bg-red-500/10 text-red-200"
-      : t === "MEETING"
+      : t === "ประชุม"
         ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
-        : t === "LEAVE"
+        : t === "ลางาน"
           ? "border-violet-500/30 bg-violet-500/10 text-violet-200"
-          : t === "ISSUE"
+          : t === "ปัญหา"
             ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
             : "border-white/10 bg-white/5 text-white/70";
 
@@ -76,7 +76,7 @@ export default function TeamNoticesPage() {
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [noticeType, setNoticeType] = useState<NoticeType>("GENERAL");
+  const [noticeType, setNoticeType] = useState<NoticeType>("ทั่วไป");
   const [isPinned, setIsPinned] = useState(false);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"ALL" | NoticeType>("ALL");
@@ -161,7 +161,7 @@ export default function TeamNoticesPage() {
 
       setTitle("");
       setContent("");
-      setNoticeType("GENERAL");
+      setNoticeType("ทั่วไป");
       setIsPinned(false);
       setAttachmentUrl(null);
       setAttachmentName(null);
@@ -264,12 +264,12 @@ export default function TeamNoticesPage() {
                 onChange={(e) => setFilterType(e.target.value as any)}
                 className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
               >
-                <option value="ALL">All messages</option>
-                <option value="GENERAL">GENERAL</option>
-                <option value="LEAVE">LEAVE</option>
-                <option value="MEETING">MEETING</option>
-                <option value="ISSUE">ISSUE</option>
-                <option value="URGENT">URGENT</option>
+                <option value="ALL">All</option>
+                <option value="ทั่วไป">ทั่วไป</option>
+                <option value="ลางาน">ลางาน</option>
+                <option value="ประชุม">ประชุม</option>
+                <option value="ปัญหา">ปัญหา</option>
+                <option value="เร่งด่วน">เร่งด่วน</option>
               </select>
             </div>
 
@@ -380,7 +380,7 @@ export default function TeamNoticesPage() {
               />
 
               <div className="flex flex-wrap gap-2">
-                {["GENERAL", "LEAVE", "MEETING", "ISSUE", "URGENT"].map((t) => {
+                {["ทั่วไป", "ลางาน", "ประชุม", "ปัญหา", "เร่งด่วน"].map((t) => {
                   const active = noticeType === t;
                   return (
                     <button
@@ -411,7 +411,7 @@ export default function TeamNoticesPage() {
                     }}
                   />
                   <span className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10">
-                    {uploading ? "กำลังอัปโหลด..." : "แนบรูปหรือไฟล์"}
+                    {uploading ? "กำลังอัปโหลด..." : "แนบรูปหรือไฟล์" + " (ไม่เกิน 5MB)"}
                   </span>
                 </label>
 

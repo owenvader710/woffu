@@ -402,80 +402,6 @@ function WorkloadBars({
   );
 }
 
-function TeamNoticeBoard() {
-  const [items, setItems] = useState<any[]>([]);
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-
-  async function load() {
-    const res = await fetch("/api/team-notices");
-    const json = await res.json();
-    setItems(json?.data ?? []);
-  }
-
-  async function send() {
-    if (!title.trim()) return;
-
-    await fetch("/api/team-notices", {
-      method: "POST",
-      body: JSON.stringify({
-        title,
-        content,
-      }),
-    });
-
-    setTitle("");
-    setContent("");
-    load();
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <div className="text-lg font-semibold text-white">ประกาศทีม</div>
-        <TeamNoticeBoard />
-
-      <div className="mt-3 space-y-2">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="หัวข้อประกาศ"
-          className="w-full rounded-lg bg-black/30 px-3 py-2 text-white"
-        />
-
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="รายละเอียด"
-          className="w-full rounded-lg bg-black/30 px-3 py-2 text-white"
-        />
-
-        <button
-          onClick={send}
-          className="rounded-lg bg-[#e5ff78] px-4 py-2 text-black font-semibold"
-        >
-          ส่งประกาศ
-        </button>
-      </div>
-
-      <div className="mt-4 space-y-3">
-        {items.map((n) => (
-          <div
-            key={n.id}
-            className="rounded-lg border border-white/10 p-3 text-sm"
-          >
-            <div className="font-semibold text-white">{n.title}</div>
-            <div className="text-white/70">{n.content}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function NoticeTypePill({ type }: { type?: string | null }) {
   const t = type || "GENERAL";
 
@@ -901,106 +827,97 @@ export default function DashboardPage() {
         </div>
       </div>
 
-<DashboardCard
-  title="ภาพรวมงาน"
-  desc="จำนวนงานทั้งหมด จำนวนของแต่ละสถานะ และเปอร์เซ็นต์งานที่ทำเสร็จแล้ว"
-  className="mt-6"
->
-  <div className="grid gap-8 lg:grid-cols-[260px_minmax(0,1fr)]">
+      <DashboardCard
+        title="ภาพรวมงาน"
+        desc="จำนวนงานทั้งหมด จำนวนของแต่ละสถานะ และเปอร์เซ็นต์งานที่ทำเสร็จแล้ว"
+        className="mt-6"
+      >
+        <div className="grid gap-8 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <div className="flex flex-col items-center">
+            <StatusDonut
+              total={projects.length}
+              counts={{
+                preOrder: projectCounts.preOrder,
+                todo: projectCounts.todo,
+                inProgress: projectCounts.inProgress,
+                blocked: projectCounts.blocked,
+                completed: projectCounts.completed,
+              }}
+            />
 
-    {/* donut */}
-    <div className="flex flex-col items-center">
+            <div className="mt-6 grid grid-cols-2 gap-2 text-xs text-white/70">
+              <div className="flex items-center gap-2">
+                <div className="h-3 w-3 rounded-full bg-violet-400" />
+                PRE_ORDER
+              </div>
 
-      <StatusDonut
-        total={projects.length}
-        counts={{
-          preOrder: projectCounts.preOrder,
-          todo: projectCounts.todo,
-          inProgress: projectCounts.inProgress,
-          blocked: projectCounts.blocked,
-          completed: projectCounts.completed,
-        }}
-      />
+              <div className="flex items-center gap-2">
+                <div className="h-3 w-3 rounded-full bg-gray-400" />
+                TODO
+              </div>
 
-      {/* legend */}
-      <div className="mt-6 grid grid-cols-2 gap-2 text-xs text-white/70">
+              <div className="flex items-center gap-2">
+                <div className="h-3 w-3 rounded-full bg-blue-400" />
+                IN_PROGRESS
+              </div>
 
-        <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full bg-violet-400"/>
-          PRE_ORDER
+              <div className="flex items-center gap-2">
+                <div className="h-3 w-3 rounded-full bg-red-400" />
+                BLOCKED
+              </div>
+
+              <div className="col-span-2 flex items-center gap-2">
+                <div className="h-3 w-3 rounded-full bg-green-400" />
+                COMPLETED
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <SummaryStat
+              label="ALL ACTIVE"
+              value={projectCounts.total}
+              hint="งานที่ยังไม่ปิด"
+              onClick={() => router.push("/projects")}
+            />
+
+            <SummaryStat
+              label="PRE_ORDER"
+              value={projectCounts.preOrder}
+              hint="งานสั่งล่วงหน้า"
+              onClick={() => router.push("/projects")}
+            />
+
+            <SummaryStat
+              label="TODO"
+              value={projectCounts.todo}
+              hint="งานที่ต้องทำ"
+              onClick={() => router.push("/projects")}
+            />
+
+            <SummaryStat
+              label="IN_PROGRESS"
+              value={projectCounts.inProgress}
+              hint="งานที่กำลังทำ"
+              onClick={() => router.push("/my-work")}
+            />
+
+            <SummaryStat
+              label="BLOCKED"
+              value={projectCounts.blocked}
+              hint="งานติดปัญหา"
+              onClick={() => router.push("/blocked")}
+            />
+
+            <SummaryStat
+              label="DONE %"
+              value={projectCounts.progressPercent}
+              hint={`${projectCounts.completed} งานที่ปิดแล้ว`}
+              onClick={() => router.push("/completed")}
+            />
+          </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full bg-gray-400"/>
-          TODO
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full bg-blue-400"/>
-          IN_PROGRESS
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full bg-red-400"/>
-          BLOCKED
-        </div>
-
-        <div className="flex items-center gap-2 col-span-2">
-          <div className="h-3 w-3 rounded-full bg-green-400"/>
-          COMPLETED
-        </div>
-
-      </div>
-    </div>
-
-    {/* stat cards */}
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-
-      <SummaryStat
-        label="ALL ACTIVE"
-        value={projectCounts.total}
-        hint="งานที่ยังไม่ปิด"
-        onClick={() => router.push("/projects")}
-      />
-
-      <SummaryStat
-        label="PRE_ORDER"
-        value={projectCounts.preOrder}
-        hint="งานสั่งล่วงหน้า"
-        onClick={() => router.push("/projects")}
-      />
-
-      <SummaryStat
-        label="TODO"
-        value={projectCounts.todo}
-        hint="งานที่ต้องทำ"
-        onClick={() => router.push("/projects")}
-      />
-
-      <SummaryStat
-        label="IN_PROGRESS"
-        value={projectCounts.inProgress}
-        hint="งานที่กำลังทำ"
-        onClick={() => router.push("/my-work")}
-      />
-
-      <SummaryStat
-        label="BLOCKED"
-        value={projectCounts.blocked}
-        hint="งานติดปัญหา"
-        onClick={() => router.push("/blocked")}
-      />
-
-      <SummaryStat
-        label="DONE %"
-        value={projectCounts.progressPercent}
-        hint={`${projectCounts.completed} งานที่ปิดแล้ว`}
-        onClick={() => router.push("/completed")}
-      />
-
-    </div>
-  </div>
-</DashboardCard>
+      </DashboardCard>
 
       {!isLeader ? (
         <div className="mt-6 grid gap-6 xl:grid-cols-2">
@@ -1026,13 +943,13 @@ export default function DashboardPage() {
             />
           </DashboardCard>
 
-<DashboardCard
-  title="ประกาศทีม"
-  desc="ใช้สำหรับแจ้งลา ประชุม ปัญหา และงานด่วนของทีม"
-  className="xl:col-span-12"
->
-  <TeamNoticeBoard isLeader={true} />
-</DashboardCard>
+          <DashboardCard
+            title="ประกาศทีม"
+            desc="ใช้สำหรับแจ้งลา ประชุม ปัญหา และงานด่วนของทีม"
+            className="xl:col-span-2"
+          >
+            <TeamNoticeBoard isLeader={false} />
+          </DashboardCard>
         </div>
       ) : (
         <div className="mt-6 grid gap-6 xl:grid-cols-12">
@@ -1083,14 +1000,10 @@ export default function DashboardPage() {
 
           <DashboardCard
             title="ประกาศทีม"
-            desc="พื้นที่สำหรับประกาศภายในทีม หรือใช้แทนโน้ตกลางได้ในช่วงแรก"
+            desc="ใช้สำหรับแจ้งลา ประชุม ปัญหา และงานด่วนของทีม"
             className="xl:col-span-12"
           >
-            <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-5 text-sm leading-7 text-white/50">
-              ตอนนี้ยังเป็นกล่อง placeholder อยู่ก่อน
-              <br />
-              ต่อไปค่อยเชื่อมกับ announcement / team notes / pinned message ได้
-            </div>
+            <TeamNoticeBoard isLeader={true} />
           </DashboardCard>
         </div>
       )}

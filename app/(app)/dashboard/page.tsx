@@ -64,6 +64,15 @@ type TeamNotice = {
   updated_at?: string | null;
 };
 
+type DashboardNotice = {
+  id: string;
+  title: string;
+  content?: string | null;
+  notice_type?: string | null;
+  is_pinned?: boolean | null;
+  created_at?: string | null;
+};
+
 async function safeJson(res: Response) {
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -423,15 +432,6 @@ function NoticeTypePill({ type }: { type?: string | null }) {
   );
 }
 
-type DashboardNotice = {
-  id: string;
-  title: string;
-  content?: string | null;
-  notice_type?: string | null;
-  is_pinned?: boolean | null;
-  created_at?: string | null;
-};
-
 function DashboardNoticePreview() {
   const [items, setItems] = useState<DashboardNotice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -489,169 +489,6 @@ function DashboardNoticePreview() {
         >
           ดูทั้งหมด
         </Link>
-      </div>
-    </div>
-  );
-}
-
-  async function submitNotice() {
-    if (!title.trim()) return;
-
-    setSubmitting(true);
-    setError("");
-
-    try {
-      const res = await fetch("/api/team-notices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim(),
-          content: content.trim(),
-          notice_type: noticeType,
-          is_pinned: isLeader ? isPinned : false,
-        }),
-      });
-
-      const json = await safeJson(res);
-
-      if (!res.ok) {
-        throw new Error((json && (json.error || json.message)) || "Create notice failed");
-      }
-
-      setTitle("");
-      setContent("");
-      setNoticeType("GENERAL");
-      setIsPinned(false);
-
-      await loadNotices();
-    } catch (e: any) {
-      setError(e?.message || "Create notice failed");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  useEffect(() => {
-    loadNotices();
-  }, []);
-
-  return (
-    <div className="space-y-4">
-      {/* รายการประกาศไว้ด้านบน */}
-      <div className="space-y-3">
-        {loading ? (
-          <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/50">
-            กำลังโหลดประกาศ...
-          </div>
-        ) : items.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/40">
-            ยังไม่มีประกาศทีม
-          </div>
-        ) : (
-          items.map((n) => (
-            <div
-              key={n.id}
-              className="rounded-2xl border border-white/10 bg-black/20 p-4"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <NoticeTypePill type={n.notice_type} />
-                {n.is_pinned ? <Pill tone="violet">PINNED</Pill> : null}
-                <span className="ml-auto text-xs text-white/40">
-                  {formatDateTimeTH(n.created_at)}
-                </span>
-              </div>
-
-              <div className="mt-3 font-semibold text-white">{n.title}</div>
-
-              {n.content ? (
-                <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/70">
-                  {n.content}
-                </div>
-              ) : null}
-
-              {n.attachment_url ? (
-                <a
-                  href={n.attachment_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-3 inline-flex rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80 hover:bg-white/10"
-                >
-                  เปิดไฟล์แนบ {n.attachment_name ? `: ${n.attachment_name}` : ""}
-                </a>
-              ) : null}
-            </div>
-          ))
-        )}
-      </div>
-
-      {/* ฟอร์มสร้างไว้ด้านล่าง */}
-      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-        <div className="grid gap-3">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="หัวข้อประกาศ"
-            className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
-          />
-
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="รายละเอียดประกาศ"
-            className="h-24 w-full resize-none rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
-          />
-
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex flex-wrap gap-2">
-              {["GENERAL", "LEAVE", "MEETING", "ISSUE", "URGENT"].map((t) => {
-                const active = noticeType === t;
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setNoticeType(t)}
-                    className={cn(
-                      "rounded-xl border px-3 py-2 text-xs font-semibold transition",
-                      active
-                        ? "border-white/10 bg-white text-black"
-                        : "border-white/10 bg-transparent text-white/70 hover:bg-white/10 hover:text-white"
-                    )}
-                  >
-                    {t}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="flex items-center gap-3">
-              {isLeader ? (
-                <label className="flex items-center gap-2 text-xs text-white/70">
-                  <input
-                    type="checkbox"
-                    checked={isPinned}
-                    onChange={(e) => setIsPinned(e.target.checked)}
-                  />
-                  ปักหมุด
-                </label>
-              ) : null}
-
-              <button
-                type="button"
-                onClick={submitNotice}
-                disabled={submitting || !title.trim()}
-                className="rounded-xl bg-[#e5ff78] px-4 py-2 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
-              >
-                {submitting ? "กำลังส่ง..." : "ส่งประกาศ"}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {error ? (
-          <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-            {error}
-          </div>
-        ) : null}
       </div>
     </div>
   );
@@ -983,7 +820,7 @@ export default function DashboardPage() {
             desc="ใช้สำหรับแจ้งลา ประชุม ปัญหา และงานด่วนของทีม"
             className="xl:col-span-2"
           >
-            <TeamNoticeBoard isLeader={false} />
+            <DashboardNoticePreview />
           </DashboardCard>
         </div>
       ) : (
@@ -1033,13 +870,13 @@ export default function DashboardPage() {
             <WorkloadBars items={workload} />
           </DashboardCard>
 
-<DashboardCard
-  title="ประกาศทีม"
-  desc="ใช้สำหรับแจ้งลา ประชุม ปัญหา และงานด่วนของทีม"
-  className="xl:col-span-12"
->
-  <DashboardNoticePreview />
-</DashboardCard>
+          <DashboardCard
+            title="ประกาศทีม"
+            desc="ใช้สำหรับแจ้งลา ประชุม ปัญหา และงานด่วนของทีม"
+            className="xl:col-span-12"
+          >
+            <DashboardNoticePreview />
+          </DashboardCard>
         </div>
       )}
     </div>

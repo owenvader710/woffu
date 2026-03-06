@@ -423,46 +423,76 @@ function NoticeTypePill({ type }: { type?: string | null }) {
   );
 }
 
-function TeamNoticeBoard({
-  isLeader,
-}: {
-  isLeader: boolean;
-}) {
-  const [items, setItems] = useState<TeamNotice[]>([]);
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [noticeType, setNoticeType] = useState("GENERAL");
-  const [isPinned, setIsPinned] = useState(false);
+type DashboardNotice = {
+  id: string;
+  title: string;
+  content?: string | null;
+  notice_type?: string | null;
+  is_pinned?: boolean | null;
+  created_at?: string | null;
+};
+
+function DashboardNoticePreview() {
+  const [items, setItems] = useState<DashboardNotice[]>([]);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
 
-  async function loadNotices() {
-    setLoading(true);
-    setError("");
-
-    try {
-      const res = await fetch("/api/team-notices", { cache: "no-store" });
-      const json = await safeJson(res);
-
-      if (!res.ok) {
-        throw new Error((json && (json.error || json.message)) || "Load notices failed");
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/team-notices?limit=5", { cache: "no-store" });
+        const json = await safeJson(res);
+        const rows = Array.isArray(json?.data) ? (json.data as DashboardNotice[]) : [];
+        setItems(rows);
+      } catch {
+        setItems([]);
+      } finally {
+        setLoading(false);
       }
+    })();
+  }, []);
 
-      const rows = Array.isArray(json?.data)
-        ? (json.data as TeamNotice[])
-        : Array.isArray(json)
-          ? (json as TeamNotice[])
-          : [];
-
-      setItems(rows);
-    } catch (e: any) {
-      setError(e?.message || "Load notices failed");
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
+  if (loading) {
+    return <div className="text-sm text-white/50">กำลังโหลดประกาศ...</div>;
   }
+
+  if (items.length === 0) {
+    return <div className="text-sm text-white/40">ยังไม่มีประกาศทีม</div>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {items.map((n) => (
+        <Link
+          key={n.id}
+          href="/team-notices"
+          className="block rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/10"
+        >
+          <div className="flex items-center gap-2">
+            <NoticeTypePill type={n.notice_type} />
+            {n.is_pinned ? <Pill tone="violet">PINNED</Pill> : null}
+            <span className="ml-auto text-xs text-white/40">{formatDateTimeTH(n.created_at)}</span>
+          </div>
+
+          <div className="mt-3 font-semibold text-white">{n.title}</div>
+          {n.content ? (
+            <div className="mt-2 line-clamp-2 text-sm leading-6 text-white/65">
+              {n.content}
+            </div>
+          ) : null}
+        </Link>
+      ))}
+
+      <div className="flex justify-end">
+        <Link
+          href="/team-notices"
+          className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
+        >
+          ดูทั้งหมด
+        </Link>
+      </div>
+    </div>
+  );
+}
 
   async function submitNotice() {
     if (!title.trim()) return;
@@ -1003,13 +1033,13 @@ export default function DashboardPage() {
             <WorkloadBars items={workload} />
           </DashboardCard>
 
-          <DashboardCard
-            title="ประกาศทีม"
-            desc="ใช้สำหรับแจ้งลา ประชุม ปัญหา และงานด่วนของทีม"
-            className="xl:col-span-12"
-          >
-            <TeamNoticeBoard isLeader={true} />
-          </DashboardCard>
+<DashboardCard
+  title="ประกาศทีม"
+  desc="ใช้สำหรับแจ้งลา ประชุม ปัญหา และงานด่วนของทีม"
+  className="xl:col-span-12"
+>
+  <DashboardNoticePreview />
+</DashboardCard>
         </div>
       )}
     </div>

@@ -17,6 +17,7 @@ type Project = {
   video_priority?: string | null;
   video_purpose?: string | null;
   graphic_job_type?: string | null;
+  blocked_reason?: string | null;
 };
 
 type Member = {
@@ -25,6 +26,16 @@ type Member = {
   department: "VIDEO" | "GRAPHIC" | "ALL";
   role: "LEADER" | "MEMBER";
   is_active: boolean;
+};
+
+type ProjectLog = {
+  id: string;
+  project_id: string;
+  action?: string | null;
+  message?: string | null;
+  meta?: any | null;
+  detail?: any | null;
+  created_at?: string | null;
 };
 
 async function safeJson(res: Response) {
@@ -72,10 +83,36 @@ function Pill({
       ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
       : "border-white/10 bg-white/5 text-white/70";
 
-  return <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs ${cls}`}>{children}</span>;
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs ${cls}`}>
+      {children}
+    </span>
+  );
 }
 
 export type ProjectListMode = "ACTIVE" | "COMPLETED" | "BLOCKED";
+
+function extractBlockedReason(logs: ProjectLog[]): string | null {
+  for (const log of logs) {
+    const metaReason =
+      typeof log?.meta?.blocked_reason === "string" ? log.meta.blocked_reason.trim() : "";
+    if (metaReason) return metaReason;
+
+    const detailReason =
+      typeof log?.detail?.blocked_reason === "string" ? log.detail.blocked_reason.trim() : "";
+    if (detailReason) return detailReason;
+
+    const msg = typeof log?.message === "string" ? log.message : "";
+    const marker = "blocked_reason:";
+    const idx = msg.toLowerCase().indexOf(marker);
+    if (idx >= 0) {
+      const text = msg.slice(idx + marker.length).trim();
+      if (text) return text;
+    }
+  }
+
+  return null;
+}
 
 export default function ProjectListView({
   title,
@@ -86,6 +123,7 @@ export default function ProjectListView({
 }) {
   const [items, setItems] = useState<Project[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [blockedReasons, setBlockedReasons] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
@@ -142,8 +180,49 @@ export default function ProjectListView({
     (async () => {
       await Promise.all([loadProjects(), loadMembers()]);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (mode !== "BLOCKED") return;
+
+    const blockedItems = items.filter((p) => p.status === "BLOCKED");
+    if (blockedItems.length === 0) {
+      setBlockedReasons({});
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      const entries = await Promise.all(
+        blockedItems.map(async (p) => {
+          try {
+            const res = await fetch(`/api/projects/${encodeURIComponent(p.id)}/logs`, {
+              cache: "no-store",
+            });
+            const json = await safeJson(res);
+            const logs = Array.isArray(json?.data) ? (json.data as ProjectLog[]) : [];
+            const reason = extractBlockedReason(logs);
+            return [p.id, reason || ""] as const;
+          } catch {
+            return [p.id, ""] as const;
+          }
+        })
+      );
+
+      if (cancelled) return;
+
+      const next: Record<string, string> = {};
+      for (const [id, reason] of entries) {
+        if (reason) next[id] = reason;
+      }
+      setBlockedReasons(next);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items, mode]);
 
   const filteredItems = useMemo(() => {
     let list = items;
@@ -156,19 +235,19 @@ export default function ProjectListView({
       const needle = q.trim().toLowerCase();
       list = list.filter((p) => {
         const assigneeName = p.assignee_id ? memberMap.get(p.assignee_id)?.display_name ?? "" : "";
+        const blockedReason = blockedReasons[p.id] ?? "";
         const hay = `${p.title ?? ""} ${p.brand ?? ""} ${p.video_priority ?? ""} ${p.video_purpose ?? ""} ${
           p.graphic_job_type ?? ""
-        } ${assigneeName}`.toLowerCase();
+        } ${assigneeName} ${blockedReason}`.toLowerCase();
         return hay.includes(needle);
       });
     }
 
     return list;
-  }, [items, q, memberMap, mode]);
+  }, [items, q, memberMap, mode, blockedReasons]);
 
   return (
     <div>
-      {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
@@ -189,12 +268,11 @@ export default function ProjectListView({
         </div>
       </div>
 
-      {/* Search */}
       <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="ค้นหา: ชื่อโปรเจกต์ / ผู้รับผิดชอบ / แบรนด์ / รูปแบบงาน / ประเภทงาน"
+          placeholder="ค้นหา: ชื่อโปรเจกต์ / ผู้รับผิดชอบ / แบรนด์ / รูปแบบงาน / ประเภทงาน / รายละเอียดปัญหา"
           className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78] md:w-[520px]"
         />
       </div>
@@ -231,14 +309,29 @@ export default function ProjectListView({
               ) : (
                 filteredItems.map((p) => {
                   const assigneeName = p.assignee_id ? memberMap.get(p.assignee_id)?.display_name ?? "-" : "-";
+                  const blockedReason = blockedReasons[p.id];
+
                   return (
                     <tr key={p.id} className="border-t border-white/10 hover:bg-white/[0.06]">
                       <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <Link className="font-semibold text-white underline underline-offset-4" href={`/projects/${p.id}`}>
-                            {p.title}
-                          </Link>
-                          {p.brand ? <Pill tone="neutral">{p.brand}</Pill> : null}
+                        <div className="flex items-start gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Link
+                                className="font-semibold text-white underline underline-offset-4"
+                                href={`/projects/${p.id}`}
+                              >
+                                {p.title}
+                              </Link>
+                              {p.brand ? <Pill tone="neutral">{p.brand}</Pill> : null}
+                            </div>
+
+                            {mode === "BLOCKED" && blockedReason ? (
+                              <div className="mt-2 max-w-[520px] rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-6 text-red-100">
+                                <span className="font-extrabold">รายละเอียดปัญหา:</span> {blockedReason}
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
                       </td>
 

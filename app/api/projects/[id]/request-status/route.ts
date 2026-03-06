@@ -48,9 +48,15 @@ export async function POST(
     const body = await req.json().catch(() => ({}));
     const from_status = body?.from_status;
     const to_status = body?.to_status;
+    const blocked_reason =
+      typeof body?.blocked_reason === "string" ? body.blocked_reason.trim() : "";
 
     if (!from_status || !to_status) {
       return NextResponse.json({ error: "Missing from_status/to_status" }, { status: 400 });
+    }
+
+    if (to_status === "CANCELLED" && !blocked_reason) {
+      return NextResponse.json({ error: "Missing blocked_reason" }, { status: 400 });
     }
 
     const { data: pending, error: pendErr } = await supabase
@@ -71,30 +77,63 @@ export async function POST(
       return applyCookies(res);
     }
 
-    const { error: insErr } = await supabase.from("status_change_requests").insert({
+    const insertPayload: Record<string, any> = {
       project_id: projectId,
       from_status,
       to_status,
       request_status: "PENDING",
       requested_by: user.id,
       created_at: new Date().toISOString(),
-    });
+    };
+
+    const { data: insertedReq, error: insErr } = await supabase
+      .from("status_change_requests")
+      .insert(insertPayload)
+      .select("id, project_id, from_status, to_status, request_status, created_at")
+      .single();
 
     if (insErr) return NextResponse.json({ error: insErr.message }, { status: 400 });
 
-    const { error: logErr } = await supabase.from("project_logs").insert({
+    const message =
+      to_status === "CANCELLED"
+        ? `Requested status change: ${from_status} -> ${to_status} | blocked_reason: ${blocked_reason}`
+        : `Requested status change: ${from_status} -> ${to_status}`;
+
+    const logPayload: Record<string, any> = {
       project_id: projectId,
       actor_id: user.id,
       action: "STATUS_REQUESTED",
-      message: `Requested status change: ${from_status} -> ${to_status}`,
-      meta: { from_status, to_status, mode: "REQUESTED" },
-    });
+      message,
+      meta: {
+        from_status,
+        to_status,
+        mode: "REQUESTED",
+        request_id: insertedReq.id,
+        ...(blocked_reason ? { blocked_reason } : {}),
+      },
+    };
+
+    const { error: logErr } = await supabase.from("project_logs").insert(logPayload);
 
     if (logErr) {
       return NextResponse.json({ error: `Log insert failed: ${logErr.message}` }, { status: 400 });
     }
 
-    const res = NextResponse.json({ ok: true, mode: "REQUESTED" }, { status: 200 });
+    const res = NextResponse.json(
+      {
+        ok: true,
+        mode: "REQUESTED",
+        request: {
+          id: insertedReq.id,
+          from_status: insertedReq.from_status,
+          to_status: insertedReq.to_status,
+          status: insertedReq.request_status,
+          created_at: insertedReq.created_at,
+        },
+      },
+      { status: 200 }
+    );
+
     return applyCookies(res);
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? "Internal error" }, { status: 500 });

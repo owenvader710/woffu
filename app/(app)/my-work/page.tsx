@@ -46,20 +46,20 @@ function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-/** ✅ เฉพาะหน้า My Work: UI <-> DB mapping */
 type DbStatus = "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED" | "REVIEW";
+
 function toDbStatus(s: Status): DbStatus {
   if (s === "COMPLETED") return "DONE";
   if (s === "BLOCKED") return "CANCELLED";
   return s as unknown as DbStatus;
 }
+
 function toUiStatus(s: any): Status {
   if (s === "DONE") return "COMPLETED";
   if (s === "CANCELLED") return "BLOCKED";
   return s as Status;
 }
 
-/** ✅ localStorage: กันรีเฟรชแล้ว pending หาย */
 const PENDING_KEY = "woffu_mywork_pending_v1";
 
 function readPendingStore(): Record<string, PendingReq> {
@@ -73,17 +73,20 @@ function readPendingStore(): Record<string, PendingReq> {
     return {};
   }
 }
+
 function writePendingStore(next: Record<string, PendingReq>) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(PENDING_KEY, JSON.stringify(next));
   } catch {}
 }
+
 function setPendingForProject(projectId: string, req: PendingReq) {
   const store = readPendingStore();
   store[projectId] = req;
   writePendingStore(store);
 }
+
 function removePendingForProject(projectId: string) {
   const store = readPendingStore();
   delete store[projectId];
@@ -97,6 +100,7 @@ function DeptPill({ dept }: { dept: WorkItem["department"] }) {
       : dept === "GRAPHIC"
       ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
       : "border-white/10 bg-white/5 text-white/70";
+
   return (
     <span className={cn("inline-flex items-center rounded-full border px-3 py-1 text-xs font-extrabold", cls)}>
       {dept}
@@ -148,21 +152,33 @@ function uiLabelFromDb(db: string) {
   return db;
 }
 
+type BlockedModalState = {
+  open: boolean;
+  projectId: string;
+  projectTitle: string;
+};
+
 export default function MyWorkPage() {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  // ✅ toast มุมขวาล่าง
   const [toast, setToast] = useState<string | null>(null);
   function showToast(msg: string) {
     setToast(msg);
     window.setTimeout(() => setToast(null), 2500);
   }
 
-  // ✅ เหลือแค่ 4 สถานะ + ALL
   const FILTERS = ["ALL", "TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"] as const;
   const [statusFilter, setStatusFilter] = useState<(typeof FILTERS)[number]>("ALL");
+
+  const [blockedModal, setBlockedModal] = useState<BlockedModalState>({
+    open: false,
+    projectId: "",
+    projectTitle: "",
+  });
+  const [blockedNote, setBlockedNote] = useState("");
+  const [blockedSubmitting, setBlockedSubmitting] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -180,26 +196,22 @@ export default function MyWorkPage() {
 
       const arr = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
 
-      // ✅ map DB -> UI + (ถ้า API ส่ง pending_request มา ก็รับด้วย)
       const normalized = (arr as any[]).map((x) => ({
         ...x,
         status: toUiStatus(x.status),
         pending_request: x.pending_request ?? null,
       })) as WorkItem[];
 
-      // ✅ merge pending จาก localStorage เพื่อกัน F5 แล้วหาย
       const store = readPendingStore();
 
       const merged = normalized.map((x) => {
         const apiPending = x.pending_request?.status === "PENDING" ? x.pending_request : null;
 
-        // ถ้า API มี pending -> sync ลง store
         if (apiPending) {
           setPendingForProject(x.id, apiPending);
           return x;
         }
 
-        // ถ้า API ไม่มี -> ใช้ store
         const localPending = store[x.id];
         if (localPending?.status === "PENDING") {
           return { ...x, pending_request: localPending };
@@ -208,7 +220,6 @@ export default function MyWorkPage() {
         return x;
       });
 
-      // cleanup: ถ้า store มี key ที่ไม่มีในรายการแล้ว ลบทิ้ง
       for (const pid of Object.keys(store)) {
         if (!merged.find((x) => x.id === pid)) removePendingForProject(pid);
       }
@@ -222,14 +233,12 @@ export default function MyWorkPage() {
     }
   }
 
-  // ✅ ส่งคำขอเปลี่ยนสถานะ -> request-status
-  async function requestStatusChange(projectId: string, nextUi: Status) {
+  async function requestStatusChange(projectId: string, nextUi: Status, blocked_reason?: string) {
     const prev = items;
 
     const target = items.find((x) => x.id === projectId);
     if (!target) return;
 
-    // ถ้ามี pending อยู่แล้ว ห้ามส่งซ้ำ
     if (target.pending_request?.status === "PENDING") {
       showToast("มีคำขอรออนุมัติอยู่แล้ว");
       return;
@@ -237,6 +246,11 @@ export default function MyWorkPage() {
 
     const fromDb = toDbStatus(target.status);
     const toDb = toDbStatus(nextUi);
+
+    if (nextUi === "BLOCKED" && !blocked_reason?.trim()) {
+      showToast("กรุณาระบุปัญหาของงานก่อน");
+      return;
+    }
 
     const optimisticPending: PendingReq = {
       id: "temp",
@@ -246,7 +260,6 @@ export default function MyWorkPage() {
       created_at: new Date().toISOString(),
     };
 
-    // optimistic: ใส่ pending_request ให้เห็นทันที + เก็บลง localStorage
     setItems((xs) => xs.map((x) => (x.id === projectId ? { ...x, pending_request: optimisticPending } : x)));
     setPendingForProject(projectId, optimisticPending);
 
@@ -257,6 +270,7 @@ export default function MyWorkPage() {
         body: JSON.stringify({
           from_status: fromDb,
           to_status: toDb,
+          blocked_reason: nextUi === "BLOCKED" ? blocked_reason?.trim() : null,
         }),
       });
 
@@ -270,7 +284,6 @@ export default function MyWorkPage() {
         return;
       }
 
-      // ถ้า API ส่ง request กลับมา ก็เอามาแทน temp + sync localStorage
       const reqRow = j?.request ?? null;
       if (reqRow?.id) {
         const saved: PendingReq = {
@@ -293,9 +306,45 @@ export default function MyWorkPage() {
     }
   }
 
+  function openBlockedModal(projectId: string, projectTitle: string) {
+    setBlockedModal({
+      open: true,
+      projectId,
+      projectTitle,
+    });
+    setBlockedNote("");
+  }
+
+  function closeBlockedModal() {
+    if (blockedSubmitting) return;
+    setBlockedModal({
+      open: false,
+      projectId: "",
+      projectTitle: "",
+    });
+    setBlockedNote("");
+  }
+
+  async function confirmBlockedModal() {
+    if (!blockedModal.projectId) return;
+
+    const note = blockedNote.trim();
+    if (!note) {
+      showToast("กรุณาระบุปัญหาของงานก่อน");
+      return;
+    }
+
+    try {
+      setBlockedSubmitting(true);
+      await requestStatusChange(blockedModal.projectId, "BLOCKED", note);
+      closeBlockedModal();
+    } finally {
+      setBlockedSubmitting(false);
+    }
+  }
+
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const counts = useMemo(() => {
@@ -312,7 +361,6 @@ export default function MyWorkPage() {
   return (
     <div className="w-full bg-black text-white">
       <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
-        {/* Toast */}
         {toast ? (
           <div className="fixed bottom-6 right-6 z-[99999]">
             <div className="rounded-2xl border border-white/10 bg-[#111] px-4 py-3 text-sm font-semibold text-white shadow-[0_30px_120px_rgba(0,0,0,0.7)]">
@@ -321,7 +369,64 @@ export default function MyWorkPage() {
           </div>
         ) : null}
 
-        {/* Header */}
+        {blockedModal.open ? (
+          <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-xl rounded-[28px] border border-red-500/20 bg-[#0b0b0b] p-6 shadow-[0_0_60px_rgba(239,68,68,0.12)]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-sm font-extrabold tracking-[0.18em] text-red-300/80">ALERT</div>
+                  <h2 className="mt-2 text-2xl font-extrabold text-white">แจ้งเตือนงานติดปัญหา</h2>
+                  <p className="mt-2 text-sm text-white/60">
+                    กรุณาระบุรายละเอียดของปัญหา เพื่อให้หัวหน้าทีมหรือผู้อนุมัติเห็นสาเหตุชัดเจน
+                  </p>
+                  {blockedModal.projectTitle ? (
+                    <div className="mt-3 text-sm text-white/45">งาน: {blockedModal.projectTitle}</div>
+                  ) : null}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={closeBlockedModal}
+                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mt-5">
+                <label className="mb-2 block text-sm font-bold text-white/80">กล่องข้อความสำหรับแจ้งปัญหา</label>
+                <textarea
+                  value={blockedNote}
+                  onChange={(e) => setBlockedNote(e.target.value)}
+                  rows={6}
+                  placeholder="เช่น รอไฟล์จากลูกค้า / อุปกรณ์มีปัญหา / ข้อมูลไม่ครบ / ต้องรอคอนเฟิร์มเพิ่มเติม"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-red-400/40 focus:bg-white/[0.07]"
+                />
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={closeBlockedModal}
+                  disabled={blockedSubmitting}
+                  className="rounded-2xl border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-extrabold text-white/80 transition hover:bg-white/10 disabled:opacity-50"
+                >
+                  ยกเลิก
+                </button>
+
+                <button
+                  type="button"
+                  onClick={confirmBlockedModal}
+                  disabled={blockedSubmitting}
+                  className="rounded-2xl border border-red-400/35 bg-red-500 px-5 py-2.5 text-sm font-extrabold text-white shadow-[0_0_18px_rgba(239,68,68,0.45),0_0_40px_rgba(239,68,68,0.20)] transition hover:scale-[1.02] hover:bg-red-400 disabled:opacity-50"
+                >
+                  {blockedSubmitting ? "กำลังส่ง..." : "ยืนยัน"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
@@ -338,7 +443,6 @@ export default function MyWorkPage() {
           </button>
         </div>
 
-        {/* Status Filter */}
         <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-4">
           <div className="flex flex-wrap items-center gap-2">
             {FILTERS.map((s) => {
@@ -403,7 +507,6 @@ export default function MyWorkPage() {
 
                               {secondLine(w) ? <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div> : null}
 
-                              {/* ✅ รออนุมัติ (ไม่หายหลัง F5 เพราะ merge จาก localStorage) */}
                               {pending ? (
                                 <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-lime-400/20 bg-lime-400/10 px-4 py-1 text-xs font-extrabold text-lime-200">
                                   <span className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_18px_rgba(163,230,53,0.9)]" />
@@ -426,7 +529,16 @@ export default function MyWorkPage() {
 
                         <td className="px-6 py-5 text-right">
                           <div className={cn(pending ? "opacity-60 pointer-events-none" : "")}>
-                            <StatusDropdown value={w.status} onChange={(s) => requestStatusChange(w.id, s)} />
+                            <StatusDropdown
+                              value={w.status}
+                              onChange={(s) => {
+                                if (s === "BLOCKED") {
+                                  openBlockedModal(w.id, w.title || "-");
+                                  return;
+                                }
+                                requestStatusChange(w.id, s);
+                              }}
+                            />
                           </div>
                         </td>
                       </tr>

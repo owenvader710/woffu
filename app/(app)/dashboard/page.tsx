@@ -1,282 +1,605 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+type MeProfile = {
+  id: string;
+  display_name?: string | null;
+  role?: "LEADER" | "MEMBER" | "ADMIN" | string | null;
+  department?: "VIDEO" | "GRAPHIC" | "ALL" | string | null;
+  is_active?: boolean | null;
+};
+
+type Project = {
+  id: string;
+  title: string;
+  code?: string | null;
+  type?: "VIDEO" | "GRAPHIC" | string | null;
+  department?: "VIDEO" | "GRAPHIC" | "ALL" | string | null;
+  status?: "PRE_ORDER" | "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED" | string | null;
+  created_at?: string | null;
+  start_date?: string | null;
+  due_date?: string | null;
+  brand?: string | null;
+  video_priority?: string | null;
+  video_purpose?: string | null;
+  graphic_job_type?: string | null;
+  assignee_id?: string | null;
+};
+
+type Member = {
+  id: string;
+  display_name?: string | null;
+  department?: "VIDEO" | "GRAPHIC" | "ALL" | string | null;
+  role?: "LEADER" | "MEMBER" | string | null;
+  is_active?: boolean;
+};
+
+type ApprovalItem = {
+  id: string;
+  project_id: string;
+  request_status: "PENDING" | "APPROVED" | "REJECTED";
+  created_at?: string | null;
+  project?: {
+    id?: string;
+    title?: string | null;
+    code?: string | null;
+    department?: "VIDEO" | "GRAPHIC" | "ALL" | string | null;
+  } | null;
+};
 
 async function safeJson(res: Response) {
-  const t = await res.text();
-  return t ? JSON.parse(t) : null;
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-export default function DashboardPage() {
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState("");
-
-  const [me, setMe] = useState<any>(null);
-  const [stats, setStats] = useState<any>({
-    myWorkCount: 0,
-    myProjectCount: 0,
-    approvalsCount: 0,
+function formatDateTH(iso?: string | null) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("th-TH", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
   });
+}
 
-  // ✅ badge บน Quick Actions
-  const approvalsRef = useRef<number>(0);
-  const [pendingNow, setPendingNow] = useState<number>(0);
+function formatDateTimeTH(iso?: string | null) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "-";
+  const date = d.toLocaleDateString("th-TH", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+  const time = d.toLocaleTimeString("th-TH", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${date} ${time}`;
+}
 
-  // ✅ รายการ pending ไว้โชว์ทางลัดอนุมัติ/ปฏิเสธ
-  const [pendingItems, setPendingItems] = useState<any[]>([]);
+function getProjectCode(p: Project | ApprovalItem["project"]) {
+  return p?.code ?? null;
+}
 
-  const isLeader = String(me?.role || "").toUpperCase() === "LEADER";
+function secondLine(p: Project) {
+  const parts = [
+    p.brand ? String(p.brand).toUpperCase() : null,
+    p.video_purpose ? String(p.video_purpose) : null,
+    p.graphic_job_type ? String(p.graphic_job_type) : null,
+    p.video_priority ? `PRIORITY: ${String(p.video_priority)}` : null,
+  ].filter(Boolean) as string[];
 
-  async function load() {
+  return parts.length ? parts.join(" · ") : "";
+}
+
+function statusTone(status?: string | null) {
+  if (status === "PRE_ORDER") return "violet";
+  if (status === "TODO") return "neutral";
+  if (status === "IN_PROGRESS") return "blue";
+  if (status === "BLOCKED") return "red";
+  if (status === "COMPLETED") return "green";
+  return "neutral";
+}
+
+function Pill({
+  children,
+  tone = "neutral",
+}: {
+  children: React.ReactNode;
+  tone?: "neutral" | "green" | "amber" | "red" | "blue" | "violet";
+}) {
+  const cls =
+    tone === "green"
+      ? "border-green-500/30 bg-green-500/10 text-green-200"
+      : tone === "amber"
+        ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+        : tone === "red"
+          ? "border-red-500/30 bg-red-500/10 text-red-200"
+          : tone === "blue"
+            ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
+            : tone === "violet"
+              ? "border-violet-500/30 bg-violet-500/10 text-violet-200"
+              : "border-white/10 bg-white/5 text-white/70";
+
+  return (
+    <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", cls)}>
+      {children}
+    </span>
+  );
+}
+
+function CodeBadge({ code }: { code?: string | null }) {
+  if (!code) return null;
+  return (
+    <span className="inline-flex items-center rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-[11px] font-semibold text-white/80">
+      {code}
+    </span>
+  );
+}
+
+function DashboardCard({
+  title,
+  desc,
+  children,
+  onClick,
+  className,
+}: {
+  title: string;
+  desc?: string;
+  children: React.ReactNode;
+  onClick?: () => void;
+  className?: string;
+}) {
+  return (
+    <section
+      onClick={onClick}
+      className={cn(
+        "rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-[0_10px_30px_rgba(0,0,0,0.18)]",
+        onClick && "cursor-pointer transition hover:bg-white/[0.07] hover:border-white/15",
+        className
+      )}
+    >
+      <div className="mb-4">
+        <div className="text-xl font-extrabold tracking-tight text-white">{title}</div>
+        {desc ? <div className="mt-1 text-sm text-white/45">{desc}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function SummaryStat({
+  label,
+  value,
+  hint,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  hint?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-left transition hover:bg-white/10"
+    >
+      <div className="text-xs font-semibold tracking-widest text-white/45">{label}</div>
+      <div className="mt-2 text-3xl font-extrabold text-white">{value}</div>
+      {hint ? <div className="mt-1 text-xs text-white/45">{hint}</div> : null}
+    </button>
+  );
+}
+
+function ProjectMiniList({
+  items,
+  emptyText,
+}: {
+  items: Project[];
+  emptyText: string;
+}) {
+  if (items.length === 0) {
+    return <div className="text-sm text-white/40">{emptyText}</div>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {items.map((p) => (
+        <Link
+          key={p.id}
+          href={`/projects/${p.id}`}
+          className="block rounded-2xl border border-white/10 bg-black/20 px-4 py-3 transition hover:bg-white/10"
+        >
+          <div className="flex items-center gap-2">
+            <CodeBadge code={getProjectCode(p)} />
+            <div className="truncate font-semibold text-white">{p.title || "-"}</div>
+          </div>
+
+          {secondLine(p) ? (
+            <div className="mt-1 truncate text-xs text-white/45">{secondLine(p)}</div>
+          ) : null}
+
+          <div className="mt-2 flex items-center gap-2">
+            <Pill tone={p.type === "VIDEO" ? "blue" : "amber"}>{p.type || "-"}</Pill>
+            <Pill tone={statusTone(p.status)}>{p.status || "-"}</Pill>
+            <span className="ml-auto text-xs text-white/40">{formatDateTH(p.start_date || p.created_at)}</span>
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function ApprovalMiniList({
+  items,
+  emptyText,
+}: {
+  items: ApprovalItem[];
+  emptyText: string;
+}) {
+  if (items.length === 0) {
+    return <div className="text-sm text-white/40">{emptyText}</div>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {items.map((item) => (
+        <Link
+          key={item.id}
+          href="/approvals"
+          className="block rounded-2xl border border-white/10 bg-black/20 px-4 py-3 transition hover:bg-white/10"
+        >
+          <div className="flex items-center gap-2">
+            <CodeBadge code={getProjectCode(item.project)} />
+            <div className="truncate font-semibold text-white">{item.project?.title || "-"}</div>
+          </div>
+
+          <div className="mt-2 flex items-center gap-2">
+            <Pill tone={item.project?.department === "VIDEO" ? "blue" : item.project?.department === "GRAPHIC" ? "amber" : "neutral"}>
+              {item.project?.department || "-"}
+            </Pill>
+            <Pill tone="violet">PENDING</Pill>
+            <span className="ml-auto text-xs text-white/40">{formatDateTimeTH(item.created_at)}</span>
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  const router = useRouter();
+
+  const [me, setMe] = useState<MeProfile | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function loadAll() {
     setLoading(true);
-    setErr("");
-    try {
-      const r = await fetch("/api/dashboard", { cache: "no-store" });
-      const j = await safeJson(r);
-      if (!r.ok) {
-        setErr((j && (j.error || j.message)) || `Load failed (${r.status})`);
-        return;
-      }
-      setMe(j?.me || null);
-      setStats(j?.stats || stats);
+    setError("");
 
-      // ให้ badge เริ่มต้นตรงกับ server (กันกะพริบ)
-      const initial = Number(j?.stats?.approvalsCount || 0);
-      approvalsRef.current = initial;
-      setPendingNow(initial);
+    try {
+      const [meRes, projectsRes, membersRes, approvalsRes] = await Promise.all([
+        fetch("/api/me-profile", { cache: "no-store" }),
+        fetch("/api/projects", { cache: "no-store" }),
+        fetch("/api/members", { cache: "no-store" }),
+        fetch("/api/approvals", { cache: "no-store" }),
+      ]);
+
+      const [meJson, projectsJson, membersJson, approvalsJson] = await Promise.all([
+        safeJson(meRes),
+        safeJson(projectsRes),
+        safeJson(membersRes),
+        safeJson(approvalsRes),
+      ]);
+
+      if (!meRes.ok) throw new Error((meJson && (meJson.error || meJson.message)) || "Load profile failed");
+      if (!projectsRes.ok) throw new Error((projectsJson && (projectsJson.error || projectsJson.message)) || "Load projects failed");
+      if (!membersRes.ok) throw new Error((membersJson && (membersJson.error || membersJson.message)) || "Load members failed");
+      if (!approvalsRes.ok) throw new Error((approvalsJson && (approvalsJson.error || approvalsJson.message)) || "Load approvals failed");
+
+      const meData = (meJson?.data ?? meJson ?? null) as MeProfile | null;
+      const projectData = Array.isArray(projectsJson?.data)
+        ? (projectsJson.data as Project[])
+        : Array.isArray(projectsJson)
+          ? (projectsJson as Project[])
+          : [];
+      const memberData = Array.isArray(membersJson?.data)
+        ? (membersJson.data as Member[])
+        : Array.isArray(membersJson)
+          ? (membersJson as Member[])
+          : [];
+
+      const approvalData = Array.isArray(approvalsJson?.data)
+        ? (approvalsJson.data as ApprovalItem[])
+        : Array.isArray(approvalsJson)
+          ? (approvalsJson as ApprovalItem[])
+          : approvalsJson?.data?.pending
+            ? (approvalsJson.data.pending as ApprovalItem[])
+            : [];
+
+      setMe(meData);
+      setProjects(projectData);
+      setMembers(memberData.filter((m) => m.is_active !== false));
+      setApprovals(approvalData.filter((a) => a.request_status === "PENDING"));
     } catch (e: any) {
-      setErr(e?.message || "Load failed");
+      setError(e?.message || "Load dashboard failed");
     } finally {
       setLoading(false);
     }
   }
 
-  // ✅ poll “pending approvals” ให้หัวหน้า (อ่านให้ถูก: { pending, history })
-  async function pollApprovals() {
-    try {
-      const res = await fetch("/api/approvals", { cache: "no-store" });
-      const json = await safeJson(res);
-      if (!res.ok) return;
-
-      const pendingOnly = Array.isArray(json?.pending) ? json.pending : [];
-      setPendingItems(pendingOnly);
-
-      const nextCount = pendingOnly.length;
-
-      if (approvalsRef.current !== nextCount) {
-        approvalsRef.current = nextCount;
-        setPendingNow(nextCount);
-      }
-    } catch {}
-  }
-
-  async function approveReq(id: string) {
-    const res = await fetch(`/api/approvals/${encodeURIComponent(id)}/approve`, { method: "POST" });
-    const j = await safeJson(res);
-    if (!res.ok) throw new Error((j && (j.error || j.message)) || "Approve failed");
-  }
-
-  async function rejectReq(id: string) {
-    const res = await fetch(`/api/approvals/${encodeURIComponent(id)}/reject`, { method: "POST" });
-    const j = await safeJson(res);
-    if (!res.ok) throw new Error((j && (j.error || j.message)) || "Reject failed");
-  }
-
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadAll();
   }, []);
 
-  useEffect(() => {
-    if (!isLeader) return;
+  const isLeader = me?.role === "LEADER" || me?.role === "ADMIN";
 
-    pollApprovals();
-    const t = setInterval(() => pollApprovals(), 8000);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLeader]);
+  const activeProjects = useMemo(
+    () => projects.filter((p) => p.status !== "COMPLETED"),
+    [projects]
+  );
+
+  const projectCounts = useMemo(() => {
+    const total = activeProjects.length;
+    const preOrder = activeProjects.filter((p) => p.status === "PRE_ORDER").length;
+    const todo = activeProjects.filter((p) => p.status === "TODO").length;
+    const inProgress = activeProjects.filter((p) => p.status === "IN_PROGRESS").length;
+    const blocked = activeProjects.filter((p) => p.status === "BLOCKED").length;
+    const completed = projects.filter((p) => p.status === "COMPLETED").length;
+
+    const progressPercent = projects.length > 0 ? Math.round((completed / projects.length) * 100) : 0;
+
+    return {
+      total,
+      preOrder,
+      todo,
+      inProgress,
+      blocked,
+      completed,
+      progressPercent,
+    };
+  }, [projects, activeProjects]);
+
+  const myIncompleteLatest = useMemo(() => {
+    if (!me?.id) return [];
+    return projects
+      .filter((p) => p.assignee_id === me.id && p.status !== "COMPLETED" && p.status !== "BLOCKED")
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+      .slice(0, isLeader ? 0 : 3);
+  }, [projects, me?.id, isLeader]);
+
+  const queuePreOrder = useMemo(() => {
+    if (!me?.id) return [];
+    return projects
+      .filter((p) => p.assignee_id === me.id && p.status === "PRE_ORDER")
+      .sort((a, b) => new Date(a.start_date || 0).getTime() - new Date(b.start_date || 0).getTime())
+      .slice(0, isLeader ? 0 : 5);
+  }, [projects, me?.id, isLeader]);
+
+  const latestGraphic = useMemo(() => {
+    return projects
+      .filter((p) => p.type === "GRAPHIC" && p.status !== "COMPLETED")
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+      .slice(0, 5);
+  }, [projects]);
+
+  const latestVideo = useMemo(() => {
+    return projects
+      .filter((p) => p.type === "VIDEO" && p.status !== "COMPLETED")
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+      .slice(0, 5);
+  }, [projects]);
+
+  const workload = useMemo(() => {
+    return members
+      .map((m) => {
+        const count = projects.filter(
+          (p) =>
+            p.assignee_id === m.id &&
+            p.status !== "COMPLETED"
+        ).length;
+
+        return {
+          id: m.id,
+          name: m.display_name || m.id,
+          department: m.department || "ALL",
+          count,
+        };
+      })
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "th"))
+      .slice(0, 8);
+  }, [members, projects]);
+
+  if (loading) {
+    return (
+      <div className="px-6 py-8 lg:px-10">
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-6 text-white/60">
+          กำลังโหลด Dashboard...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="px-6 py-8 lg:px-10">
+        <div className="rounded-3xl border border-red-500/30 bg-red-500/10 p-6 text-red-200">
+          {error}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full bg-black text-white">
-      <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
-            <h1 className="mt-2 text-4xl font-extrabold tracking-tight">Dashboard</h1>
-            <div className="mt-2 text-sm text-white/50">
-              {me?.name ? `สวัสดี, ${me.name}` : "สวัสดี"}
-            </div>
-          </div>
-
-          <button
-            onClick={load}
-            disabled={loading}
-            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50"
-          >
-            รีเฟรช
-          </button>
+    <div className="px-6 py-8 lg:px-10">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
+          <h1 className="mt-2 text-4xl font-extrabold tracking-tight text-white">Dashboard</h1>
         </div>
 
-        {loading ? (
-          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">
-            กำลังโหลด...
-          </div>
-        ) : err ? (
-          <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
-            {err}
-          </div>
-        ) : (
-          <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {/* QUICK ACTIONS */}
-            <div className="rounded-[30px] border border-white/10 bg-white/5 p-6">
-              <div className="text-xs font-semibold tracking-widest text-white/50">QUICK ACTIONS</div>
-
-              <div className="mt-4 space-y-3">
-                <Link
-                  href="/projects"
-                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-4 hover:bg-white/[0.04]"
-                >
-                  <div>
-                    <div className="text-sm font-extrabold">อัปเดตงาน</div>
-                    <div className="text-xs text-white/50">ไปหน้า Projects</div>
-                  </div>
-                  <div className="text-white/40">›</div>
-                </Link>
-
-                <Link
-                  href="/my-work"
-                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-4 hover:bg-white/[0.04]"
-                >
-                  <div>
-                    <div className="text-sm font-extrabold">ไปที่งานของฉัน</div>
-                    <div className="text-xs text-white/50">My Work</div>
-                  </div>
-                  <div className="text-white/40">›</div>
-                </Link>
-
-                {isLeader ? (
-                  <Link
-                    href="/approvals"
-                    className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-4 hover:bg-white/[0.04]"
-                  >
-                    <div>
-                      <div className="text-sm font-extrabold">ไปหน้า Approvals</div>
-                      <div className="text-xs text-white/50">รออนุมัติ</div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold",
-                          pendingNow > 0 ? "bg-[#D7FF2F]/90 text-black" : "bg-white/10 text-white/70"
-                        )}
-                      >
-                        {pendingNow}
-                      </span>
-                      <div className="text-white/40">›</div>
-                    </div>
-                  </Link>
-                ) : null}
-
-                <Link
-                  href="/create"
-                  className="flex items-center justify-between rounded-2xl bg-[#D7FF2F] p-4 text-black hover:opacity-95"
-                >
-                  <div>
-                    <div className="text-sm font-extrabold">สั่งงานใหม่</div>
-                    <div className="text-xs opacity-80">Create Project</div>
-                  </div>
-                  <div className="opacity-70">›</div>
-                </Link>
-              </div>
-            </div>
-
-            {/* ACTIVITY LOGS (ใส่ทางลัดอนุมัติ/ปฏิเสธให้หัวหน้า) */}
-            <div className="rounded-[30px] border border-white/10 bg-white/5 p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="text-xs font-semibold tracking-widest text-white/50">ACTIVITY LOGS</div>
-
-                {isLeader ? (
-                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-1.5">
-                    <div className="text-xs font-semibold text-white/70">Approvals</div>
-                    <span
-                      className={cn(
-                        "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-2 text-xs font-extrabold",
-                        pendingNow > 0 ? "bg-[#D7FF2F]/90 text-black" : "bg-white/10 text-white/70"
-                      )}
-                    >
-                      {pendingNow}
-                    </span>
-                  </div>
-                ) : null}
-              </div>
-
-              {isLeader && pendingItems.length > 0 ? (
-                <div className="space-y-3">
-                  {pendingItems.slice(0, 3).map((x: any) => (
-                    <div key={x.id} className="rounded-3xl border border-white/10 bg-black/30 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-extrabold text-white">
-                            {(x?.project?.code ? `${x.project.code} ` : "") + (x?.project?.title || "-")}
-                          </div>
-                          <div className="mt-1 text-xs text-white/55">
-                            ขอเปลี่ยนสถานะ: <span className="font-bold text-white/80">{x.from_status}</span> →{" "}
-                            <span className="font-bold text-white/80">{x.to_status}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex shrink-0 items-center gap-2">
-                          <button
-                            onClick={async () => {
-                              try {
-                                await approveReq(x.id);
-                                await pollApprovals();
-                              } catch (e: any) {
-                                alert(e?.message || "Approve failed");
-                              }
-                            }}
-                            className="rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-xs font-extrabold text-white hover:bg-white/15"
-                          >
-                            อนุมัติ
-                          </button>
-                          <button
-                            onClick={async () => {
-                              try {
-                                await rejectReq(x.id);
-                                await pollApprovals();
-                              } catch (e: any) {
-                                alert(e?.message || "Reject failed");
-                              }
-                            }}
-                            className="rounded-2xl border border-white/10 bg-transparent px-3 py-2 text-xs font-extrabold text-white/80 hover:bg-white/10 hover:text-white"
-                          >
-                            ปฏิเสธ
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-
-                  <Link href="/approvals" className="inline-flex text-xs font-semibold text-white/70 hover:text-white">
-                    ไปหน้า Approvals →
-                  </Link>
-                </div>
-              ) : (
-                <div className="rounded-3xl border border-white/10 bg-black/30 p-6 text-center text-sm text-white/45">
-                  ยังไม่มีความเคลื่อนไหวล่าสุด
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        <button
+          onClick={loadAll}
+          className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
+        >
+          รีเฟรช
+        </button>
       </div>
+
+      <div className="mt-4 max-w-xl rounded-2xl border border-white/10 bg-white/5 px-5 py-4">
+        <div className="text-sm font-semibold text-white">
+          {me?.display_name || "-"}
+        </div>
+        <div className="mt-1 text-sm text-white/45">
+          {isLeader ? "หัวหน้าทีม" : "สมาชิกทีม"} · {me?.department || "-"}
+        </div>
+      </div>
+
+      <DashboardCard
+        title="ภาพรวมงาน"
+        desc="จำนวนงานทั้งหมด จำนวนของแต่ละสถานะ และเปอร์เซ็นต์งานที่ทำเสร็จแล้ว"
+        className="mt-6"
+      >
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <SummaryStat label="ALL ACTIVE" value={projectCounts.total} hint="งานที่ยังไม่ปิด" onClick={() => router.push("/projects")} />
+          <SummaryStat label="PRE_ORDER" value={projectCounts.preOrder} hint="งานสั่งล่วงหน้า" onClick={() => router.push("/projects")} />
+          <SummaryStat label="TODO" value={projectCounts.todo} hint="งานที่ต้องทำ" onClick={() => router.push("/projects")} />
+          <SummaryStat label="IN_PROGRESS" value={projectCounts.inProgress} hint="งานที่กำลังทำ" onClick={() => router.push("/my-work")} />
+          <SummaryStat label="BLOCKED" value={projectCounts.blocked} hint="งานติดปัญหา" onClick={() => router.push("/blocked")} />
+          <SummaryStat label="DONE %" value={projectCounts.progressPercent} hint={`${projectCounts.completed} งานที่ปิดแล้ว`} onClick={() => router.push("/completed")} />
+        </div>
+      </DashboardCard>
+
+      {!isLeader ? (
+        <div className="mt-6 grid gap-6 xl:grid-cols-2">
+          <DashboardCard
+            title="โปรเจกต์ล่าสุดของฉัน"
+            desc="รายการงานล่าสุดที่ยังไม่ปิด และกดเพื่อไปหน้า my work"
+            onClick={() => router.push("/my-work")}
+          >
+            <ProjectMiniList
+              items={myIncompleteLatest}
+              emptyText="ยังไม่มีงานล่าสุดในตอนนี้"
+            />
+          </DashboardCard>
+
+          <DashboardCard
+            title="งานรอต่อคิว"
+            desc="ดึงจากงานที่มีสถานะ PRE_ORDER ของคุณ"
+            onClick={() => router.push("/my-work")}
+          >
+            <ProjectMiniList
+              items={queuePreOrder}
+              emptyText="ยังไม่มีงานที่สั่งล่วงหน้า"
+            />
+          </DashboardCard>
+
+          <DashboardCard
+            title="ประกาศทีม"
+            desc="พื้นที่สำหรับประกาศภายในทีม หรือใช้แทนโน้ตกลางได้ในช่วงแรก"
+            className="xl:col-span-2"
+          >
+            <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-5 text-sm leading-7 text-white/50">
+              ตอนนี้ยังเป็นกล่อง placeholder อยู่ก่อน
+              <br />
+              ต่อไปค่อยเชื่อมกับ announcement / team notes / pinned message ได้
+            </div>
+          </DashboardCard>
+        </div>
+      ) : (
+        <div className="mt-6 grid gap-6 xl:grid-cols-12">
+          <DashboardCard
+            title="โปรเจกต์ล่าสุดของกราฟิก"
+            desc="5 รายการล่าสุดที่ยังไม่ปิด"
+            onClick={() => router.push("/projects")}
+            className="xl:col-span-6"
+          >
+            <ProjectMiniList
+              items={latestGraphic}
+              emptyText="ยังไม่มีโปรเจกต์กราฟิก"
+            />
+          </DashboardCard>
+
+          <DashboardCard
+            title="รออนุมัติ"
+            desc="คำขอเปลี่ยนสถานะที่กำลังรอหัวหน้าอนุมัติ"
+            onClick={() => router.push("/approvals")}
+            className="xl:col-span-6"
+          >
+            <ApprovalMiniList
+              items={approvals.slice(0, 5)}
+              emptyText="ไม่มีรายการรออนุมัติ"
+            />
+          </DashboardCard>
+
+          <DashboardCard
+            title="โปรเจกต์ล่าสุดของวิดีโอ"
+            desc="5 รายการล่าสุดที่ยังไม่ปิด"
+            onClick={() => router.push("/projects")}
+            className="xl:col-span-6"
+          >
+            <ProjectMiniList
+              items={latestVideo}
+              emptyText="ยังไม่มีโปรเจกต์วิดีโอ"
+            />
+          </DashboardCard>
+
+          <DashboardCard
+            title="Workload"
+            desc="ดูว่าใครกำลังถือจำนวนงานอยู่เท่าไร"
+            onClick={() => router.push("/members")}
+            className="xl:col-span-6"
+          >
+            {workload.length === 0 ? (
+              <div className="text-sm text-white/40">ยังไม่มีข้อมูล workload</div>
+            ) : (
+              <div className="space-y-3">
+                {workload.map((w) => (
+                  <div
+                    key={w.id}
+                    className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold text-white">{w.name}</div>
+                      <div className="mt-1 text-xs text-white/45">{w.department}</div>
+                    </div>
+
+                    <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-sm font-bold text-white">
+                      {w.count} งาน
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </DashboardCard>
+
+          <DashboardCard
+            title="ประกาศทีม"
+            desc="พื้นที่สำหรับประกาศภายในทีม หรือใช้แทนโน้ตกลางได้ในช่วงแรก"
+            className="xl:col-span-12"
+          >
+            <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-5 text-sm leading-7 text-white/50">
+              ตอนนี้ยังเป็นกล่อง placeholder อยู่ก่อน
+              <br />
+              ต่อไปค่อยเชื่อมกับ announcement / team notes / pinned message ได้
+            </div>
+          </DashboardCard>
+        </div>
+      )}
     </div>
   );
 }

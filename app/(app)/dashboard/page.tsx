@@ -50,20 +50,6 @@ type ApprovalItem = {
   } | null;
 };
 
-type TeamNotice = {
-  id: string;
-  title: string;
-  content?: string | null;
-  notice_type?: string | null;
-  attachment_url?: string | null;
-  attachment_name?: string | null;
-  is_pinned?: boolean | null;
-  is_active?: boolean | null;
-  created_by?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-};
-
 type DashboardNotice = {
   id: string;
   title: string;
@@ -266,9 +252,15 @@ function ProjectMiniList({
 function ApprovalMiniList({
   items,
   emptyText,
+  onApprove,
+  onReject,
+  submittingId,
 }: {
   items: ApprovalItem[];
   emptyText: string;
+  onApprove: (id: string) => void | Promise<void>;
+  onReject: (id: string) => void | Promise<void>;
+  submittingId?: string | null;
 }) {
   if (items.length === 0) {
     return <div className="text-sm text-white/40">{emptyText}</div>;
@@ -276,34 +268,80 @@ function ApprovalMiniList({
 
   return (
     <div className="space-y-3">
-      {items.map((item) => (
-        <Link
-          key={item.id}
-          href="/approvals"
-          className="block rounded-2xl border border-white/10 bg-black/20 px-4 py-3 transition hover:bg-white/10"
-        >
-          <div className="flex items-center gap-2">
-            <CodeBadge code={getProjectCode(item.project)} />
-            <div className="truncate font-semibold text-white">{item.project?.title || "-"}</div>
-          </div>
+      {items.map((item) => {
+        const busy = submittingId === item.id;
 
-          <div className="mt-2 flex items-center gap-2">
-            <Pill
-              tone={
-                item.project?.department === "VIDEO"
-                  ? "blue"
-                  : item.project?.department === "GRAPHIC"
-                    ? "amber"
-                    : "neutral"
-              }
-            >
-              {item.project?.department || "-"}
-            </Pill>
-            <Pill tone="violet">PENDING</Pill>
-            <span className="ml-auto text-xs text-white/40">{formatDateTimeTH(item.created_at)}</span>
+        return (
+          <div
+            key={item.id}
+            className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3"
+          >
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <Link
+                  href="/approvals"
+                  className="block transition hover:opacity-90"
+                >
+                  <div className="flex items-center gap-2">
+                    <CodeBadge code={getProjectCode(item.project)} />
+                    <div className="truncate font-semibold text-white">
+                      {item.project?.title || "-"}
+                    </div>
+                  </div>
+
+                  <div className="mt-2 flex items-center gap-2">
+                    <Pill
+                      tone={
+                        item.project?.department === "VIDEO"
+                          ? "blue"
+                          : item.project?.department === "GRAPHIC"
+                            ? "amber"
+                            : "neutral"
+                      }
+                    >
+                      {item.project?.department || "-"}
+                    </Pill>
+                    <Pill tone="violet">PENDING</Pill>
+                    <span className="ml-auto text-xs text-white/40">
+                      {formatDateTimeTH(item.created_at)}
+                    </span>
+                  </div>
+                </Link>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onApprove(item.id);
+                  }}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-400/25 bg-emerald-500/10 text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50"
+                  title="Approve"
+                >
+                  ✓
+                </button>
+
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onReject(item.id);
+                  }}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-red-400/25 bg-red-500/10 text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
+                  title="Reject"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
           </div>
-        </Link>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -497,6 +535,7 @@ function DashboardNoticePreview() {
 export default function DashboardPage() {
   const router = useRouter();
 
+  const [approvalSubmittingId, setApprovalSubmittingId] = useState<string | null>(null);
   const [me, setMe] = useState<MeProfile | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -573,6 +612,31 @@ export default function DashboardPage() {
       setError(e?.message || "Load dashboard failed");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleApprovalAction(id: string, action: "approve" | "reject") {
+    if (!id) return;
+
+    try {
+      setApprovalSubmittingId(id);
+
+      const res = await fetch(`/api/approvals/${id}/${action}`, {
+        method: "POST",
+      });
+
+      const json = await safeJson(res);
+
+      if (!res.ok) {
+        alert((json && (json.error || json.message)) || `${action} failed`);
+        return;
+      }
+
+      await loadAll();
+    } catch (e: any) {
+      alert(e?.message || `${action} failed`);
+    } finally {
+      setApprovalSubmittingId(null);
     }
   }
 
@@ -791,6 +855,14 @@ export default function DashboardPage() {
         </div>
       </DashboardCard>
 
+      <DashboardCard
+        title="ประกาศทีม"
+        desc="ใช้สำหรับแจ้งลา ประชุม ปัญหา และงานด่วนของทีม"
+        className="mt-6 border-[#e5ff78]/10 bg-[radial-gradient(circle_at_top,rgba(229,255,120,0.08),rgba(255,255,255,0.02)_35%,rgba(255,255,255,0.02)_100%)] shadow-[0_0_30px_rgba(229,255,120,0.06)]"
+      >
+        <DashboardNoticePreview />
+      </DashboardCard>
+
       {!isLeader ? (
         <div className="mt-6 grid gap-6 xl:grid-cols-2">
           <DashboardCard
@@ -814,17 +886,23 @@ export default function DashboardPage() {
               emptyText="ยังไม่มีงานที่สั่งล่วงหน้า"
             />
           </DashboardCard>
-
-          <DashboardCard
-            title="ประกาศทีม"
-            desc="ใช้สำหรับแจ้งลา ประชุม ปัญหา และงานด่วนของทีม"
-            className="xl:col-span-2"
-          >
-            <DashboardNoticePreview />
-          </DashboardCard>
         </div>
       ) : (
         <div className="mt-6 grid gap-6 xl:grid-cols-12">
+          <DashboardCard
+            title="รออนุมัติ"
+            desc="คำขอเปลี่ยนสถานะที่กำลังรอหัวหน้าอนุมัติ"
+            className="xl:col-span-12"
+          >
+            <ApprovalMiniList
+              items={approvals.slice(0, 5)}
+              emptyText="ไม่มีรายการรออนุมัติ"
+              submittingId={approvalSubmittingId}
+              onApprove={(id) => handleApprovalAction(id, "approve")}
+              onReject={(id) => handleApprovalAction(id, "reject")}
+            />
+          </DashboardCard>
+
           <DashboardCard
             title="โปรเจกต์ล่าสุดของกราฟิก"
             desc="5 รายการล่าสุดที่ยังไม่ปิด"
@@ -834,18 +912,6 @@ export default function DashboardPage() {
             <ProjectMiniList
               items={latestGraphic}
               emptyText="ยังไม่มีโปรเจกต์กราฟิก"
-            />
-          </DashboardCard>
-
-          <DashboardCard
-            title="รออนุมัติ"
-            desc="คำขอเปลี่ยนสถานะที่กำลังรอหัวหน้าอนุมัติ"
-            onClick={() => router.push("/approvals")}
-            className="xl:col-span-6"
-          >
-            <ApprovalMiniList
-              items={approvals.slice(0, 5)}
-              emptyText="ไม่มีรายการรออนุมัติ"
             />
           </DashboardCard>
 
@@ -865,17 +931,9 @@ export default function DashboardPage() {
             title="Workload"
             desc="ดูว่าใครกำลังถือจำนวนงานอยู่เท่าไร (ไม่รวมหัวหน้า)"
             onClick={() => router.push("/members")}
-            className="xl:col-span-6"
-          >
-            <WorkloadBars items={workload} />
-          </DashboardCard>
-
-          <DashboardCard
-            title="ประกาศทีม"
-            desc="ใช้สำหรับแจ้งลา ประชุม ปัญหา และงานด่วนของทีม"
             className="xl:col-span-12"
           >
-            <DashboardNoticePreview />
+            <WorkloadBars items={workload} />
           </DashboardCard>
         </div>
       )}

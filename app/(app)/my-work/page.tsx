@@ -625,8 +625,8 @@ export default function MyWorkPage() {
           </div>
         ) : (
           <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 overflow-visible">
-            <div className="w-full overflow-x-auto overflow-y-visible">
-              <table className="min-w-[980px] w-full">
+  <div className="w-full overflow-x-auto overflow-y-visible rounded-[30px]">
+              <table className="min-w-[980px] w-full overflow-visible">
                 <thead>
                   <tr className="text-left text-xs font-semibold tracking-widest text-white/45">
                     <th className="px-6 py-4">งาน</th>
@@ -637,12 +637,12 @@ export default function MyWorkPage() {
                   </tr>
                 </thead>
 
-                <tbody className="divide-y divide-white/10">
+                <tbody className="divide-y divide-white/10 overflow-visible">
                   {filtered.map((w) => {
                     const pending = w.pending_request?.status === "PENDING" ? w.pending_request : null;
 
                     return (
-                      <tr key={w.id} className="hover:bg-white/[0.03]">
+                      <tr key={w.id} className="hover:bg-white/[0.03] overflow-visible">
                         <td className="px-6 py-5">
                           <div className="flex items-start gap-3">
                             <span className="mt-[2px] inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
@@ -683,21 +683,20 @@ export default function MyWorkPage() {
                           {fmtDeadline(w.due_date)}
                         </td>
 
-                        <td className="px-6 py-5 text-right">
-                          <div className={cn(pending ? "opacity-60 pointer-events-none" : "")}>
-                            <StatusDropdown
-                              value={w.status}
-                              onChange={(s) => {
-                                if (s === "PRE_ORDER") return;
-
-                                if (s === "BLOCKED") {
-                                  openBlockedModal(w.id, w.title || "-");
-                                  return;
-                                }
-
-                                requestStatusChange(w.id, s);
-                              }}
-                            />
+                        <td className="relative z-20 overflow-visible px-6 py-5 text-right">
+  <div className={cn("relative z-30 overflow-visible", pending ? "opacity-60 pointer-events-none" : "")}>
+                            <div className="relative z-40 inline-block overflow-visible">
+  <StatusDropdown
+    value={w.status}
+    onChange={(s) => {
+      if (s === "BLOCKED") {
+        openBlockedModal(w.id, w.title || "-");
+        return;
+      }
+      requestStatusChange(w.id, s);
+    }}
+  />
+</div>
                           </div>
                         </td>
                       </tr>

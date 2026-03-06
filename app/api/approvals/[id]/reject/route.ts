@@ -74,8 +74,9 @@ export async function POST(
 
   const { error: logErr } = await admin.from("project_logs").insert({
     project_id: reqRow.project_id,
+    actor_id: user.id,
     action: "STATUS_REJECTED",
-    created_by: user.id,
+    message: `Rejected status change: ${reqRow.from_status} -> ${reqRow.to_status}`,
     detail: {
       request_id: id,
       from_status: reqRow.from_status,

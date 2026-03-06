@@ -308,7 +308,6 @@ function StatusDonut({
   const todo = (counts.todo / safeTotal) * 100;
   const progress = (counts.inProgress / safeTotal) * 100;
   const blocked = (counts.blocked / safeTotal) * 100;
-  const done = (counts.completed / safeTotal) * 100;
 
   const s1 = pre;
   const s2 = s1 + todo;
@@ -326,54 +325,12 @@ function StatusDonut({
   };
 
   return (
-    <div className="flex flex-col items-center gap-4 lg:flex-row lg:items-start lg:gap-6">
+    <div className="flex flex-col items-center">
       <div className="relative h-44 w-44 shrink-0 rounded-full" style={style}>
         <div className="absolute inset-[18px] flex items-center justify-center rounded-full border border-white/10 bg-[#090909]">
           <div className="text-center">
             <div className="text-3xl font-extrabold text-white">{total}</div>
             <div className="mt-1 text-xs tracking-widest text-white/45">TOTAL</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid w-full gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-          <div className="text-xs tracking-widest text-white/45">PRE_ORDER</div>
-          <div className="mt-2 flex items-center justify-between">
-            <Pill tone="violet">PRE_ORDER</Pill>
-            <div className="text-lg font-bold text-white">{counts.preOrder}</div>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-          <div className="text-xs tracking-widest text-white/45">TODO</div>
-          <div className="mt-2 flex items-center justify-between">
-            <Pill tone="neutral">TODO</Pill>
-            <div className="text-lg font-bold text-white">{counts.todo}</div>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-          <div className="text-xs tracking-widest text-white/45">IN_PROGRESS</div>
-          <div className="mt-2 flex items-center justify-between">
-            <Pill tone="blue">IN_PROGRESS</Pill>
-            <div className="text-lg font-bold text-white">{counts.inProgress}</div>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-          <div className="text-xs tracking-widest text-white/45">BLOCKED</div>
-          <div className="mt-2 flex items-center justify-between">
-            <Pill tone="red">BLOCKED</Pill>
-            <div className="text-lg font-bold text-white">{counts.blocked}</div>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 sm:col-span-2">
-          <div className="text-xs tracking-widest text-white/45">COMPLETED</div>
-          <div className="mt-2 flex items-center justify-between">
-            <Pill tone="green">COMPLETED</Pill>
-            <div className="text-lg font-bold text-white">{counts.completed}</div>
           </div>
         </div>
       </div>

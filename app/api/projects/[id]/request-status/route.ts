@@ -55,7 +55,7 @@ export async function POST(
       return NextResponse.json({ error: "Missing from_status/to_status" }, { status: 400 });
     }
 
-    if (to_status === "CANCELLED" && !blocked_reason) {
+    if (to_status === "BLOCKED" && !blocked_reason) {
       return NextResponse.json({ error: "Missing blocked_reason" }, { status: 400 });
     }
 
@@ -67,7 +67,9 @@ export async function POST(
       .eq("request_status", "PENDING")
       .limit(1);
 
-    if (pendErr) return NextResponse.json({ error: pendErr.message }, { status: 400 });
+    if (pendErr) {
+      return NextResponse.json({ error: pendErr.message }, { status: 400 });
+    }
 
     if (pending && pending.length > 0) {
       const res = NextResponse.json(
@@ -92,10 +94,12 @@ export async function POST(
       .select("id, project_id, from_status, to_status, request_status, created_at")
       .single();
 
-    if (insErr) return NextResponse.json({ error: insErr.message }, { status: 400 });
+    if (insErr) {
+      return NextResponse.json({ error: insErr.message }, { status: 400 });
+    }
 
     const message =
-      to_status === "CANCELLED"
+      to_status === "BLOCKED"
         ? `Requested status change: ${from_status} -> ${to_status} | blocked_reason: ${blocked_reason}`
         : `Requested status change: ${from_status} -> ${to_status}`;
 

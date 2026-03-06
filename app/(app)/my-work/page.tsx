@@ -46,17 +46,17 @@ function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-type DbStatus = "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED" | "REVIEW";
+type DbStatus = "TODO" | "IN_PROGRESS" | "DONE" | "BLOCKED" | "REVIEW";
 
 function toDbStatus(s: Status): DbStatus {
   if (s === "COMPLETED") return "DONE";
-  if (s === "BLOCKED") return "CANCELLED";
-  return s as unknown as DbStatus;
+  if (s === "BLOCKED") return "BLOCKED";
+  return s as DbStatus;
 }
 
 function toUiStatus(s: any): Status {
   if (s === "DONE") return "COMPLETED";
-  if (s === "CANCELLED") return "BLOCKED";
+  if (s === "BLOCKED") return "BLOCKED";
   return s as Status;
 }
 
@@ -121,8 +121,16 @@ function fmtDeadline(iso?: string | null) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
 
-  const date = d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
-  const time = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false });
+  const date = d.toLocaleDateString("th-TH", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+  const time = d.toLocaleTimeString("th-TH", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
   return `${date} ${time}`;
 }
 
@@ -148,7 +156,7 @@ function secondLine(w: WorkItem) {
 
 function uiLabelFromDb(db: string) {
   if (db === "DONE") return "COMPLETED";
-  if (db === "CANCELLED") return "BLOCKED";
+  if (db === "BLOCKED") return "BLOCKED";
   return db;
 }
 
@@ -204,50 +212,47 @@ export default function MyWorkPage() {
 
       const store = readPendingStore();
 
-const merged = normalized.map((x) => {
-  const apiPending = x.pending_request?.status === "PENDING" ? x.pending_request : null;
+      const merged = normalized.map((x) => {
+        const apiPending = x.pending_request?.status === "PENDING" ? x.pending_request : null;
 
-  if (apiPending) {
-    setPendingForProject(x.id, apiPending);
-    return x;
-  }
+        if (apiPending) {
+          setPendingForProject(x.id, apiPending);
+          return x;
+        }
 
-  const localPending = store[x.id];
+        const localPending = store[x.id];
 
-  if (localPending?.status === "PENDING") {
-    const targetUiStatus = toUiStatus(localPending.to_status);
+        if (localPending?.status === "PENDING") {
+          const targetUiStatus = toUiStatus(localPending.to_status);
 
-    // ถ้างานถูกอนุมัติไปแล้ว และสถานะจริงของงานตรงกับปลายทางของ pending
-    // ให้ลบ cache pending ทิ้งทันที
-    if (x.status === targetUiStatus) {
-      removePendingForProject(x.id);
-      return { ...x, pending_request: null };
-    }
+          if (x.status === targetUiStatus) {
+            removePendingForProject(x.id);
+            return { ...x, pending_request: null };
+          }
 
-    // ถ้ายังไม่ถึงสถานะปลายทาง ค่อย fallback ไปใช้ local cache
-    return { ...x, pending_request: localPending };
-  }
+          return { ...x, pending_request: localPending };
+        }
 
-  return { ...x, pending_request: null };
-});
+        return { ...x, pending_request: null };
+      });
 
-for (const pid of Object.keys(store)) {
-  const stillExists = merged.find((x) => x.id === pid);
+      for (const pid of Object.keys(store)) {
+        const stillExists = merged.find((x) => x.id === pid);
 
-  if (!stillExists) {
-    removePendingForProject(pid);
-    continue;
-  }
+        if (!stillExists) {
+          removePendingForProject(pid);
+          continue;
+        }
 
-  const localPending = store[pid];
-  if (localPending?.status === "PENDING") {
-    const targetUiStatus = toUiStatus(localPending.to_status);
+        const localPending = store[pid];
+        if (localPending?.status === "PENDING") {
+          const targetUiStatus = toUiStatus(localPending.to_status);
 
-    if (stillExists.status === targetUiStatus) {
-      removePendingForProject(pid);
-    }
-  }
-}
+          if (stillExists.status === targetUiStatus) {
+            removePendingForProject(pid);
+          }
+        }
+      }
 
       setItems(merged);
     } catch (e: any) {
@@ -258,95 +263,95 @@ for (const pid of Object.keys(store)) {
     }
   }
 
-async function requestStatusChange(
-  projectId: string,
-  nextUi: Status,
-  blocked_reason?: string
-): Promise<boolean> {
-  const prev = items;
+  async function requestStatusChange(
+    projectId: string,
+    nextUi: Status,
+    blocked_reason?: string
+  ): Promise<boolean> {
+    const prev = items;
 
-  const target = items.find((x) => x.id === projectId);
-  if (!target) return false;
+    const target = items.find((x) => x.id === projectId);
+    if (!target) return false;
 
-  if (target.pending_request?.status === "PENDING") {
-    showToast("มีคำขอรออนุมัติอยู่แล้ว");
-    return false;
-  }
-
-  const fromDb = toDbStatus(target.status);
-  const toDb = toDbStatus(nextUi);
-
-  if (nextUi === "BLOCKED" && !blocked_reason?.trim()) {
-    showToast("กรุณาระบุปัญหาของงานก่อน");
-    return false;
-  }
-
-  const optimisticPending: PendingReq = {
-    id: "temp",
-    from_status: fromDb,
-    to_status: toDb,
-    status: "PENDING",
-    created_at: new Date().toISOString(),
-  };
-
-  setItems((xs) =>
-    xs.map((x) =>
-      x.id === projectId ? { ...x, pending_request: optimisticPending } : x
-    )
-  );
-  setPendingForProject(projectId, optimisticPending);
-
-  try {
-    const res = await fetch(
-      `/api/projects/${encodeURIComponent(projectId)}/request-status`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          from_status: fromDb,
-          to_status: toDb,
-          blocked_reason: nextUi === "BLOCKED" ? blocked_reason?.trim() : null,
-        }),
-      }
-    );
-
-    const j = await safeJson(res);
-
-    if (!res.ok) {
-      setItems(prev);
-      removePendingForProject(projectId);
-      const msg = (j && (j.error || j.message)) || "Update failed";
-      showToast(msg);
+    if (target.pending_request?.status === "PENDING") {
+      showToast("มีคำขอรออนุมัติอยู่แล้ว");
       return false;
     }
 
-    const reqRow = j?.request ?? null;
-    if (reqRow?.id) {
-      const saved: PendingReq = {
-        id: reqRow.id,
-        from_status: reqRow.from_status,
-        to_status: reqRow.to_status,
-        status: reqRow.status,
-        created_at: reqRow.created_at ?? null,
-      };
+    const fromDb = toDbStatus(target.status);
+    const toDb = toDbStatus(nextUi);
 
-      setItems((xs) =>
-        xs.map((x) =>
-          x.id === projectId ? { ...x, pending_request: saved } : x
-        )
-      );
-      setPendingForProject(projectId, saved);
+    if (nextUi === "BLOCKED" && !blocked_reason?.trim()) {
+      showToast("กรุณาระบุปัญหาของงานก่อน");
+      return false;
     }
 
-    showToast("ส่งคำขอสำเร็จแล้ว และกำลังรออนุมัติ");
-    return true;
-  } catch (e: any) {
-    setItems(prev);
-    removePendingForProject(projectId);
-    showToast(e?.message || "Update failed");
-    return false;
+    const optimisticPending: PendingReq = {
+      id: "temp",
+      from_status: fromDb,
+      to_status: toDb,
+      status: "PENDING",
+      created_at: new Date().toISOString(),
+    };
+
+    setItems((xs) =>
+      xs.map((x) =>
+        x.id === projectId ? { ...x, pending_request: optimisticPending } : x
+      )
+    );
+    setPendingForProject(projectId, optimisticPending);
+
+    try {
+      const res = await fetch(
+        `/api/projects/${encodeURIComponent(projectId)}/request-status`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from_status: fromDb,
+            to_status: toDb,
+            blocked_reason: nextUi === "BLOCKED" ? blocked_reason?.trim() : null,
+          }),
+        }
+      );
+
+      const j = await safeJson(res);
+
+      if (!res.ok) {
+        setItems(prev);
+        removePendingForProject(projectId);
+        const msg = (j && (j.error || j.message)) || "Update failed";
+        showToast(msg);
+        return false;
+      }
+
+      const reqRow = j?.request ?? null;
+      if (reqRow?.id) {
+        const saved: PendingReq = {
+          id: reqRow.id,
+          from_status: reqRow.from_status,
+          to_status: reqRow.to_status,
+          status: reqRow.status,
+          created_at: reqRow.created_at ?? null,
+        };
+
+        setItems((xs) =>
+          xs.map((x) =>
+            x.id === projectId ? { ...x, pending_request: saved } : x
+          )
+        );
+        setPendingForProject(projectId, saved);
+      }
+
+      showToast("ส่งคำขอสำเร็จแล้ว และกำลังรออนุมัติ");
+      return true;
+    } catch (e: any) {
+      setItems(prev);
+      removePendingForProject(projectId);
+      showToast(e?.message || "Update failed");
+      return false;
+    }
   }
-}
 
   function openBlockedModal(projectId: string, projectTitle: string) {
     setBlockedModal({
@@ -357,43 +362,49 @@ async function requestStatusChange(
     setBlockedNote("");
   }
 
-function closeBlockedModal(force = false) {
-  if (blockedSubmitting && !force) return;
-  setBlockedModal({
-    open: false,
-    projectId: "",
-    projectTitle: "",
-  });
-  setBlockedNote("");
-}
-
-async function confirmBlockedModal() {
-  if (!blockedModal.projectId) return;
-
-  const note = blockedNote.trim();
-  if (!note) {
-    showToast("กรุณาระบุปัญหาของงานก่อน");
-    return;
+  function closeBlockedModal(force = false) {
+    if (blockedSubmitting && !force) return;
+    setBlockedModal({
+      open: false,
+      projectId: "",
+      projectTitle: "",
+    });
+    setBlockedNote("");
   }
 
-  try {
-    setBlockedSubmitting(true);
-    const ok = await requestStatusChange(blockedModal.projectId, "BLOCKED", note);
+  async function confirmBlockedModal() {
+    if (!blockedModal.projectId) return;
 
-    if (ok) {
-      closeBlockedModal(true);
+    const note = blockedNote.trim();
+    if (!note) {
+      showToast("กรุณาระบุปัญหาของงานก่อน");
+      return;
     }
-  } finally {
-    setBlockedSubmitting(false);
+
+    try {
+      setBlockedSubmitting(true);
+      const ok = await requestStatusChange(blockedModal.projectId, "BLOCKED", note);
+
+      if (ok) {
+        closeBlockedModal(true);
+      }
+    } finally {
+      setBlockedSubmitting(false);
+    }
   }
-}
 
   useEffect(() => {
     load();
   }, []);
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { ALL: items.length, TODO: 0, IN_PROGRESS: 0, COMPLETED: 0, BLOCKED: 0 };
+    const c: Record<string, number> = {
+      ALL: items.length,
+      TODO: 0,
+      IN_PROGRESS: 0,
+      COMPLETED: 0,
+      BLOCKED: 0,
+    };
     for (const x of items) c[x.status] = (c[x.status] || 0) + 1;
     return c;
   }, [items]);

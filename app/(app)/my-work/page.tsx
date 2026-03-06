@@ -204,25 +204,50 @@ export default function MyWorkPage() {
 
       const store = readPendingStore();
 
-      const merged = normalized.map((x) => {
-        const apiPending = x.pending_request?.status === "PENDING" ? x.pending_request : null;
+const merged = normalized.map((x) => {
+  const apiPending = x.pending_request?.status === "PENDING" ? x.pending_request : null;
 
-        if (apiPending) {
-          setPendingForProject(x.id, apiPending);
-          return x;
-        }
+  if (apiPending) {
+    setPendingForProject(x.id, apiPending);
+    return x;
+  }
 
-        const localPending = store[x.id];
-        if (localPending?.status === "PENDING") {
-          return { ...x, pending_request: localPending };
-        }
+  const localPending = store[x.id];
 
-        return x;
-      });
+  if (localPending?.status === "PENDING") {
+    const targetUiStatus = toUiStatus(localPending.to_status);
 
-      for (const pid of Object.keys(store)) {
-        if (!merged.find((x) => x.id === pid)) removePendingForProject(pid);
-      }
+    // ถ้างานถูกอนุมัติไปแล้ว และสถานะจริงของงานตรงกับปลายทางของ pending
+    // ให้ลบ cache pending ทิ้งทันที
+    if (x.status === targetUiStatus) {
+      removePendingForProject(x.id);
+      return { ...x, pending_request: null };
+    }
+
+    // ถ้ายังไม่ถึงสถานะปลายทาง ค่อย fallback ไปใช้ local cache
+    return { ...x, pending_request: localPending };
+  }
+
+  return { ...x, pending_request: null };
+});
+
+for (const pid of Object.keys(store)) {
+  const stillExists = merged.find((x) => x.id === pid);
+
+  if (!stillExists) {
+    removePendingForProject(pid);
+    continue;
+  }
+
+  const localPending = store[pid];
+  if (localPending?.status === "PENDING") {
+    const targetUiStatus = toUiStatus(localPending.to_status);
+
+    if (stillExists.status === targetUiStatus) {
+      removePendingForProject(pid);
+    }
+  }
+}
 
       setItems(merged);
     } catch (e: any) {

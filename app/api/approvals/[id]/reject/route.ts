@@ -87,6 +87,15 @@ export async function POST(
     },
   });
 
+  await admin.from("notifications").insert({
+  user_id: reqRow.requested_by,
+  type: "JOB_STATUS_CHANGED",
+  title: "คำขอเปลี่ยนสถานะงานถูกปฏิเสธ",
+  message: `${reqRow.from_status} → ${reqRow.to_status}`,
+  link: "/my-work",
+  is_read: false,
+});
+
   if (logErr) {
     return NextResponse.json({ error: logErr.message }, { status: 500 });
   }

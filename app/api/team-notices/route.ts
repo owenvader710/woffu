@@ -118,7 +118,27 @@ export async function POST(req: NextRequest) {
     is_active: true,
     created_by: user.id,
   };
+const { data: profiles } = await admin
+  .from("profiles")
+  .select("id")
+  .eq("is_active", true);
 
+const targetUsers = (profiles || [])
+  .map((x) => x.id)
+  .filter((id) => id && id !== user.id);
+
+if (targetUsers.length > 0) {
+  await admin.from("notifications").insert(
+    targetUsers.map((uid) => ({
+      user_id: uid,
+      type: "TEAM_NOTICE",
+      title: "มีประกาศทีมใหม่",
+      message: title,
+      link: "/team-notices",
+      is_read: false,
+    }))
+  );
+}
   const { data, error } = await admin
     .from("team_notices")
     .insert(insertRow)

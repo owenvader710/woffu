@@ -1,6 +1,7 @@
 // app/api/projects/route.ts
 import { NextResponse } from "next/server";
 import { createSupabaseServer } from "../_supabase";
+import { createSupabaseAdmin } from "../_supabaseAdmin";
 
 const SELECT_FIELDS = [
   "id",
@@ -113,6 +114,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const supabase = await createSupabaseServer();
+  const admin = createSupabaseAdmin();
 
   const { data: authData, error: authErr } = await supabase.auth.getUser();
   if (authErr) {
@@ -152,6 +154,24 @@ export async function POST(req: Request) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (data?.assignee_id) {
+    const notifTitle =
+      insertRow.status === "PRE_ORDER"
+        ? "คุณได้รับงานล่วงหน้าใหม่"
+        : "คุณได้รับงานใหม่";
+
+    const notifMessage = data.title || "มีงานใหม่ถูกมอบหมายให้คุณ";
+
+    await admin.from("notifications").insert({
+      user_id: data.assignee_id,
+      type: "JOB_ASSIGNED",
+      title: notifTitle,
+      message: notifMessage,
+      link: "/my-work",
+      is_read: false,
+    });
   }
 
   return NextResponse.json({ data }, { status: 201 });

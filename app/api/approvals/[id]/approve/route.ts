@@ -60,6 +60,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       requested_by: reqRow.requested_by,
     },
   });
+  await admin.from("notifications").insert({
+  user_id: reqRow.requested_by,
+  type: "JOB_STATUS_CHANGED",
+  title: "สถานะงานของคุณถูกอนุมัติแล้ว",
+  message: `${reqRow.from_status} → ${reqRow.to_status}`,
+  link: "/my-work",
+  is_read: false,
+});
 
   return NextResponse.json({ ok: true });
 }

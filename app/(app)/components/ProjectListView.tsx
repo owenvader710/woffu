@@ -5,9 +5,10 @@ import Link from "next/link";
 
 type Project = {
   id: string;
+  code?: string | null;
   title: string;
   type: "VIDEO" | "GRAPHIC";
-  status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
+  status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED" | "DONE";
   created_at: string;
   start_date: string | null;
   due_date: string | null;
@@ -46,14 +47,25 @@ async function safeJson(res: Response) {
 function formatDateTH(iso?: string | null) {
   if (!iso) return "-";
   const d = new Date(iso);
-  return d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
+  return d.toLocaleDateString("th-TH", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
 }
 
 function formatDateTimeTH(iso?: string | null) {
   if (!iso) return "-";
   const d = new Date(iso);
-  const date = d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
-  const time = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+  const date = d.toLocaleDateString("th-TH", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+  const time = d.toLocaleTimeString("th-TH", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   return `${date} ${time}`;
 }
 
@@ -61,7 +73,7 @@ function statusTone(status: Project["status"]) {
   if (status === "TODO") return "neutral";
   if (status === "IN_PROGRESS") return "blue";
   if (status === "BLOCKED") return "red";
-  if (status === "COMPLETED") return "green";
+  if (status === "COMPLETED" || status === "DONE") return "green";
   return "neutral";
 }
 
@@ -76,12 +88,12 @@ function Pill({
     tone === "green"
       ? "border-green-500/30 bg-green-500/10 text-green-200"
       : tone === "amber"
-      ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
-      : tone === "red"
-      ? "border-red-500/30 bg-red-500/10 text-red-200"
-      : tone === "blue"
-      ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
-      : "border-white/10 bg-white/5 text-white/70";
+        ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+        : tone === "red"
+          ? "border-red-500/30 bg-red-500/10 text-red-200"
+          : tone === "blue"
+            ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
+            : "border-white/10 bg-white/5 text-white/70";
 
   return (
     <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs ${cls}`}>
@@ -112,6 +124,26 @@ function extractBlockedReason(logs: ProjectLog[]): string | null {
   }
 
   return null;
+}
+
+function makeCode(p: Project) {
+  const real = (p.code ?? "").toString().trim();
+  if (real) return real;
+
+  const t = (p.type || "").toUpperCase().trim();
+  const short = (p.id || "").replace(/-/g, "").slice(0, 6).toUpperCase();
+  return t ? `${t}-${short}` : short;
+}
+
+function secondLine(p: Project) {
+  const parts = [
+    p.brand ? String(p.brand).toUpperCase() : null,
+    p.video_purpose ? String(p.video_purpose) : null,
+    p.graphic_job_type ? String(p.graphic_job_type) : null,
+    p.video_priority ? `PRIORITY: ${String(p.video_priority)}` : null,
+  ].filter(Boolean) as string[];
+
+  return parts.length ? parts.join(" · ") : "";
 }
 
 export default function ProjectListView({
@@ -168,7 +200,10 @@ export default function ProjectListView({
     try {
       const res = await fetch("/api/members", { cache: "no-store" });
       const json = await safeJson(res);
-      if (!res.ok) return setMembers([]);
+      if (!res.ok) {
+        setMembers([]);
+        return;
+      }
       const data = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
       setMembers(data.filter((m: Member) => m.is_active !== false));
     } catch {
@@ -177,9 +212,7 @@ export default function ProjectListView({
   }
 
   useEffect(() => {
-    (async () => {
-      await Promise.all([loadProjects(), loadMembers()]);
-    })();
+    void Promise.all([loadProjects(), loadMembers()]);
   }, []);
 
   useEffect(() => {
@@ -193,7 +226,7 @@ export default function ProjectListView({
 
     let cancelled = false;
 
-    (async () => {
+    void (async () => {
       const entries = await Promise.all(
         blockedItems.map(async (p) => {
           try {
@@ -227,8 +260,8 @@ export default function ProjectListView({
   const filteredItems = useMemo(() => {
     let list = items;
 
-    if (mode === "ACTIVE") list = list.filter((p) => p.status !== "COMPLETED" && p.status !== "BLOCKED");
-    if (mode === "COMPLETED") list = list.filter((p) => p.status === "COMPLETED");
+    if (mode === "ACTIVE") list = list.filter((p) => p.status !== "COMPLETED" && p.status !== "DONE" && p.status !== "BLOCKED");
+    if (mode === "COMPLETED") list = list.filter((p) => p.status === "COMPLETED" || p.status === "DONE");
     if (mode === "BLOCKED") list = list.filter((p) => p.status === "BLOCKED");
 
     if (q.trim()) {
@@ -238,7 +271,7 @@ export default function ProjectListView({
         const blockedReason = blockedReasons[p.id] ?? "";
         const hay = `${p.title ?? ""} ${p.brand ?? ""} ${p.video_priority ?? ""} ${p.video_purpose ?? ""} ${
           p.graphic_job_type ?? ""
-        } ${assigneeName} ${blockedReason}`.toLowerCase();
+        } ${assigneeName} ${blockedReason} ${p.code ?? ""}`.toLowerCase();
         return hay.includes(needle);
       });
     }
@@ -258,8 +291,8 @@ export default function ProjectListView({
         <div className="flex gap-2">
           <button
             onClick={() => {
-              loadProjects();
-              loadMembers();
+              void loadProjects();
+              void loadMembers();
             }}
             className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
           >
@@ -272,17 +305,21 @@ export default function ProjectListView({
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="ค้นหา: ชื่อโปรเจกต์ / ผู้รับผิดชอบ / แบรนด์ / รูปแบบงาน / ประเภทงาน / รายละเอียดปัญหา"
+          placeholder="ค้นหา: ชื่อโปรเจกต์ / รหัสงาน / ผู้รับผิดชอบ / แบรนด์ / รูปแบบงาน / รายละเอียดปัญหา"
           className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78] md:w-[520px]"
         />
       </div>
 
       {loading && (
-        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">กำลังโหลด...</div>
+        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">
+          กำลังโหลด...
+        </div>
       )}
 
       {!loading && error && (
-        <div className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>
+        <div className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+          {error}
+        </div>
       )}
 
       {!loading && !error && (
@@ -308,26 +345,35 @@ export default function ProjectListView({
                 </tr>
               ) : (
                 filteredItems.map((p) => {
-                  const assigneeName = p.assignee_id ? memberMap.get(p.assignee_id)?.display_name ?? "-" : "-";
+                  const assigneeName = p.assignee_id
+                    ? memberMap.get(p.assignee_id)?.display_name ?? "-"
+                    : "-";
                   const blockedReason = blockedReasons[p.id];
 
                   return (
-                    <tr key={p.id} className="border-t border-white/10 hover:bg-white/[0.06]">
+                    <tr key={p.id} className="border-t border-white/10 hover:bg-white/[0.06] align-top">
                       <td className="p-4">
-                        <div className="flex items-start gap-2">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Link
-                                className="font-semibold text-white underline underline-offset-4"
-                                href={`/projects/${p.id}`}
-                              >
-                                {p.title}
-                              </Link>
-                              {p.brand ? <Pill tone="neutral">{p.brand}</Pill> : null}
-                            </div>
+                        <div className="flex items-start gap-3">
+                          <span className="mt-[2px] inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
+                            {makeCode(p)}
+                          </span>
+
+                          <div className="min-w-0">
+                            <Link
+                              href={`/projects/${p.id}`}
+                              className="block text-base font-extrabold text-white hover:underline"
+                            >
+                              {p.title || "-"}
+                            </Link>
+
+                            {secondLine(p) ? (
+                              <div className="mt-1 text-xs text-white/45">
+                                {secondLine(p)}
+                              </div>
+                            ) : null}
 
                             {mode === "BLOCKED" && blockedReason ? (
-                              <div className="mt-2 max-w-[520px] rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-6 text-red-100">
+                              <div className="mt-3 max-w-[560px] rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-6 text-red-100">
                                 <span className="font-extrabold">รายละเอียดปัญหา:</span> {blockedReason}
                               </div>
                             ) : null}
@@ -344,7 +390,9 @@ export default function ProjectListView({
                       </td>
 
                       <td className="p-4">
-                        <Pill tone={statusTone(p.status) as any}>{p.status}</Pill>
+                        <Pill tone={statusTone(p.status) as any}>
+                          {p.status === "DONE" ? "COMPLETED" : p.status}
+                        </Pill>
                       </td>
 
                       <td className="p-4 text-white/60">{formatDateTH(p.created_at)}</td>

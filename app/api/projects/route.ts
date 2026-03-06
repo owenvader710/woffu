@@ -53,7 +53,6 @@ function getInitialStatus(startDate?: string | null) {
   if (Number.isNaN(start.getTime())) return "TODO";
 
   start.setHours(0, 0, 0, 0);
-
   return start.getTime() > startOfToday().getTime() ? "PRE_ORDER" : "TODO";
 }
 
@@ -79,7 +78,9 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const data: ProjectRow[] = Array.isArray(rawData) ? (rawData as ProjectRow[]) : [];
+  const data: ProjectRow[] = Array.isArray(rawData)
+    ? (rawData as unknown as ProjectRow[])
+    : [];
 
   const preOrderIdsToActivate = data
     .filter((item) => item.status === "PRE_ORDER" && shouldMovePreOrderToTodo(item.start_date))
@@ -114,13 +115,19 @@ export async function POST(req: Request) {
   const supabase = await createSupabaseServer();
 
   const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
+  if (authErr) {
+    return NextResponse.json({ error: authErr.message }, { status: 401 });
+  }
 
   const user = authData?.user;
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const body = await req.json().catch(() => null);
-  if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
 
   const insertRow: Record<string, any> = {
     ...body,

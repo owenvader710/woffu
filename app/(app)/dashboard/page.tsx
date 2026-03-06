@@ -50,6 +50,20 @@ type ApprovalItem = {
   } | null;
 };
 
+type TeamNotice = {
+  id: string;
+  title: string;
+  content?: string | null;
+  notice_type?: string | null;
+  attachment_url?: string | null;
+  attachment_name?: string | null;
+  is_pinned?: boolean | null;
+  is_active?: boolean | null;
+  created_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 async function safeJson(res: Response) {
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -423,7 +437,7 @@ function TeamNoticeBoard() {
     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
       <div className="text-lg font-semibold text-white">ประกาศทีม</div>
         <TeamNoticeBoard />
-        
+
       <div className="mt-3 space-y-2">
         <input
           value={title}
@@ -457,6 +471,226 @@ function TeamNoticeBoard() {
             <div className="text-white/70">{n.content}</div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function NoticeTypePill({ type }: { type?: string | null }) {
+  const t = type || "GENERAL";
+
+  const cls =
+    t === "URGENT"
+      ? "border-red-500/30 bg-red-500/10 text-red-200"
+      : t === "MEETING"
+        ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
+        : t === "LEAVE"
+          ? "border-violet-500/30 bg-violet-500/10 text-violet-200"
+          : t === "ISSUE"
+            ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+            : "border-white/10 bg-white/5 text-white/70";
+
+  return (
+    <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold", cls)}>
+      {t}
+    </span>
+  );
+}
+
+function TeamNoticeBoard({
+  isLeader,
+}: {
+  isLeader: boolean;
+}) {
+  const [items, setItems] = useState<TeamNotice[]>([]);
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [noticeType, setNoticeType] = useState("GENERAL");
+  const [isPinned, setIsPinned] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function loadNotices() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/team-notices", { cache: "no-store" });
+      const json = await safeJson(res);
+
+      if (!res.ok) {
+        throw new Error((json && (json.error || json.message)) || "Load notices failed");
+      }
+
+      const rows = Array.isArray(json?.data)
+        ? (json.data as TeamNotice[])
+        : Array.isArray(json)
+          ? (json as TeamNotice[])
+          : [];
+
+      setItems(rows);
+    } catch (e: any) {
+      setError(e?.message || "Load notices failed");
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submitNotice() {
+    if (!title.trim()) return;
+
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/team-notices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          content: content.trim(),
+          notice_type: noticeType,
+          is_pinned: isLeader ? isPinned : false,
+        }),
+      });
+
+      const json = await safeJson(res);
+
+      if (!res.ok) {
+        throw new Error((json && (json.error || json.message)) || "Create notice failed");
+      }
+
+      setTitle("");
+      setContent("");
+      setNoticeType("GENERAL");
+      setIsPinned(false);
+
+      await loadNotices();
+    } catch (e: any) {
+      setError(e?.message || "Create notice failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  useEffect(() => {
+    loadNotices();
+  }, []);
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+        <div className="grid gap-3">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="หัวข้อประกาศ"
+            className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
+          />
+
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="รายละเอียดประกาศ"
+            className="h-24 w-full resize-none rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
+          />
+
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-wrap gap-2">
+              {["GENERAL", "LEAVE", "MEETING", "ISSUE", "URGENT"].map((t) => {
+                const active = noticeType === t;
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setNoticeType(t)}
+                    className={cn(
+                      "rounded-xl border px-3 py-2 text-xs font-semibold transition",
+                      active
+                        ? "border-white/10 bg-white text-black"
+                        : "border-white/10 bg-transparent text-white/70 hover:bg-white/10 hover:text-white"
+                    )}
+                  >
+                    {t}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-3">
+              {isLeader ? (
+                <label className="flex items-center gap-2 text-xs text-white/70">
+                  <input
+                    type="checkbox"
+                    checked={isPinned}
+                    onChange={(e) => setIsPinned(e.target.checked)}
+                  />
+                  ปักหมุด
+                </label>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={submitNotice}
+                disabled={submitting || !title.trim()}
+                className="rounded-xl bg-[#e5ff78] px-4 py-2 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
+              >
+                {submitting ? "กำลังส่ง..." : "ส่งประกาศ"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {error ? (
+          <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+            {error}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="space-y-3">
+        {loading ? (
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/50">
+            กำลังโหลดประกาศ...
+          </div>
+        ) : items.length === 0 ? (
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/40">
+            ยังไม่มีประกาศทีม
+          </div>
+        ) : (
+          items.map((n) => (
+            <div
+              key={n.id}
+              className="rounded-2xl border border-white/10 bg-black/20 p-4"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <NoticeTypePill type={n.notice_type} />
+                {n.is_pinned ? <Pill tone="violet">PINNED</Pill> : null}
+                <span className="ml-auto text-xs text-white/40">{formatDateTimeTH(n.created_at)}</span>
+              </div>
+
+              <div className="mt-3 font-semibold text-white">{n.title}</div>
+              {n.content ? (
+                <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/70">
+                  {n.content}
+                </div>
+              ) : null}
+
+              {n.attachment_url ? (
+                <a
+                  href={n.attachment_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80 hover:bg-white/10"
+                >
+                  เปิดไฟล์แนบ {n.attachment_name ? `: ${n.attachment_name}` : ""}
+                </a>
+              ) : null}
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
@@ -792,17 +1026,13 @@ export default function DashboardPage() {
             />
           </DashboardCard>
 
-          <DashboardCard
-            title="ประกาศทีม"
-            desc="พื้นที่สำหรับประกาศภายในทีม หรือใช้แทนโน้ตกลางได้ในช่วงแรก"
-            className="xl:col-span-2"
-          >
-            <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-5 text-sm leading-7 text-white/50">
-              ตอนนี้ยังเป็นกล่อง placeholder อยู่ก่อน
-              <br />
-              ต่อไปค่อยเชื่อมกับ announcement / team notes / pinned message ได้
-            </div>
-          </DashboardCard>
+<DashboardCard
+  title="ประกาศทีม"
+  desc="ใช้สำหรับแจ้งลา ประชุม ปัญหา และงานด่วนของทีม"
+  className="xl:col-span-12"
+>
+  <TeamNoticeBoard isLeader={true} />
+</DashboardCard>
         </div>
       ) : (
         <div className="mt-6 grid gap-6 xl:grid-cols-12">

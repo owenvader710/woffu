@@ -22,22 +22,36 @@ export async function GET() {
 export async function POST(req: Request) {
   const supabase = await createSupabaseServer();
 
-  const body = await req.json();
+  const { data: authData, error: authErr } = await supabase.auth.getUser();
+  if (authErr) {
+    return NextResponse.json({ error: authErr.message }, { status: 401 });
+  }
 
-  const { data: authData } = await supabase.auth.getUser();
   const user = authData?.user;
-
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const body = await req.json().catch(() => null);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const title = String(body.title ?? "").trim();
+  const content = String(body.content ?? "").trim();
+
+  if (!title) {
+    return NextResponse.json({ error: "Missing title" }, { status: 400 });
+  }
+
   const insertRow = {
-    title: body.title,
-    content: body.content,
+    title,
+    content: content || null,
     notice_type: body.notice_type ?? "GENERAL",
     attachment_url: body.attachment_url ?? null,
     attachment_name: body.attachment_name ?? null,
-    is_pinned: body.is_pinned ?? false,
+    is_pinned: !!body.is_pinned,
+    is_active: true,
     created_by: user.id,
   };
 
@@ -51,5 +65,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ data });
+  return NextResponse.json({ data }, { status: 201 });
 }

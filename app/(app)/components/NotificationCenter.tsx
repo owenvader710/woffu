@@ -22,6 +22,8 @@ type MeProfile = {
   role?: string | null;
 };
 
+const HIDDEN_KEY = "woffu_hidden_notifications_v1";
+
 async function safeJson(res: Response) {
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -47,7 +49,32 @@ function toneClass(type: string) {
   if (type === "JOB_ASSIGNED") return "border-lime-400/20 bg-lime-400/10 text-lime-200";
   if (type === "JOB_STATUS_CHANGED") return "border-blue-400/20 bg-blue-400/10 text-blue-200";
   if (type === "TEAM_NOTICE") return "border-violet-400/20 bg-violet-400/10 text-violet-200";
+  if (type === "JOB_ACKNOWLEDGED") return "border-amber-400/20 bg-amber-400/10 text-amber-200";
   return "border-white/10 bg-white/5 text-white/80";
+}
+
+function readHiddenIds() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(HIDDEN_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeHiddenIds(ids: string[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(HIDDEN_KEY, JSON.stringify(ids));
+  } catch {}
+}
+
+function getProjectIdFromLink(link?: string | null) {
+  if (!link) return null;
+  const m = link.match(/\/projects\/([a-zA-Z0-9-]+)/);
+  return m?.[1] || null;
 }
 
 function showDesktopNotification(n: AppNotification) {
@@ -80,6 +107,8 @@ export default function NotificationCenter() {
   const [pushSupported, setPushSupported] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
+  const [hiddenIds, setHiddenIds] = useState<string[]>([]);
+  const [ackBusyId, setAckBusyId] = useState<string | null>(null);
 
   const initializedRef = useRef(false);
   const channelRef = useRef<any>(null);
@@ -116,22 +145,22 @@ export default function NotificationCenter() {
       const gain = ctx.createGain();
 
       oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(880, ctx.currentTime);
+      oscillator.frequency.setValueAtTime(920, ctx.currentTime);
       gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+      gain.gain.exponentialRampToValueAtTime(0.09, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.26);
 
       oscillator.connect(gain);
       gain.connect(ctx.destination);
 
       oscillator.start(ctx.currentTime);
-      oscillator.stop(ctx.currentTime + 0.22);
+      oscillator.stop(ctx.currentTime + 0.26);
     } catch {}
   }
 
   async function loadInitial() {
     try {
-      const res = await fetch("/api/notifications?limit=20", { cache: "no-store" });
+      const res = await fetch("/api/notifications?limit=30", { cache: "no-store" });
       const json = await safeJson(res);
       const rows = Array.isArray(json?.data) ? (json.data as AppNotification[]) : [];
 
@@ -151,7 +180,7 @@ export default function NotificationCenter() {
 
   async function pollNotifications() {
     try {
-      const res = await fetch("/api/notifications?limit=20", { cache: "no-store" });
+      const res = await fetch("/api/notifications?limit=30", { cache: "no-store" });
       const json = await safeJson(res);
       const rows = Array.isArray(json?.data) ? (json.data as AppNotification[]) : [];
       const nextUnread = Number(json?.unread || 0);
@@ -171,9 +200,7 @@ export default function NotificationCenter() {
 
       setItems(rows);
       setUnread(nextUnread);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
   async function readAll() {
@@ -186,6 +213,13 @@ export default function NotificationCenter() {
     await fetch(`/api/notifications/read/${id}`, { method: "POST" });
     setItems((prev) => prev.map((x) => (x.id === id ? { ...x, is_read: true } : x)));
     setUnread((prev) => Math.max(prev - 1, 0));
+  }
+
+  function clearVisibleList() {
+    const visibleIds = visibleItems.map((x) => x.id);
+    const merged = Array.from(new Set([...hiddenIds, ...visibleIds]));
+    setHiddenIds(merged);
+    writeHiddenIds(merged);
   }
 
   async function enableDesktopNotifications() {
@@ -313,6 +347,32 @@ export default function NotificationCenter() {
     }
   }
 
+  async function acknowledgeAssignment(n: AppNotification) {
+    const projectId = getProjectIdFromLink(n.link);
+    if (!projectId) return;
+
+    try {
+      setAckBusyId(n.id);
+
+      const res = await fetch("/api/notifications/ack-assignment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: projectId }),
+      });
+
+      const json = await safeJson(res);
+      if (!res.ok) {
+        throw new Error((json && (json.error || json.message)) || "Acknowledge failed");
+      }
+
+      await readOne(n.id);
+    } catch (e: any) {
+      alert(e?.message || "Acknowledge failed");
+    } finally {
+      setAckBusyId(null);
+    }
+  }
+
   function pushIncoming(n: AppNotification) {
     setItems((prev) => {
       const exists = prev.some((x) => x.id === n.id);
@@ -339,6 +399,7 @@ export default function NotificationCenter() {
   }
 
   useEffect(() => {
+    setHiddenIds(readHiddenIds());
     loadMe();
     loadInitial();
     checkPushStatus();
@@ -422,7 +483,10 @@ export default function NotificationCenter() {
     return () => window.clearTimeout(timer);
   }, [toasts]);
 
-  const latestEight = useMemo(() => items.slice(0, 8), [items]);
+  const visibleItems = useMemo(
+    () => items.filter((x) => !hiddenIds.includes(x.id)).slice(0, 10),
+    [items, hiddenIds]
+  );
 
   return (
     <>
@@ -445,13 +509,22 @@ export default function NotificationCenter() {
           <div className="absolute bottom-14 right-0 w-[360px] rounded-3xl border border-white/10 bg-[#0b0b0b] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
             <div className="flex items-center justify-between">
               <div className="text-sm font-extrabold text-white">แจ้งเตือน</div>
-              <button
-                type="button"
-                onClick={readAll}
-                className="text-xs font-semibold text-white/60 hover:text-white"
-              >
-                อ่านทั้งหมด
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={clearVisibleList}
+                  className="text-xs font-semibold text-white/60 hover:text-white"
+                >
+                  เคลียร์รายการ
+                </button>
+                <button
+                  type="button"
+                  onClick={readAll}
+                  className="text-xs font-semibold text-white/60 hover:text-white"
+                >
+                  อ่านทั้งหมด
+                </button>
+              </div>
             </div>
 
             <div className="mt-2 space-y-2">
@@ -507,36 +580,59 @@ export default function NotificationCenter() {
             </div>
 
             <div className="mt-3 space-y-2">
-              {latestEight.length === 0 ? (
+              {visibleItems.length === 0 ? (
                 <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-white/45">
                   ยังไม่มีแจ้งเตือน
                 </div>
               ) : (
-                latestEight.map((n) => {
-                  const body = (
+                visibleItems.map((n) => {
+                  const projectId = getProjectIdFromLink(n.link);
+                  const canAcknowledge = n.type === "JOB_ASSIGNED" && !!projectId;
+
+                  return (
                     <div
-                      className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 transition hover:bg-white/10"
-                      onClick={() => readOne(n.id)}
+                      key={n.id}
+                      className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3"
                     >
-                      <div className="flex items-start gap-2">
-                        <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${toneClass(n.type)}`}>
-                          {n.type}
-                        </span>
-                        {!n.is_read ? <span className="mt-1 h-2 w-2 rounded-full bg-lime-300" /> : null}
+                      <div
+                        className="cursor-pointer transition hover:bg-white/0"
+                        onClick={() => readOne(n.id)}
+                      >
+                        <div className="flex items-start gap-2">
+                          <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${toneClass(n.type)}`}>
+                            {n.type}
+                          </span>
+                          {!n.is_read ? <span className="mt-1 h-2 w-2 rounded-full bg-lime-300" /> : null}
+                        </div>
+
+                        <div className="mt-2 font-semibold text-white">{n.title}</div>
+                        {n.message ? <div className="mt-1 text-sm leading-6 text-white/65">{n.message}</div> : null}
+                        <div className="mt-2 text-xs text-white/35">{formatDateTimeTH(n.created_at)}</div>
                       </div>
 
-                      <div className="mt-2 font-semibold text-white">{n.title}</div>
-                      {n.message ? <div className="mt-1 text-sm leading-6 text-white/65">{n.message}</div> : null}
-                      <div className="mt-2 text-xs text-white/35">{formatDateTimeTH(n.created_at)}</div>
-                    </div>
-                  );
+                      <div className="mt-3 flex items-center gap-2">
+                        {n.link ? (
+                          <Link
+                            href={n.link}
+                            onClick={() => readOne(n.id)}
+                            className="inline-flex rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
+                          >
+                            เปิดดู
+                          </Link>
+                        ) : null}
 
-                  return n.link ? (
-                    <Link key={n.id} href={n.link}>
-                      {body}
-                    </Link>
-                  ) : (
-                    <div key={n.id}>{body}</div>
+                        {canAcknowledge ? (
+                          <button
+                            type="button"
+                            onClick={() => acknowledgeAssignment(n)}
+                            disabled={ackBusyId === n.id}
+                            className="inline-flex rounded-xl border border-lime-400/20 bg-lime-400/10 px-3 py-2 text-xs font-semibold text-lime-200 hover:bg-lime-400/15 disabled:opacity-50"
+                          >
+                            {ackBusyId === n.id ? "..." : "รับทราบ"}
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
                   );
                 })
               )}

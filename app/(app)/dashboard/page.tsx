@@ -449,8 +449,17 @@ function WorkloadBars({
   );
 }
 
+const NOTICE_LABEL: Record<string, string> = {
+  GENERAL: "ทั่วไป",
+  LEAVE: "ลาป่วย",
+  MEETING: "ประชุม",
+  ISSUE: "ปัญหา",
+  URGENT: "เร่งด่วน",
+};
+
 function NoticeTypePill({ type }: { type?: string | null }) {
-  const t = type || "GENERAL";
+  const t = String(type || "GENERAL").toUpperCase();
+  const label = NOTICE_LABEL[t] || "ทั่วไป";
 
   const cls =
     t === "URGENT"
@@ -465,7 +474,7 @@ function NoticeTypePill({ type }: { type?: string | null }) {
 
   return (
     <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold", cls)}>
-      {t}
+      {label}
     </span>
   );
 }

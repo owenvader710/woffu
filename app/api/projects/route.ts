@@ -166,6 +166,7 @@ if (insertedData?.assignee_id) {
       : "คุณได้รับงานใหม่";
 
   const notifMessage = insertedData.title || "มีงานใหม่ถูกมอบหมายให้คุณ";
+  const notifLink = `/projects/${insertedData.id}`;
 
   try {
     await admin.from("notifications").insert({
@@ -173,23 +174,19 @@ if (insertedData?.assignee_id) {
       type: "JOB_ASSIGNED",
       title: notifTitle,
       message: notifMessage,
-      link: "/my-work",
+      link: notifLink,
       is_read: false,
     });
-  } catch {
-    // ignore
-  }
+  } catch {}
 
   try {
     await sendPushToUser({
       userId: insertedData.assignee_id,
       title: notifTitle,
       message: notifMessage,
-      url: "/my-work",
+      url: notifLink,
     });
-  } catch {
-    // ignore
-  }
+  } catch {}
 }
 
   return NextResponse.json({ data: insertedData }, { status: 201 });

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type Status =
   | "PRE_ORDER"
@@ -20,6 +21,7 @@ function cn(...xs: Array<string | false | null | undefined>) {
 
 export default function StatusDropdown({ value, onChange }: Props) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -27,12 +29,7 @@ export default function StatusDropdown({ value, onChange }: Props) {
 
   const options = useMemo(() => {
     return [
-      {
-        value: "PRE_ORDER" as Status,
-        label: "PRE_ORDER",
-        note: "AUTO",
-        disabled: true,
-      },
+      { value: "PRE_ORDER" as Status, label: "PRE_ORDER", note: "AUTO", disabled: true },
       { value: "TODO" as Status, label: "TODO" },
       { value: "IN_PROGRESS" as Status, label: "IN_PROGRESS" },
       { value: "COMPLETED" as Status, label: "COMPLETED" },
@@ -75,6 +72,10 @@ export default function StatusDropdown({ value, onChange }: Props) {
     });
   }
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useLayoutEffect(() => {
     if (!open) return;
     updateMenuPosition();
@@ -85,7 +86,6 @@ export default function StatusDropdown({ value, onChange }: Props) {
 
     const onResize = () => updateMenuPosition();
     const onScroll = () => updateMenuPosition();
-
     const onPointerDown = (e: MouseEvent) => {
       const target = e.target as Node;
       if (wrapRef.current?.contains(target) || menuRef.current?.contains(target)) return;
@@ -103,6 +103,49 @@ export default function StatusDropdown({ value, onChange }: Props) {
     };
   }, [open]);
 
+  const menu = open ? (
+    <div
+      ref={menuRef}
+      style={menuStyle}
+      className="rounded-[22px] border border-white/10 bg-[#0b0b0b] p-3 shadow-[0_24px_80px_rgba(0,0,0,0.60)]"
+    >
+      <div className="space-y-2">
+        {options.map((opt) => {
+          const active = opt.value === value;
+          const disabled = !!opt.disabled;
+
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                if (disabled) return;
+                setOpen(false);
+                if (opt.value !== value) onChange(opt.value);
+              }}
+              className={cn(
+                "flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-extrabold transition",
+                active
+                  ? "bg-white text-black"
+                  : disabled
+                    ? "cursor-not-allowed bg-white/5 text-white/35"
+                    : "bg-[#171717] text-white hover:bg-[#222222]"
+              )}
+            >
+              <span>{opt.label}</span>
+              {opt.note ? (
+                <span className="ml-4 text-[11px] font-black tracking-widest text-white/25">
+                  {opt.note}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  ) : null;
+
   return (
     <>
       <div ref={wrapRef} className="relative inline-block text-left">
@@ -117,54 +160,7 @@ export default function StatusDropdown({ value, onChange }: Props) {
         </button>
       </div>
 
-      {open ? (
-        <div
-          ref={menuRef}
-          style={menuStyle}
-          className="rounded-[22px] border border-white/10 bg-[#0b0b0b] p-3 shadow-[0_24px_80px_rgba(0,0,0,0.60)]"
-        >
-          <div className="space-y-2">
-            {options.map((opt) => {
-              const active = opt.value === value;
-              const disabled = !!opt.disabled;
-
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => {
-                    if (disabled) return;
-                    setOpen(false);
-                    if (opt.value !== value) onChange(opt.value);
-                  }}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-extrabold transition",
-                    active
-                      ? "bg-white text-black"
-                      : disabled
-                        ? "bg-white/5 text-white/35"
-                        : "bg-[#171717] text-white hover:bg-[#222222]",
-                    disabled && "cursor-not-allowed"
-                  )}
-                >
-                  <span>{opt.label}</span>
-                  {opt.note ? (
-                    <span
-                      className={cn(
-                        "ml-4 text-[11px] font-black tracking-widest",
-                        disabled ? "text-white/25" : "text-white/35"
-                      )}
-                    >
-                      {opt.note}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
+      {mounted && menu ? createPortal(menu, document.body) : null}
     </>
   );
 }

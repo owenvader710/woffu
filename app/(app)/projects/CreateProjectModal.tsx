@@ -18,7 +18,6 @@ type Props = {
   members: Member[];
 };
 
-// ✅ แยก Brand ตามฝ่าย
 const VIDEO_BRANDS = ["IRONTEC", "IVADE", "AMURO", "THE GYM CO.", "OVCM"] as const;
 
 const GRAPHIC_BRANDS = [
@@ -88,8 +87,8 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
   const [brand, setBrand] = useState<string>("");
   const [assigneeId, setAssigneeId] = useState<string>("");
 
-  const [startDate, setStartDate] = useState<string>(""); // datetime-local
-  const [dueDate, setDueDate] = useState<string>(""); // datetime-local
+  const [startDate, setStartDate] = useState<string>("");
+  const [dueDate, setDueDate] = useState<string>("");
 
   const [videoPriority, setVideoPriority] = useState<(typeof VIDEO_PRIORITIES)[number]>("3ดาว");
   const [videoPurpose, setVideoPurpose] = useState<(typeof VIDEO_PURPOSES)[number]>("สร้างความต้องการ");
@@ -97,6 +96,10 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
   const [graphicJobType, setGraphicJobType] = useState<(typeof GRAPHIC_JOB_TYPES)[number]>("Support MKT");
 
   const [description, setDescription] = useState("");
+
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
+  const [attachmentName, setAttachmentName] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -106,22 +109,18 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
     [members]
   );
 
-  // ✅ แสดงผู้รับผิดชอบเฉพาะฝ่ายที่เลือก
   const assigneeOptions = useMemo(() => {
     const list = activeMembers.filter((m) => m.department === type);
     return list.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || "", "th"));
   }, [activeMembers, type]);
 
-  // ✅ list แบรนด์ตามฝ่าย
   const brandOptions = useMemo(() => {
     return (type === "VIDEO" ? VIDEO_BRANDS : GRAPHIC_BRANDS) as readonly string[];
   }, [type]);
 
-  // ✅ ถ้าเปลี่ยนฝ่ายแล้ว brand เดิมไม่อยู่ใน list ใหม่ ให้รีเซ็ตเป็น "-"
   React.useEffect(() => {
     if (brand && !brandOptions.includes(brand)) setBrand("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type]);
+  }, [type, brand, brandOptions]);
 
   function resetForm() {
     setType("VIDEO");
@@ -136,7 +135,40 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
     setVideoPurpose("สร้างความต้องการ");
     setGraphicJobType("Support MKT");
     setDescription("");
+    setAttachmentUrl(null);
+    setAttachmentName(null);
     setError("");
+  }
+
+  async function uploadFile(file: File) {
+    setUploading(true);
+    setError("");
+
+    try {
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error("ไฟล์มีขนาดเกิน 5MB");
+      }
+
+      const form = new FormData();
+      form.append("file", file);
+
+      const res = await fetch("/api/projects/upload", {
+        method: "POST",
+        body: form,
+      });
+
+      const json = await safeJson(res);
+      if (!res.ok) {
+        throw new Error((json && (json.error || json.message)) || "Upload failed");
+      }
+
+      setAttachmentUrl(json?.data?.url || null);
+      setAttachmentName(json?.data?.name || null);
+    } catch (err: any) {
+      setError(err?.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
   }
 
   if (!open) return null;
@@ -152,19 +184,24 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
 
     setSubmitting(true);
     try {
-const payload: any = {
-  type,
-  department: type,
-  title: title.trim(),
+      const finalDescription = [
+        description.trim() || "",
+        attachmentUrl ? `\n\n[แนบไฟล์] ${attachmentName || "file"}\n${attachmentUrl}` : "",
+      ]
+        .join("")
+        .trim();
+
+      const payload: any = {
+        type,
+        department: type,
+        title: title.trim(),
         code: code.trim() || null,
-
         product_group: productGroup || null,
-
         brand: brand || null,
         assignee_id: assigneeId || null,
         start_date: startDate ? new Date(startDate).toISOString() : null,
         due_date: dueDate ? new Date(dueDate).toISOString() : null,
-        description: description.trim() || null,
+        description: finalDescription || null,
       };
 
       if (type === "VIDEO") {
@@ -400,6 +437,28 @@ const payload: any = {
               placeholder="ใส่รายละเอียดงานเพิ่มเติมได้"
               className="mt-2 h-32 w-full resize-none rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
             />
+
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-white/70">
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) uploadFile(file);
+                  }}
+                />
+                <span className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10">
+                  {uploading ? "กำลังอัปโหลด..." : "แนบรูปหรือไฟล์ (ไม่เกิน 5MB)"}
+                </span>
+              </label>
+            </div>
+
+            {attachmentName ? (
+              <div className="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80">
+                แนบแล้ว: {attachmentName}
+              </div>
+            ) : null}
           </div>
 
           {error ? (
@@ -424,7 +483,7 @@ const payload: any = {
             <button
               type="submit"
               className="rounded-2xl bg-[#e5ff78] px-6 py-3 text-sm font-extrabold text-black hover:opacity-90 disabled:opacity-60"
-              disabled={submitting}
+              disabled={submitting || uploading}
             >
               {submitting ? "กำลังสร้าง..." : "สร้างงาน"}
             </button>

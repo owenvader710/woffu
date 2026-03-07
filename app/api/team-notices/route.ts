@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServer } from "../_supabase";
 import { createSupabaseAdmin } from "../_supabaseAdmin";
+import { sendPushToUser } from "../_push";
 
 type NoticeType = "GENERAL" | "LEAVE" | "MEETING" | "ISSUE" | "URGENT";
 
@@ -138,17 +139,32 @@ export async function POST(req: NextRequest) {
       .filter((id) => id && id !== user.id);
 
     if (targetUsers.length > 0) {
-      await admin.from("notifications").insert(
-        targetUsers.map((uid) => ({
-          user_id: uid,
-          type: "TEAM_NOTICE",
-          title: "มีประกาศทีมใหม่",
-          message: title,
-          link: "/team-notices",
-          is_read: false,
-        }))
-      );
-    }
+  try {
+    await admin.from("notifications").insert(
+      targetUsers.map((uid) => ({
+        user_id: uid,
+        type: "TEAM_NOTICE",
+        title: "มีประกาศทีมใหม่",
+        message: title,
+        link: "/team-notices",
+        is_read: false,
+      }))
+    );
+  } catch {
+    // ignore
+  }
+
+  await Promise.allSettled(
+    targetUsers.map((uid) =>
+      sendPushToUser({
+        userId: uid,
+        title: "มีประกาศทีมใหม่",
+        message: title,
+        url: "/team-notices",
+      })
+    )
+  );
+}
   } catch {
     // ไม่ให้ notification ทำให้การสร้างประกาศล้ม
   }

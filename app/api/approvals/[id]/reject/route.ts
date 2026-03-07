@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseFromRequest } from "@/utils/supabase/api";
 import { createSupabaseAdmin } from "@/app/api/_supabaseAdmin";
+import { sendPushToUser } from "@/app/api/_push";
 
 function badId(id: string) {
   return !id || id.length < 10;
@@ -91,17 +92,28 @@ export async function POST(
   }
 
   try {
-    await admin.from("notifications").insert({
-      user_id: reqRow.requested_by,
-      type: "JOB_STATUS_CHANGED",
-      title: "คำขอเปลี่ยนสถานะงานถูกปฏิเสธ",
-      message: `${reqRow.from_status} → ${reqRow.to_status}`,
-      link: "/my-work",
-      is_read: false,
-    });
-  } catch {
-    // ไม่ให้ notification พลาดแล้วทำให้ reject ล้ม
-  }
+  await admin.from("notifications").insert({
+    user_id: reqRow.requested_by,
+    type: "JOB_STATUS_CHANGED",
+    title: "คำขอเปลี่ยนสถานะงานถูกปฏิเสธ",
+    message: `${reqRow.from_status} → ${reqRow.to_status}`,
+    link: "/my-work",
+    is_read: false,
+  });
+} catch {
+  // ignore
+}
+
+try {
+  await sendPushToUser({
+    userId: reqRow.requested_by,
+    title: "คำขอเปลี่ยนสถานะงานถูกปฏิเสธ",
+    message: `${reqRow.from_status} → ${reqRow.to_status}`,
+    url: "/my-work",
+  });
+} catch {
+  // ignore
+}
 
   return NextResponse.json({ ok: true });
 }

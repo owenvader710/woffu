@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer } from "../_supabase";
 import { createSupabaseAdmin } from "../_supabaseAdmin";
+import { sendPushToUser } from "../_push";
 
 const SELECT_FIELDS = [
   "id",
@@ -158,27 +159,38 @@ export async function POST(req: Request) {
 
   const insertedData = (insertedRaw ?? null) as unknown as ProjectRow | null;
 
-  if (insertedData?.assignee_id) {
-    const notifTitle =
-      insertRow.status === "PRE_ORDER"
-        ? "คุณได้รับงานล่วงหน้าใหม่"
-        : "คุณได้รับงานใหม่";
+if (insertedData?.assignee_id) {
+  const notifTitle =
+    insertRow.status === "PRE_ORDER"
+      ? "คุณได้รับงานล่วงหน้าใหม่"
+      : "คุณได้รับงานใหม่";
 
-    const notifMessage = insertedData.title || "มีงานใหม่ถูกมอบหมายให้คุณ";
+  const notifMessage = insertedData.title || "มีงานใหม่ถูกมอบหมายให้คุณ";
 
-    try {
-      await admin.from("notifications").insert({
-        user_id: insertedData.assignee_id,
-        type: "JOB_ASSIGNED",
-        title: notifTitle,
-        message: notifMessage,
-        link: "/my-work",
-        is_read: false,
-      });
-    } catch {
-      // ไม่ให้ notification พลาดแล้วทำให้การสร้างงานล้ม
-    }
+  try {
+    await admin.from("notifications").insert({
+      user_id: insertedData.assignee_id,
+      type: "JOB_ASSIGNED",
+      title: notifTitle,
+      message: notifMessage,
+      link: "/my-work",
+      is_read: false,
+    });
+  } catch {
+    // ignore
   }
+
+  try {
+    await sendPushToUser({
+      userId: insertedData.assignee_id,
+      title: notifTitle,
+      message: notifMessage,
+      url: "/my-work",
+    });
+  } catch {
+    // ignore
+  }
+}
 
   return NextResponse.json({ data: insertedData }, { status: 201 });
 }

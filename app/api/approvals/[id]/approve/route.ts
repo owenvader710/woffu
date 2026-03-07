@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseFromRequest } from "@/utils/supabase/api";
 import { createSupabaseAdmin } from "@/app/api/_supabaseAdmin";
+import { sendPushToUser } from "@/app/api/_push";
 
 function badId(id: string) {
   return !id || id.length < 10;
@@ -82,22 +83,28 @@ export async function POST(
   }
 
   try {
-    await admin.from("project_logs").insert({
-      project_id: reqRow.project_id,
-      created_by: user.id,
-      action: "STATUS_APPROVED",
-      detail: {
-        request_id: id,
-        from_status: reqRow.from_status,
-        to_status: reqRow.to_status,
-        requested_by: reqRow.requested_by,
-        reviewed_by: user.id,
-        result: "APPROVED",
-      },
-    });
-  } catch {
-    // ไม่ให้ log พลาดแล้วทำให้ approve ล้ม
-  }
+  await admin.from("notifications").insert({
+    user_id: reqRow.requested_by,
+    type: "JOB_STATUS_CHANGED",
+    title: "สถานะงานของคุณถูกอนุมัติแล้ว",
+    message: `${reqRow.from_status} → ${reqRow.to_status}`,
+    link: "/my-work",
+    is_read: false,
+  });
+} catch {
+  // ignore
+}
+
+try {
+  await sendPushToUser({
+    userId: reqRow.requested_by,
+    title: "สถานะงานของคุณถูกอนุมัติแล้ว",
+    message: `${reqRow.from_status} → ${reqRow.to_status}`,
+    url: "/my-work",
+  });
+} catch {
+  // ignore
+}
 
   try {
     await admin.from("notifications").insert({

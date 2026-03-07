@@ -50,29 +50,6 @@ function toneClass(type: string) {
   return "border-white/10 bg-white/5 text-white/80";
 }
 
-function playBeep() {
-  try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-
-    const ctx = new AudioCtx();
-    const oscillator = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    oscillator.type = "sine";
-    oscillator.frequency.setValueAtTime(880, ctx.currentTime);
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
-
-    oscillator.connect(gain);
-    gain.connect(ctx.destination);
-
-    oscillator.start(ctx.currentTime);
-    oscillator.stop(ctx.currentTime + 0.22);
-  } catch {}
-}
-
 function showDesktopNotification(n: AppNotification) {
   try {
     if (!("Notification" in window)) return;
@@ -106,6 +83,8 @@ export default function NotificationCenter() {
 
   const initializedRef = useRef(false);
   const channelRef = useRef<any>(null);
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
   async function loadMe() {
     try {
@@ -118,17 +97,82 @@ export default function NotificationCenter() {
     }
   }
 
+  function playBeep() {
+    try {
+      if (!audioCtxRef.current) {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioCtx) return;
+        audioCtxRef.current = new AudioCtx();
+      }
+
+      const ctx = audioCtxRef.current;
+      if (!ctx) return;
+
+      if (ctx.state === "suspended") {
+        ctx.resume().catch(() => {});
+      }
+
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+
+      oscillator.start(ctx.currentTime);
+      oscillator.stop(ctx.currentTime + 0.22);
+    } catch {}
+  }
+
   async function loadInitial() {
     try {
       const res = await fetch("/api/notifications?limit=20", { cache: "no-store" });
       const json = await safeJson(res);
       const rows = Array.isArray(json?.data) ? (json.data as AppNotification[]) : [];
+
       setItems(rows);
       setUnread(Number(json?.unread || 0));
+
+      const set = new Set<string>();
+      rows.forEach((x) => set.add(x.id));
+      seenIdsRef.current = set;
+
       initializedRef.current = true;
     } catch {
       setItems([]);
       setUnread(0);
+    }
+  }
+
+  async function pollNotifications() {
+    try {
+      const res = await fetch("/api/notifications?limit=20", { cache: "no-store" });
+      const json = await safeJson(res);
+      const rows = Array.isArray(json?.data) ? (json.data as AppNotification[]) : [];
+      const nextUnread = Number(json?.unread || 0);
+
+      const fresh = rows.filter((x) => !seenIdsRef.current.has(x.id));
+
+      if (fresh.length > 0 && initializedRef.current) {
+        fresh
+          .slice()
+          .reverse()
+          .forEach((n) => pushIncoming(n));
+      }
+
+      const nextSet = new Set<string>();
+      rows.forEach((x) => nextSet.add(x.id));
+      seenIdsRef.current = nextSet;
+
+      setItems(rows);
+      setUnread(nextUnread);
+    } catch {
+      // ignore
     }
   }
 
@@ -202,7 +246,7 @@ export default function NotificationCenter() {
 
       if (permission !== "granted") return;
 
-      const reg = await navigator.serviceWorker.register("/sw.js");
+      await navigator.serviceWorker.register("/sw.js");
       const readyReg = await navigator.serviceWorker.ready;
 
       const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
@@ -254,12 +298,10 @@ export default function NotificationCenter() {
         return;
       }
 
-      const endpoint = sub.endpoint;
-
       await fetch("/api/push-subscriptions/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ endpoint }),
+        body: JSON.stringify({ endpoint: sub.endpoint }),
       });
 
       await sub.unsubscribe();
@@ -280,15 +322,17 @@ export default function NotificationCenter() {
       );
     });
 
+    seenIdsRef.current.add(n.id);
     setUnread((prev) => prev + (n.is_read ? 0 : 1));
 
     if (initializedRef.current) {
       setToasts((prev) => [...prev, n]);
 
-      if (soundEnabled) playBeep();
+      if (soundEnabled) {
+        playBeep();
+      }
 
-      const pageHidden = document.visibilityState === "hidden";
-      if (pageHidden && desktopPermission === "granted") {
+      if (document.visibilityState === "hidden" && desktopPermission === "granted") {
         showDesktopNotification(n);
       }
     }
@@ -309,13 +353,28 @@ export default function NotificationCenter() {
   }, []);
 
   useEffect(() => {
-    const enable = () => setSoundEnabled(true);
+    const enable = () => {
+      setSoundEnabled(true);
+      if (audioCtxRef.current?.state === "suspended") {
+        audioCtxRef.current.resume().catch(() => {});
+      }
+    };
+
     window.addEventListener("click", enable, { once: true });
     window.addEventListener("keydown", enable, { once: true });
+
     return () => {
       window.removeEventListener("click", enable);
       window.removeEventListener("keydown", enable);
     };
+  }, []);
+
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      pollNotifications();
+    }, 5000);
+
+    return () => window.clearInterval(t);
   }, []);
 
   useEffect(() => {
@@ -353,7 +412,7 @@ export default function NotificationCenter() {
         channelRef.current = null;
       }
     };
-  }, [me?.id, soundEnabled, desktopPermission]);
+  }, [me?.id, desktopPermission, soundEnabled]);
 
   useEffect(() => {
     if (toasts.length === 0) return;
@@ -398,8 +457,9 @@ export default function NotificationCenter() {
             <div className="mt-2 space-y-2">
               <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
                 <div className="text-[11px] text-white/50">
-                  realtime {me?.id ? "connected" : "waiting"}
+                  realtime / poll active
                   {desktopPermission === "granted" ? " · desktop on" : ""}
+                  {soundEnabled ? " · sound on" : ""}
                 </div>
 
                 {desktopPermission === "default" ? (
@@ -462,15 +522,11 @@ export default function NotificationCenter() {
                         <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${toneClass(n.type)}`}>
                           {n.type}
                         </span>
-                        {!n.is_read ? (
-                          <span className="mt-1 h-2 w-2 rounded-full bg-lime-300" />
-                        ) : null}
+                        {!n.is_read ? <span className="mt-1 h-2 w-2 rounded-full bg-lime-300" /> : null}
                       </div>
 
                       <div className="mt-2 font-semibold text-white">{n.title}</div>
-                      {n.message ? (
-                        <div className="mt-1 text-sm leading-6 text-white/65">{n.message}</div>
-                      ) : null}
+                      {n.message ? <div className="mt-1 text-sm leading-6 text-white/65">{n.message}</div> : null}
                       <div className="mt-2 text-xs text-white/35">{formatDateTimeTH(n.created_at)}</div>
                     </div>
                   );
@@ -501,9 +557,7 @@ export default function NotificationCenter() {
                   {n.type}
                 </div>
                 <div className="mt-2 font-bold text-white">{n.title}</div>
-                {n.message ? (
-                  <div className="mt-1 text-sm leading-6 text-white/65">{n.message}</div>
-                ) : null}
+                {n.message ? <div className="mt-1 text-sm leading-6 text-white/65">{n.message}</div> : null}
               </div>
 
               <button

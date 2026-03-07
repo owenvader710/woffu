@@ -6,8 +6,14 @@ import { sendPushToUser } from "../_push";
 type NoticeType = "GENERAL" | "LEAVE" | "MEETING" | "ISSUE" | "URGENT";
 
 function normalizeNoticeType(v: unknown): NoticeType {
-  const s = String(v || "").toUpperCase();
-  if (s === "LEAVE" || s === "MEETING" || s === "ISSUE" || s === "URGENT") return s;
+  const s = String(v || "").trim().toUpperCase();
+
+  if (s === "GENERAL" || s === "ทั่วไป") return "GENERAL";
+  if (s === "LEAVE" || s === "ลางาน" || s === "ลาป่วย") return "LEAVE";
+  if (s === "MEETING" || s === "ประชุม") return "MEETING";
+  if (s === "ISSUE" || s === "ปัญหา") return "ISSUE";
+  if (s === "URGENT" || s === "เร่งด่วน" || s === "ด่วน") return "URGENT";
+
   return "GENERAL";
 }
 

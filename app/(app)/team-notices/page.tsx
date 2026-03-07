@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 
-type NoticeType = "ทั่วไป" | "ลางาน" | "ประชุม" | "ปัญหา" | "เร่งด่วน";
+type NoticeType = "GENERAL" | "LEAVE" | "MEETING" | "ISSUE" | "URGENT";
 
 type TeamNotice = {
   id: string;
@@ -28,6 +28,16 @@ type MeProfile = {
   display_name?: string | null;
 };
 
+const NOTICE_LABEL: Record<NoticeType, string> = {
+  GENERAL: "ทั่วไป",
+  LEAVE: "ลาป่วย",
+  MEETING: "ประชุม",
+  ISSUE: "ปัญหา",
+  URGENT: "เร่งด่วน",
+};
+
+const NOTICE_OPTIONS: NoticeType[] = ["GENERAL", "LEAVE", "MEETING", "ISSUE", "URGENT"];
+
 async function safeJson(res: Response) {
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -41,28 +51,41 @@ function formatDateTimeTH(iso?: string | null) {
   if (!iso) return "-";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "-";
-  const date = d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
-  const time = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+  const date = d.toLocaleDateString("th-TH", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+  const time = d.toLocaleTimeString("th-TH", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   return `${date} ${time}`;
 }
 
 function NoticeTypePill({ type }: { type?: string | null }) {
-  const t = type || "ทั่วไป";
+  const t = (type || "GENERAL") as NoticeType;
+  const label = NOTICE_LABEL[t] || "ทั่วไป";
 
   const cls =
-    t === "เร่งด่วน"
+    t === "URGENT"
       ? "border-red-500/30 bg-red-500/10 text-red-200"
-      : t === "ประชุม"
+      : t === "MEETING"
         ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
-        : t === "ลางาน"
+        : t === "LEAVE"
           ? "border-violet-500/30 bg-violet-500/10 text-violet-200"
-          : t === "ปัญหา"
+          : t === "ISSUE"
             ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
             : "border-white/10 bg-white/5 text-white/70";
 
   return (
-    <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold", cls)}>
-      {t}
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold",
+        cls
+      )}
+    >
+      {label}
     </span>
   );
 }
@@ -76,7 +99,7 @@ export default function TeamNoticesPage() {
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [noticeType, setNoticeType] = useState<NoticeType>("ทั่วไป");
+  const [noticeType, setNoticeType] = useState<NoticeType>("GENERAL");
   const [isPinned, setIsPinned] = useState(false);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"ALL" | NoticeType>("ALL");
@@ -98,10 +121,14 @@ export default function TeamNoticesPage() {
 
     try {
       const q = new URLSearchParams();
+
       if (search.trim()) q.set("q", search.trim());
       if (filterType !== "ALL") q.set("type", filterType);
 
-      const res = await fetch(`/api/team-notices?${q.toString()}`, { cache: "no-store" });
+      const qs = q.toString();
+      const res = await fetch(`/api/team-notices${qs ? `?${qs}` : ""}`, {
+        cache: "no-store",
+      });
       const json = await safeJson(res);
 
       if (!res.ok) {
@@ -128,9 +155,12 @@ export default function TeamNoticesPage() {
 
   const filtered = useMemo(() => {
     if (!search.trim()) return items;
+
     const needle = search.trim().toLowerCase();
     return items.filter((n) =>
-      `${n.title || ""} ${n.content || ""} ${n.creator?.display_name || ""}`.toLowerCase().includes(needle)
+      `${n.title || ""} ${n.content || ""} ${n.creator?.display_name || ""}`
+        .toLowerCase()
+        .includes(needle)
     );
   }, [items, search]);
 
@@ -161,10 +191,11 @@ export default function TeamNoticesPage() {
 
       setTitle("");
       setContent("");
-      setNoticeType("ทั่วไป");
+      setNoticeType("GENERAL");
       setIsPinned(false);
       setAttachmentUrl(null);
       setAttachmentName(null);
+
       await loadNotices();
     } catch (e: any) {
       setError(e?.message || "Create notice failed");
@@ -232,12 +263,16 @@ export default function TeamNoticesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-6 py-8 lg:px-10">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
-          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-white">Team Notice Board</h1>
-          <div className="mt-2 text-sm text-white/60">กระดานประกาศกลางของทีม สำหรับแจ้งลา ประชุม ปัญหา และงานด่วน</div>
+          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-white">
+            Team Notice Board
+          </h1>
+          <div className="mt-2 text-sm text-white/60">
+            กระดานประกาศกลางของทีม สำหรับแจ้งลา ประชุม ปัญหา และงานด่วน
+          </div>
         </div>
 
         <button
@@ -261,15 +296,15 @@ export default function TeamNoticesPage() {
 
               <select
                 value={filterType}
-                onChange={(e) => setFilterType(e.target.value as any)}
+                onChange={(e) => setFilterType(e.target.value as "ALL" | NoticeType)}
                 className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
               >
-                <option value="ALL">All</option>
-                <option value="ทั่วไป">ทั่วไป</option>
-                <option value="ลางาน">ลางาน</option>
-                <option value="ประชุม">ประชุม</option>
-                <option value="ปัญหา">ปัญหา</option>
-                <option value="เร่งด่วน">เร่งด่วน</option>
+                <option value="ALL">ทั้งหมด</option>
+                <option value="GENERAL">{NOTICE_LABEL.GENERAL}</option>
+                <option value="LEAVE">{NOTICE_LABEL.LEAVE}</option>
+                <option value="MEETING">{NOTICE_LABEL.MEETING}</option>
+                <option value="ISSUE">{NOTICE_LABEL.ISSUE}</option>
+                <option value="URGENT">{NOTICE_LABEL.URGENT}</option>
               </select>
             </div>
 
@@ -291,6 +326,7 @@ export default function TeamNoticesPage() {
               ) : (
                 filtered.map((n) => {
                   const canDelete = isLeader || n.created_by === me?.id;
+
                   return (
                     <div
                       key={n.id}
@@ -316,7 +352,8 @@ export default function TeamNoticesPage() {
                           ) : null}
 
                           <div className="mt-3 text-xs text-white/40">
-                            โดย {n.creator?.display_name || "ไม่ทราบชื่อ"} · {formatDateTimeTH(n.created_at)}
+                            โดย {n.creator?.display_name || "ไม่ทราบชื่อ"} ·{" "}
+                            {formatDateTimeTH(n.created_at)}
                           </div>
 
                           {n.attachment_url ? (
@@ -380,13 +417,13 @@ export default function TeamNoticesPage() {
               />
 
               <div className="flex flex-wrap gap-2">
-                {["ทั่วไป", "ลางาน", "ประชุม", "ปัญหา", "เร่งด่วน"].map((t) => {
+                {NOTICE_OPTIONS.map((t) => {
                   const active = noticeType === t;
                   return (
                     <button
                       key={t}
                       type="button"
-                      onClick={() => setNoticeType(t as NoticeType)}
+                      onClick={() => setNoticeType(t)}
                       className={cn(
                         "rounded-xl border px-3 py-2 text-xs font-semibold transition",
                         active
@@ -394,7 +431,7 @@ export default function TeamNoticesPage() {
                           : "border-white/10 bg-transparent text-white/70 hover:bg-white/10 hover:text-white"
                       )}
                     >
-                      {t}
+                      {NOTICE_LABEL[t]}
                     </button>
                   );
                 })}
@@ -411,7 +448,7 @@ export default function TeamNoticesPage() {
                     }}
                   />
                   <span className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10">
-                    {uploading ? "กำลังอัปโหลด..." : "แนบรูปหรือไฟล์" + " (ไม่เกิน 5MB)"}
+                    {uploading ? "กำลังอัปโหลด..." : "แนบรูปหรือไฟล์ (ไม่เกิน 5MB)"}
                   </span>
                 </label>
 

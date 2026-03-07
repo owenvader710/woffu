@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 export type Status =
   | "PRE_ORDER"
@@ -33,22 +33,10 @@ export default function StatusDropdown({ value, onChange }: Props) {
         note: "AUTO",
         disabled: true,
       },
-      {
-        value: "TODO" as Status,
-        label: "TODO",
-      },
-      {
-        value: "IN_PROGRESS" as Status,
-        label: "IN_PROGRESS",
-      },
-      {
-        value: "COMPLETED" as Status,
-        label: "COMPLETED",
-      },
-      {
-        value: "BLOCKED" as Status,
-        label: "BLOCKED",
-      },
+      { value: "TODO" as Status, label: "TODO" },
+      { value: "IN_PROGRESS" as Status, label: "IN_PROGRESS" },
+      { value: "COMPLETED" as Status, label: "COMPLETED" },
+      { value: "BLOCKED" as Status, label: "BLOCKED" },
     ];
   }, []);
 
@@ -59,25 +47,24 @@ export default function StatusDropdown({ value, onChange }: Props) {
 
   function updateMenuPosition() {
     const btn = buttonRef.current;
-    if (!btn) return;
+    const menu = menuRef.current;
+    if (!btn || !menu) return;
 
     const rect = btn.getBoundingClientRect();
     const menuWidth = 240;
-    const gap = 8;
-    const estimatedHeight = 320;
+    const gap = 10;
+    const menuHeight = menu.offsetHeight || 280;
 
     let left = rect.right - menuWidth;
-    let top = rect.bottom + gap;
-
     if (left < 12) left = 12;
     if (left + menuWidth > window.innerWidth - 12) {
       left = window.innerWidth - menuWidth - 12;
     }
 
-    if (top + estimatedHeight > window.innerHeight - 12) {
-      top = rect.top - estimatedHeight - gap;
-    }
-    if (top < 12) top = 12;
+    const hasSpaceBelow = rect.bottom + gap + menuHeight <= window.innerHeight - 12;
+    const top = hasSpaceBelow
+      ? rect.bottom + gap
+      : Math.max(12, rect.top - menuHeight - gap);
 
     setMenuStyle({
       position: "fixed",
@@ -88,21 +75,20 @@ export default function StatusDropdown({ value, onChange }: Props) {
     });
   }
 
+  useLayoutEffect(() => {
+    if (!open) return;
+    updateMenuPosition();
+  }, [open, value]);
+
   useEffect(() => {
     if (!open) return;
 
-    updateMenuPosition();
-
     const onResize = () => updateMenuPosition();
     const onScroll = () => updateMenuPosition();
+
     const onPointerDown = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (
-        wrapRef.current?.contains(target) ||
-        menuRef.current?.contains(target)
-      ) {
-        return;
-      }
+      if (wrapRef.current?.contains(target) || menuRef.current?.contains(target)) return;
       setOpen(false);
     };
 
@@ -116,12 +102,6 @@ export default function StatusDropdown({ value, onChange }: Props) {
       document.removeEventListener("mousedown", onPointerDown);
     };
   }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const id = window.requestAnimationFrame(() => updateMenuPosition());
-    return () => window.cancelAnimationFrame(id);
-  }, [open, value]);
 
   return (
     <>

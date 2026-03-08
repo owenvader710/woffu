@@ -52,13 +52,13 @@ export default function StatusDropdown({ value, onChange }: Props) {
     const isMobile = viewportWidth < 640;
 
     const horizontalPadding = 12;
-    const gap = 10;
+    const gap = 8;
 
     const preferredWidth = isMobile
-      ? Math.min(Math.max(rect.width, 220), viewportWidth - horizontalPadding * 2)
-      : 240;
+      ? Math.min(Math.max(rect.width, 190), viewportWidth - horizontalPadding * 2)
+      : 220;
 
-    const menuHeight = menu.offsetHeight || 280;
+    const menuHeight = menu.offsetHeight || 260;
 
     let left = isMobile ? rect.left : rect.right - preferredWidth;
 
@@ -116,9 +116,9 @@ export default function StatusDropdown({ value, onChange }: Props) {
     <div
       ref={menuRef}
       style={menuStyle}
-      className="rounded-[22px] border border-white/10 bg-[#0b0b0b] p-3 shadow-[0_24px_80px_rgba(0,0,0,0.60)]"
+      className="rounded-[18px] border border-white/10 bg-[#0b0b0b] p-2.5 shadow-[0_24px_80px_rgba(0,0,0,0.60)]"
     >
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {options.map((opt) => {
           const active = opt.value === value;
           const disabled = !!opt.disabled;
@@ -134,7 +134,7 @@ export default function StatusDropdown({ value, onChange }: Props) {
                 if (opt.value !== value) onChange(opt.value);
               }}
               className={cn(
-                "flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-extrabold transition",
+                "flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-[13px] font-extrabold transition",
                 active
                   ? "bg-white text-black"
                   : disabled
@@ -144,7 +144,7 @@ export default function StatusDropdown({ value, onChange }: Props) {
             >
               <span className="min-w-0 break-words">{opt.label}</span>
               {opt.note ? (
-                <span className="ml-4 shrink-0 text-[11px] font-black tracking-widest text-white/25">
+                <span className="ml-3 shrink-0 text-[10px] font-black tracking-widest text-white/25">
                   {opt.note}
                 </span>
               ) : null}
@@ -162,10 +162,10 @@ export default function StatusDropdown({ value, onChange }: Props) {
           ref={buttonRef}
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="inline-flex w-full min-w-0 items-center justify-between rounded-[18px] border border-white/35 bg-[linear-gradient(180deg,#3a3a3a,#202020)] px-4 py-3 text-sm font-extrabold text-white shadow-[0_8px_24px_rgba(0,0,0,0.28)] transition hover:brightness-110 sm:min-w-[170px] sm:px-5"
+          className="inline-flex w-full min-w-0 items-center justify-between rounded-[14px] border border-white/30 bg-[linear-gradient(180deg,#353535,#1f1f1f)] px-3.5 py-2.5 text-[13px] font-extrabold text-white shadow-[0_8px_24px_rgba(0,0,0,0.28)] transition hover:brightness-110 sm:min-w-[160px] sm:px-4"
         >
           <span className="truncate">{current.label}</span>
-          <span className="ml-4 shrink-0 text-xs text-[#9eb3d1]">▼</span>
+          <span className="ml-3 shrink-0 text-[10px] text-[#9eb3d1]">▼</span>
         </button>
       </div>
 

@@ -305,13 +305,15 @@ function MobileWorkCard({
           </div>
 
           {secondLine(w) ? (
-            <div className="mt-2 break-words text-xs leading-6 text-white/45">{secondLine(w)}</div>
+            <div className="mt-2 break-words text-xs leading-6 text-white/45">
+              {secondLine(w)}
+            </div>
           ) : null}
 
           {pending ? (
-            <div className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full border border-lime-400/20 bg-lime-400/10 px-4 py-1 text-xs font-extrabold text-lime-200">
-              <span className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_18px_rgba(163,230,53,0.9)]" />
-              <span className="truncate">
+            <div className="mt-3 flex max-w-full items-center gap-2 rounded-full border border-lime-400/20 bg-lime-400/10 px-4 py-2 text-xs font-extrabold text-lime-200">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-lime-300 shadow-[0_0_18px_rgba(163,230,53,0.9)]" />
+              <span className="min-w-0 break-words">
                 รออนุมัติ: {uiLabelFromDb(pending.from_status)} → {uiLabelFromDb(pending.to_status)}
               </span>
             </div>

@@ -76,22 +76,32 @@ function DeptPill({ dept }: { dept: Dept }) {
     dept === "VIDEO"
       ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
       : dept === "GRAPHIC"
-      ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
-      : "border-white/10 bg-white/5 text-white/70";
+        ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+        : "border-white/10 bg-white/5 text-white/70";
 
-  return <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", cls)}>{dept}</span>;
+  return (
+    <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", cls)}>
+      {dept}
+    </span>
+  );
 }
 
 function RolePill({ role }: { role: Role }) {
   const cls =
-    role === "LEADER" ? "border-green-500/30 bg-green-500/10 text-green-200" : "border-white/10 bg-white/5 text-white/70";
-  return <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", cls)}>{role}</span>;
+    role === "LEADER"
+      ? "border-green-500/30 bg-green-500/10 text-green-200"
+      : "border-white/10 bg-white/5 text-white/70";
+  return (
+    <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", cls)}>
+      {role}
+    </span>
+  );
 }
 
 function Avatar({
   url,
   name,
-  size =150,
+  size = 150,
 }: {
   url?: string | null;
   name?: string | null;
@@ -115,7 +125,6 @@ function Avatar({
   );
 }
 
-/** ✅ modal แก้ไข “โปรไฟล์ตัวเอง” (มี birth_date แต่ “ไม่โชว์” ในการ์ดหลักตามที่นายท่านบอก) */
 function EditMyProfileModal({
   open,
   onClose,
@@ -154,14 +163,11 @@ function EditMyProfileModal({
         birth_date: birthDate ? birthDate : null,
       };
 
-const res = await fetch(
-  `/api/members/${encodeURIComponent(me!.id)}`,
-  {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  }
-);
+      const res = await fetch(`/api/members/${encodeURIComponent(me!.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
       const json = await safeJson(res);
       if (!res.ok) {
@@ -181,24 +187,26 @@ const res = await fetch(
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="w-full max-w-xl rounded-3xl border border-white/10 bg-black text-white shadow-[0_25px_80px_rgba(0,0,0,0.6)]">
-        <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
-          <div>
+        <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5">
+          <div className="min-w-0">
             <div className="text-sm font-semibold tracking-widest text-white/50">MY PROFILE</div>
             <div className="mt-1 text-xl font-extrabold">แก้ไขโปรไฟล์</div>
           </div>
 
           <button
             onClick={onClose}
-            className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10"
+            className="w-fit rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10"
             disabled={saving}
           >
             ปิด
           </button>
         </div>
 
-        <div className="space-y-4 px-6 py-5">
+        <div className="space-y-4 px-5 py-4 sm:px-6 sm:py-5">
           {err ? (
-            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{err}</div>
+            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+              {err}
+            </div>
           ) : null}
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -234,14 +242,14 @@ const res = await fetch(
 
             <div>
               <div className="mb-2 text-xs font-semibold text-white/60">อีเมล (อ่านอย่างเดียว)</div>
-              <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white/80">
+              <div className="break-all rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white/80">
                 {me.email || "-"}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-white/10 px-6 py-5">
+        <div className="flex flex-col-reverse gap-2 border-t border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6 sm:py-5">
           <button
             onClick={onClose}
             className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
@@ -270,7 +278,6 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
 
-  // modals
   const [cropOpen, setCropOpen] = useState(false);
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -406,12 +413,14 @@ export default function MembersPage() {
   }
 
   const MemberCard = ({ m }: { m: Member }) => (
-    <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-      <div className="flex items-start justify-between gap-4">
+    <div className="min-w-0 rounded-[24px] border border-white/10 bg-white/5 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.35)] md:rounded-[28px] md:p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-4">
-          <Avatar url={m.avatar_url} name={m.display_name} />
+          <Avatar url={m.avatar_url} name={m.display_name} size={88} />
           <div className="min-w-0">
-            <div className="truncate text-lg font-extrabold text-white">{m.display_name || "-"}</div>
+            <div className="break-words text-base font-extrabold text-white md:text-lg">
+              {m.display_name || "-"}
+            </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <DeptPill dept={m.department} />
               <RolePill role={m.role} />
@@ -427,7 +436,7 @@ export default function MembersPage() {
         {isLeader ? (
           <button
             onClick={() => openEdit(m)}
-            className="rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
+            className="w-fit rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
             title="แก้ไขสมาชิก"
           >
             แก้ไข
@@ -436,17 +445,17 @@ export default function MembersPage() {
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
-        <div>
+        <div className="min-w-0">
           <div className="text-xs font-semibold tracking-widest text-white/45">EMAIL</div>
           <div className="mt-1 break-all text-white/85">{m.email || "-"}</div>
         </div>
-        <div>
+        <div className="min-w-0">
           <div className="text-xs font-semibold tracking-widest text-white/45">เบอร์</div>
-          <div className="mt-1 text-white/85">{m.phone || "-"}</div>
+          <div className="mt-1 break-words text-white/85">{m.phone || "-"}</div>
         </div>
-        <div>
+        <div className="min-w-0">
           <div className="text-xs font-semibold tracking-widest text-white/45">วันเกิด</div>
-          <div className="mt-1 text-white/85">{formatBirth(m.birth_date)}</div>
+          <div className="mt-1 break-words text-white/85">{formatBirth(m.birth_date)}</div>
         </div>
       </div>
     </div>
@@ -456,7 +465,7 @@ export default function MembersPage() {
     if (list.length === 0) return null;
     return (
       <div className="mt-8">
-        <div className="mb-3 flex items-end justify-between">
+        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div className="text-sm font-semibold tracking-widest text-white/50">{title}</div>
           <div className="text-xs text-white/35">จำนวน: {list.length}</div>
         </div>
@@ -472,22 +481,23 @@ export default function MembersPage() {
 
   return (
     <div className="w-full bg-black text-white">
-      <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
-        {/* ✅ โปรไฟล์บนสุด (รูปซ้าย / ข้อมูลขวา / ปุ่มอัปโหลดใต้รูป) */}
-        <div className="rounded-[34px] border border-white/10 bg-gradient-to-b from-white/5 to-white/[0.03] p-6 shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-[260px_1fr]">
-            {/* left */}
+      <div className="w-full px-4 py-6 md:px-6 md:py-8 lg:px-10 lg:py-10">
+        <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/5 to-white/[0.03] p-4 shadow-[0_25px_80px_rgba(0,0,0,0.55)] md:rounded-[34px] md:p-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[220px_1fr] xl:grid-cols-[260px_1fr] lg:gap-8">
             <div className="flex flex-col items-center gap-3">
               <div className="w-full">
                 <div className="text-xs font-semibold tracking-widest text-white/50">MY PROFILE</div>
               </div>
 
-              <div className="mt-4">
-                <Avatar url={me?.avatar_url ?? null} name={me?.display_name ?? me?.email ?? null} size={170} />
+              <div className="mt-2 md:mt-4">
+                <Avatar
+                  url={me?.avatar_url ?? null}
+                  name={me?.display_name ?? me?.email ?? null}
+                  size={128}
+                />
               </div>
 
-              {/* ✅ ปุ่มอัปโหลด “ใต้รูป” */}
-              <div className="mt-4 w-full max-w-[220px]">
+              <div className="mt-3 w-full max-w-[220px]">
                 <label
                   className={cn(
                     "flex w-full cursor-pointer items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10",
@@ -523,11 +533,12 @@ export default function MembersPage() {
               </div>
             </div>
 
-            {/* right */}
             <div className="min-w-0">
-              <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
-                  <div className="truncate text-3xl font-extrabold">{me?.display_name || me?.email || "ผู้ใช้งาน"}</div>
+                  <div className="break-words text-2xl font-extrabold md:text-3xl">
+                    {me?.display_name || me?.email || "ผู้ใช้งาน"}
+                  </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <DeptPill dept={me?.department ?? "ALL"} />
                     <RolePill role={me?.role ?? "MEMBER"} />
@@ -536,33 +547,34 @@ export default function MembersPage() {
 
                 <button
                   onClick={() => setMyEditOpen(true)}
-                  className="rounded-2xl bg-[#e5ff78] px-4 py-2 text-sm font-semibold text-black hover:opacity-90"
+                  className="w-fit rounded-2xl bg-[#e5ff78] px-4 py-2 text-sm font-semibold text-black hover:opacity-90"
                 >
                   แก้ไขโปรไฟล์
                 </button>
               </div>
 
               <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                <div className="min-w-0 rounded-2xl border border-white/10 bg-black/30 p-4">
                   <div className="text-xs font-semibold tracking-widest text-white/45">EMAIL</div>
                   <div className="mt-1 break-all text-white/85">{me?.email || "-"}</div>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                <div className="min-w-0 rounded-2xl border border-white/10 bg-black/30 p-4">
                   <div className="text-xs font-semibold tracking-widest text-white/45">เบอร์</div>
-                  <div className="mt-1 text-white/85">{me?.phone || "-"}</div>
+                  <div className="mt-1 break-words text-white/85">{me?.phone || "-"}</div>
                 </div>
-
-                {/* ❌ ไม่โชว์วันเกิดในการ์ดบนสุด ตามที่นายท่านบอก */}
               </div>
             </div>
           </div>
         </div>
 
-        {/* members list เดิม */}
         {loading ? (
-          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">กำลังโหลด...</div>
+          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">
+            กำลังโหลด...
+          </div>
         ) : error ? (
-          <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">{error}</div>
+          <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
+            {error}
+          </div>
         ) : (
           <>
             <Section title="VIDEO" list={group.VIDEO} />
@@ -571,7 +583,6 @@ export default function MembersPage() {
           </>
         )}
 
-        {/* Modals */}
         <AvatarCropModal
           open={cropOpen}
           imageFile={cropFile}

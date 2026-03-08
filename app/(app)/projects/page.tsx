@@ -150,8 +150,8 @@ function Pill({
               : "border-white/10 bg-white/5 text-white/70";
 
   return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs ${cls}`}>
-      {children}
+    <span className={`inline-flex max-w-full items-center rounded-full border px-2 py-1 text-xs ${cls}`}>
+      <span className="truncate">{children}</span>
     </span>
   );
 }
@@ -159,8 +159,8 @@ function Pill({
 function CodeBadge({ code }: { code?: string | null }) {
   if (!code) return null;
   return (
-    <span className="inline-flex items-center rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs font-semibold text-white/80">
-      {code}
+    <span className="inline-flex max-w-full items-center rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs font-semibold text-white/80">
+      <span className="truncate">{code}</span>
     </span>
   );
 }
@@ -181,21 +181,23 @@ function MobileProjectCard({
   const code = getProjectCode(p);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <CodeBadge code={code} />
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="shrink-0">
+              <CodeBadge code={code} />
+            </div>
             <Link
-              className="break-words font-semibold text-white underline underline-offset-4"
+              className="min-w-0 break-words font-semibold text-white underline underline-offset-4"
               href={`/projects/${p.id}`}
             >
-              {p.title}
+              <span className="line-clamp-2">{p.title}</span>
             </Link>
           </div>
 
           {secondLine(p) ? (
-            <div className="mt-2 break-words text-xs leading-6 text-white/45">{secondLine(p)}</div>
+            <div className="mt-2 break-words text-xs leading-6 text-white/45 line-clamp-2">{secondLine(p)}</div>
           ) : null}
 
           <div className="mt-3 flex flex-wrap gap-2">
@@ -230,17 +232,17 @@ function MobileProjectCard({
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="rounded-xl border border-white/10 bg-black/20 p-3">
           <div className="text-[11px] text-white/40">ผู้รับผิดชอบ</div>
-          <div className="mt-1 text-sm text-white/85">{assigneeName || "-"}</div>
+          <div className="mt-1 break-words text-sm text-white/85">{assigneeName || "-"}</div>
         </div>
 
         <div className="rounded-xl border border-white/10 bg-black/20 p-3">
           <div className="text-[11px] text-white/40">วันที่เริ่มงาน</div>
-          <div className="mt-1 text-sm text-white/85">{formatDateTH(p.start_date)}</div>
+          <div className="mt-1 break-words text-sm text-white/85">{formatDateTH(p.start_date)}</div>
         </div>
 
         <div className="rounded-xl border border-white/10 bg-black/20 p-3 sm:col-span-2">
           <div className="text-[11px] text-white/40">Deadline</div>
-          <div className="mt-1 text-sm text-white/85">{formatDateTimeTH(p.due_date)}</div>
+          <div className="mt-1 break-words text-sm text-white/85">{formatDateTimeTH(p.due_date)}</div>
         </div>
       </div>
     </div>
@@ -489,7 +491,7 @@ export default function ProjectsPage() {
           })}
         </div>
 
-        <div className="mt-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="mt-3 flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-wrap gap-2">
             {(["ALL", "VIDEO", "GRAPHIC"] as const).map((t) => {
               const active = typeFilter === t;
@@ -513,7 +515,7 @@ export default function ProjectsPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="ค้นหา: รหัสโปรเจกต์ / ชื่อโปรเจกต์ / ผู้รับผิดชอบ / แบรนด์ / รูปแบบงาน / ประเภทงาน"
-            className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78] xl:max-w-[520px]"
+            className="w-full min-w-0 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78] xl:max-w-[520px]"
           />
         </div>
       </div>
@@ -532,7 +534,6 @@ export default function ProjectsPage() {
 
       {!loading && !error && (
         <>
-          {/* Mobile / Tablet cards */}
           <div className="mt-6 space-y-3 lg:hidden">
             {filteredItems.length === 0 ? (
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/40">
@@ -555,10 +556,9 @@ export default function ProjectsPage() {
             )}
           </div>
 
-          {/* Desktop table */}
           <div className="mt-6 hidden overflow-hidden rounded-2xl border border-white/10 bg-white/5 lg:block">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm text-white/80">
+              <table className="w-full min-w-[1080px] text-sm text-white/80">
                 <thead className="bg-white/5 text-xs text-white/50">
                   <tr className="text-left">
                     <th className="p-4">โปรเจกต์</th>
@@ -585,41 +585,51 @@ export default function ProjectsPage() {
 
                       return (
                         <tr key={p.id} className="border-t border-white/10 hover:bg-white/[0.06]">
-                          <td className="p-4">
-                            <div className="flex items-center gap-2">
-                              <CodeBadge code={code} />
+                          <td className="p-4 align-top">
+                            <div className="flex min-w-0 items-start gap-2">
+                              <div className="shrink-0 pt-0.5">
+                                <CodeBadge code={code} />
+                              </div>
 
-                              <Link
-                                className="font-semibold text-white underline underline-offset-4"
-                                href={`/projects/${p.id}`}
-                              >
-                                {p.title}
-                              </Link>
+                              <div className="min-w-0 max-w-[360px]">
+                                <Link
+                                  className="block break-words font-semibold text-white underline underline-offset-4"
+                                  href={`/projects/${p.id}`}
+                                >
+                                  <span className="line-clamp-2">{p.title}</span>
+                                </Link>
 
-                              {p.brand ? <Pill tone="neutral">{p.brand}</Pill> : null}
+                                {secondLine(p) ? (
+                                  <div className="mt-1 break-words text-xs leading-5 text-white/45 line-clamp-2">
+                                    {secondLine(p)}
+                                  </div>
+                                ) : null}
+
+                                {p.brand ? (
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    <Pill tone="neutral">{p.brand}</Pill>
+                                  </div>
+                                ) : null}
+                              </div>
                             </div>
-
-                            {secondLine(p) ? (
-                              <div className="mt-1 text-xs text-white/45">{secondLine(p)}</div>
-                            ) : null}
                           </td>
 
-                          <td className="p-4">
+                          <td className="p-4 align-top">
                             <Pill tone={p.type === "VIDEO" ? "blue" : "amber"}>{p.type}</Pill>
                           </td>
 
-                          <td className="p-4">
-                            <span className="text-white/80">{assigneeName || "-"}</span>
+                          <td className="p-4 align-top">
+                            <span className="block max-w-[180px] break-words text-white/80">{assigneeName || "-"}</span>
                           </td>
 
-                          <td className="p-4">
+                          <td className="p-4 align-top">
                             <Pill tone={statusTone(p.status)}>{p.status}</Pill>
                           </td>
 
-                          <td className="p-4 text-white/60">{formatDateTH(p.start_date)}</td>
-                          <td className="p-4 text-white/60">{formatDateTimeTH(p.due_date)}</td>
+                          <td className="p-4 align-top text-white/60">{formatDateTH(p.start_date)}</td>
+                          <td className="p-4 align-top text-white/60">{formatDateTimeTH(p.due_date)}</td>
 
-                          <td className="p-4">
+                          <td className="p-4 align-top">
                             <div className="flex justify-end gap-2">
                               {isLeader ? (
                                 <>

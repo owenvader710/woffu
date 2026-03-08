@@ -110,47 +110,49 @@ function ApprovalCard({
   const department = normalizeDepartment(item.project?.department);
 
   return (
-    <div className="group rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_10px_30px_rgba(0,0,0,0.35)] transition duration-200 hover:border-white/20 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_14px_40px_rgba(0,0,0,0.42)]">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="group min-w-0 overflow-hidden rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_10px_30px_rgba(0,0,0,0.35)] transition duration-200 hover:border-white/20 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_14px_40px_rgba(0,0,0,0.42)]">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-white/10 bg-black/40 px-2.5 py-1 text-[11px] font-extrabold tracking-wide text-white/90">
-              {item.project?.code || item.project_id.slice(0, 6).toUpperCase()}
+            <span className="inline-flex max-w-full rounded-full border border-white/10 bg-black/40 px-2.5 py-1 text-[11px] font-extrabold tracking-wide text-white/90">
+              <span className="truncate">
+                {item.project?.code || item.project_id.slice(0, 6).toUpperCase()}
+              </span>
             </span>
 
             <span
               className={cn(
-                "rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide",
+                "inline-flex max-w-full rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide",
                 departmentPillClass(item.project?.department)
               )}
             >
-              {department}
+              <span className="truncate">{department}</span>
             </span>
 
             <span
               className={cn(
-                "rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide",
+                "inline-flex max-w-full rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide",
                 badgeClass(item.request_status)
               )}
             >
-              {item.request_status}
+              <span className="truncate">{item.request_status}</span>
             </span>
           </div>
 
           <div className="mt-3 min-w-0 text-base font-extrabold leading-snug text-white">
             <Link
-              className="truncate underline decoration-white/20 underline-offset-4 transition hover:decoration-white/60"
+              className="block break-words underline decoration-white/20 underline-offset-4 transition hover:decoration-white/60"
               href={`/projects/${item.project_id}`}
             >
-              {item.project?.title || "Project"}
+              <span className="line-clamp-2">{item.project?.title || "Project"}</span>
             </Link>
           </div>
 
-          <div className="mt-2 text-sm text-white/70">
+          <div className="mt-2 break-words text-sm text-white/70">
             {item.from_status} → {item.to_status}
           </div>
 
-          <div className="mt-2 text-xs leading-6 text-white/55">
+          <div className="mt-2 break-words text-xs leading-6 text-white/55">
             {item.assignee?.display_name
               ? `ผู้รับผิดชอบ ${item.assignee.display_name}`
               : "ยังไม่ระบุผู้รับผิดชอบ"}
@@ -161,11 +163,11 @@ function ApprovalCard({
       </div>
 
       {(onApprove || onReject) && (
-        <div className="mt-5 flex flex-wrap justify-end gap-3 border-t border-white/10 pt-4">
+        <div className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:flex-wrap sm:justify-end">
           {onReject && (
             <button
               onClick={onReject}
-              className="rounded-2xl border border-red-400/35 bg-red-500/90 px-5 py-2.5 text-sm font-extrabold text-white shadow-[0_0_18px_rgba(239,68,68,0.45),0_0_38px_rgba(239,68,68,0.18)] transition duration-200 hover:scale-[1.02] hover:bg-red-400 hover:shadow-[0_0_24px_rgba(239,68,68,0.65),0_0_44px_rgba(239,68,68,0.24)] active:scale-[0.98]"
+              className="w-full rounded-2xl border border-red-400/35 bg-red-500/90 px-5 py-2.5 text-sm font-extrabold text-white shadow-[0_0_18px_rgba(239,68,68,0.45),0_0_38px_rgba(239,68,68,0.18)] transition duration-200 hover:scale-[1.02] hover:bg-red-400 hover:shadow-[0_0_24px_rgba(239,68,68,0.65),0_0_44px_rgba(239,68,68,0.24)] active:scale-[0.98] sm:w-auto"
             >
               Reject
             </button>
@@ -174,7 +176,7 @@ function ApprovalCard({
           {onApprove && (
             <button
               onClick={onApprove}
-              className="rounded-2xl border border-emerald-300/40 bg-emerald-400 px-5 py-2.5 text-sm font-extrabold text-black shadow-[0_0_18px_rgba(52,211,153,0.58),0_0_40px_rgba(16,185,129,0.24)] transition duration-200 hover:scale-[1.02] hover:bg-emerald-300 hover:shadow-[0_0_26px_rgba(110,231,183,0.78),0_0_50px_rgba(16,185,129,0.32)] active:scale-[0.98]"
+              className="w-full rounded-2xl border border-emerald-300/40 bg-emerald-400 px-5 py-2.5 text-sm font-extrabold text-black shadow-[0_0_18px_rgba(52,211,153,0.58),0_0_40px_rgba(16,185,129,0.24)] transition duration-200 hover:scale-[1.02] hover:bg-emerald-300 hover:shadow-[0_0_26px_rgba(110,231,183,0.78),0_0_50px_rgba(16,185,129,0.32)] active:scale-[0.98] sm:w-auto"
             >
               Approve
             </button>
@@ -266,11 +268,13 @@ export default function ApprovalsPage() {
 
   return (
     <div className="w-full bg-black text-white">
-      <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
+      <div className="w-full px-4 py-6 md:px-6 md:py-8 lg:px-10 lg:py-10">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
+          <div className="min-w-0">
             <div className="text-xs font-semibold tracking-[0.22em] text-white/45">WOFFU</div>
-            <h1 className="mt-2 text-4xl font-extrabold tracking-tight text-white">Approvals</h1>
+            <h1 className="mt-2 break-words text-3xl font-extrabold tracking-tight text-white md:text-4xl">
+              Approvals
+            </h1>
             <div className="mt-2 text-sm text-white/50">Pending: {pending.length}</div>
           </div>
 
@@ -293,7 +297,7 @@ export default function ApprovalsPage() {
                   key={option}
                   onClick={() => setFilter(option)}
                   className={cn(
-                    "rounded-full border px-4 py-3 text-sm font-extrabold tracking-wide transition duration-200",
+                    "rounded-full border px-4 py-2.5 text-sm font-extrabold tracking-wide transition duration-200",
                     active
                       ? "border-white/10 bg-white text-black shadow-[0_0_24px_rgba(255,255,255,0.14)]"
                       : "border-white/10 bg-transparent text-white/80 hover:border-white/20 hover:bg-white/5 hover:text-white"
@@ -315,8 +319,8 @@ export default function ApprovalsPage() {
             {err}
           </div>
         ) : filter === "HISTORY" ? (
-          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5">
-            <div className="flex items-center justify-between">
+          <div className="mt-6 rounded-[24px] border border-white/10 bg-white/5 p-4 md:rounded-[30px] md:p-5">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm font-extrabold tracking-wide text-white/90">HISTORY</div>
               <div className="text-xs text-white/50">ล่าสุด 20 รายการ</div>
             </div>
@@ -332,8 +336,8 @@ export default function ApprovalsPage() {
             )}
           </div>
         ) : (
-          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5">
-            <div className="flex items-center justify-between">
+          <div className="mt-6 rounded-[24px] border border-white/10 bg-white/5 p-4 md:rounded-[30px] md:p-5">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm font-extrabold tracking-wide text-white/90">PENDING</div>
               <div className="text-xs text-white/50">{filteredPending.length} รายการ</div>
             </div>

@@ -237,10 +237,10 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-3xl overflow-hidden rounded-3xl border border-white/10 bg-black shadow-2xl">
-        <div className="flex items-start justify-between border-b border-white/10 bg-black px-6 py-5">
-          <div>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 p-3 md:flex md:items-center md:justify-center md:p-4">
+      <div className="mx-auto mt-0 flex min-h-[calc(100vh-24px)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-black shadow-2xl md:mt-0 md:min-h-0 md:max-h-[92vh]">
+        <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-white/10 bg-black px-4 py-4 sm:flex-row sm:items-start sm:justify-between md:px-6 md:py-5">
+          <div className="min-w-0">
             <div className="text-lg font-extrabold text-white">สร้างงานใหม่</div>
             <div className="mt-1 text-sm text-white/50">กรอกข้อมูลงาน แล้วกดสร้าง</div>
           </div>
@@ -251,242 +251,246 @@ export default function CreateProjectModal({ open, onClose, onCreated, members }
               resetForm();
               onClose();
             }}
-            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
+            className="w-fit rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
           >
             ปิด
           </button>
         </div>
 
-        <form onSubmit={onSubmit} className="px-6 py-6">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="md:col-span-1">
-              <div className="text-xs font-semibold text-white/60">ฝ่าย</div>
-              <div className="mt-2 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setType("VIDEO")}
-                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                    type === "VIDEO"
-                      ? "bg-[#e5ff78] text-black"
-                      : "border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
-                  }`}
-                >
-                  VIDEO
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setType("GRAPHIC")}
-                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                    type === "GRAPHIC"
-                      ? "bg-[#e5ff78] text-black"
-                      : "border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
-                  }`}
-                >
-                  GRAPHIC
-                </button>
+        <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="md:col-span-1">
+                <div className="text-xs font-semibold text-white/60">ฝ่าย</div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setType("VIDEO")}
+                    className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                      type === "VIDEO"
+                        ? "bg-[#e5ff78] text-black"
+                        : "border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    VIDEO
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setType("GRAPHIC")}
+                    className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                      type === "GRAPHIC"
+                        ? "bg-[#e5ff78] text-black"
+                        : "border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    GRAPHIC
+                  </button>
+                </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-xs font-semibold text-white/60">รหัสโปรเจกต์ (code)</label>
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="เช่น 5x-1234 / 0001 / 22"
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
+                />
               </div>
             </div>
 
-            <div className="md:col-span-2">
-              <label className="text-xs font-semibold text-white/60">รหัสโปรเจกต์ (code)</label>
+            <div className="mt-4">
+              <label className="text-xs font-semibold text-white/60">ชื่อโปรเจกต์</label>
               <input
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                placeholder="เช่น 5x-1234 / 0001 / 22"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="เช่น Ads กระเป๋า..."
                 className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
               />
             </div>
-          </div>
 
-          <div className="mt-4">
-            <label className="text-xs font-semibold text-white/60">ชื่อโปรเจกต์</label>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="เช่น Ads กระเป๋า..."
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
-            />
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <label className="text-xs font-semibold text-white/60">กลุ่มสินค้า</label>
-              <select
-                value={productGroup}
-                onChange={(e) => setProductGroup(e.target.value as any)}
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
-              >
-                <option value="">-</option>
-                {PRODUCT_GROUPS.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-white/60">แบรนด์</label>
-              <select
-                value={brand}
-                onChange={(e) => setBrand(e.target.value)}
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
-              >
-                <option value="">-</option>
-                {brandOptions.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <label className="text-xs font-semibold text-white/60">ผู้รับผิดชอบ</label>
-            <select
-              value={assigneeId}
-              onChange={(e) => setAssigneeId(e.target.value)}
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
-            >
-              <option value="">-</option>
-              {assigneeOptions.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.display_name || m.id}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <label className="text-xs font-semibold text-white/60">วันสั่งงาน</label>
-              <input
-                type="datetime-local"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78] [color-scheme:dark]"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-white/60">Deadline</label>
-              <input
-                type="datetime-local"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78] [color-scheme:dark]"
-              />
-            </div>
-          </div>
-
-          {type === "VIDEO" ? (
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
-                <label className="text-xs font-semibold text-white/60">ความสำคัญ</label>
+                <label className="text-xs font-semibold text-white/60">กลุ่มสินค้า</label>
                 <select
-                  value={videoPriority}
-                  onChange={(e) => setVideoPriority(e.target.value as any)}
+                  value={productGroup}
+                  onChange={(e) => setProductGroup(e.target.value as any)}
                   className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
                 >
-                  {VIDEO_PRIORITIES.map((x) => (
-                    <option key={x} value={x}>
-                      {x}
+                  <option value="">-</option>
+                  {PRODUCT_GROUPS.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-white/60">รูปแบบ</label>
+                <label className="text-xs font-semibold text-white/60">แบรนด์</label>
                 <select
-                  value={videoPurpose}
-                  onChange={(e) => setVideoPurpose(e.target.value as any)}
+                  value={brand}
+                  onChange={(e) => setBrand(e.target.value)}
                   className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
                 >
-                  {VIDEO_PURPOSES.map((x, idx) => (
-                    <option key={x} value={x}>
-                      {idx}. {x}
+                  <option value="">-</option>
+                  {brandOptions.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
                     </option>
                   ))}
                 </select>
               </div>
             </div>
-          ) : (
+
             <div className="mt-4">
-              <label className="text-xs font-semibold text-white/60">ประเภทงาน (Graphic)</label>
+              <label className="text-xs font-semibold text-white/60">ผู้รับผิดชอบ</label>
               <select
-                value={graphicJobType}
-                onChange={(e) => setGraphicJobType(e.target.value as any)}
+                value={assigneeId}
+                onChange={(e) => setAssigneeId(e.target.value)}
                 className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
               >
-                {GRAPHIC_JOB_TYPES.map((x, idx) => (
-                  <option key={x} value={x}>
-                    {idx + 1}. {x}
+                <option value="">-</option>
+                {assigneeOptions.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.display_name || m.id}
                   </option>
                 ))}
               </select>
             </div>
-          )}
 
-          <div className="mt-4">
-            <label className="text-xs font-semibold text-white/60">รายละเอียด</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="ใส่รายละเอียดงานเพิ่มเติมได้"
-              className="mt-2 h-32 w-full resize-none rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
-            />
-
-            <div className="mt-3 flex items-center justify-between gap-3">
-              <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-white/70">
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label className="text-xs font-semibold text-white/60">วันสั่งงาน</label>
                 <input
-                  type="file"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) uploadFile(file);
-                  }}
+                  type="datetime-local"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78] [color-scheme:dark]"
                 />
-                <span className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10">
-                  {uploading ? "กำลังอัปโหลด..." : "แนบรูปหรือไฟล์ (ไม่เกิน 5MB)"}
-                </span>
-              </label>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-white/60">Deadline</label>
+                <input
+                  type="datetime-local"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78] [color-scheme:dark]"
+                />
+              </div>
             </div>
 
-            {attachmentName ? (
-              <div className="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80">
-                แนบแล้ว: {attachmentName}
+            {type === "VIDEO" ? (
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-xs font-semibold text-white/60">ความสำคัญ</label>
+                  <select
+                    value={videoPriority}
+                    onChange={(e) => setVideoPriority(e.target.value as any)}
+                    className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+                  >
+                    {VIDEO_PRIORITIES.map((x) => (
+                      <option key={x} value={x}>
+                        {x}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-white/60">รูปแบบ</label>
+                  <select
+                    value={videoPurpose}
+                    onChange={(e) => setVideoPurpose(e.target.value as any)}
+                    className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+                  >
+                    {VIDEO_PURPOSES.map((x, idx) => (
+                      <option key={x} value={x}>
+                        {idx}. {x}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4">
+                <label className="text-xs font-semibold text-white/60">ประเภทงาน (Graphic)</label>
+                <select
+                  value={graphicJobType}
+                  onChange={(e) => setGraphicJobType(e.target.value as any)}
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+                >
+                  {GRAPHIC_JOB_TYPES.map((x, idx) => (
+                    <option key={x} value={x}>
+                      {idx + 1}. {x}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="mt-4">
+              <label className="text-xs font-semibold text-white/60">รายละเอียด</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="ใส่รายละเอียดงานเพิ่มเติมได้"
+                className="mt-2 h-32 w-full resize-none rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78]"
+              />
+
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <label className="inline-flex w-full cursor-pointer items-center gap-2 text-xs text-white/70 sm:w-auto">
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadFile(file);
+                    }}
+                  />
+                  <span className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-center hover:bg-white/10 sm:w-auto">
+                    {uploading ? "กำลังอัปโหลด..." : "แนบรูปหรือไฟล์ (ไม่เกิน 5MB)"}
+                  </span>
+                </label>
+              </div>
+
+              {attachmentName ? (
+                <div className="mt-3 break-words rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80">
+                  แนบแล้ว: {attachmentName}
+                </div>
+              ) : null}
+            </div>
+
+            {error ? (
+              <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                {error}
               </div>
             ) : null}
           </div>
 
-          {error ? (
-            <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-              {error}
+          <div className="sticky bottom-0 border-t border-white/10 bg-black px-4 py-4 md:px-6">
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  resetForm();
+                  onClose();
+                }}
+                className="w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-white/80 hover:bg-white/10 sm:w-auto"
+                disabled={submitting}
+              >
+                ยกเลิก
+              </button>
+
+              <button
+                type="submit"
+                className="w-full rounded-2xl bg-[#e5ff78] px-6 py-3 text-sm font-extrabold text-black hover:opacity-90 disabled:opacity-60 sm:w-auto"
+                disabled={submitting || uploading}
+              >
+                {submitting ? "กำลังสร้าง..." : "สร้างงาน"}
+              </button>
             </div>
-          ) : null}
-
-          <div className="mt-6 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                resetForm();
-                onClose();
-              }}
-              className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-white/80 hover:bg-white/10"
-              disabled={submitting}
-            >
-              ยกเลิก
-            </button>
-
-            <button
-              type="submit"
-              className="rounded-2xl bg-[#e5ff78] px-6 py-3 text-sm font-extrabold text-black hover:opacity-90 disabled:opacity-60"
-              disabled={submitting || uploading}
-            >
-              {submitting ? "กำลังสร้าง..." : "สร้างงาน"}
-            </button>
           </div>
         </form>
       </div>

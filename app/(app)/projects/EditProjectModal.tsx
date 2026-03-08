@@ -42,6 +42,8 @@ const GRAPHIC_BRANDS = [
   "MDBuddy",
 ] as const;
 
+const PRODUCT_GROUPS = ["A", "B", "C", "D", "E", "F", "G", "H"] as const;
+
 const VIDEO_PRIORITIES = ["2ดาว", "3ดาว", "5ดาว", "SPECIAL"] as const;
 
 const VIDEO_PURPOSES = [
@@ -74,6 +76,7 @@ type Project = {
   description?: string | null;
   start_date?: string | null;
   due_date?: string | null;
+  product_group?: (typeof PRODUCT_GROUPS)[number] | string | null;
   video_priority?: string | null;
   video_purpose?: string | null;
   graphic_job_type?: string | null;
@@ -90,7 +93,7 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onSaved?: () => void;
-  project: Project | null; // ✅ allow null
+  project: Project | null;
   members: Member[];
 };
 
@@ -103,13 +106,26 @@ async function safeJson(res: Response) {
   }
 }
 
+function toDateTimeLocalValue(value?: string | null) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+}
+
 export default function EditProjectModal({ open, onClose, onSaved, project, members }: Props) {
   const [type, setType] = useState<"VIDEO" | "GRAPHIC">("VIDEO");
 
-  // ✅ NEW
   const [code, setCode] = useState("");
-
   const [title, setTitle] = useState("");
+  const [productGroup, setProductGroup] = useState<(typeof PRODUCT_GROUPS)[number] | "">("");
   const [brand, setBrand] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -140,18 +156,24 @@ export default function EditProjectModal({ open, onClose, onSaved, project, memb
     setMsg("");
 
     setType(project.type || "VIDEO");
-    setCode(project.code || ""); // ✅
-
+    setCode(project.code || "");
     setTitle(project.title || "");
+    setProductGroup((project.product_group as (typeof PRODUCT_GROUPS)[number]) || "");
     setBrand(project.brand || "");
     setAssigneeId(project.assignee_id || "");
-    setStartDate(project.start_date ? project.start_date.split("T")[0] : "");
-    setDueDate(project.due_date ? project.due_date.split("T")[0] : "");
+    setStartDate(toDateTimeLocalValue(project.start_date));
+    setDueDate(toDateTimeLocalValue(project.due_date));
     setDescription(project.description || "");
     setVideoPriority(project.video_priority || "3ดาว");
     setVideoPurpose(project.video_purpose || "สร้างความต้องการ");
     setGraphicJobType(project.graphic_job_type || "ซัพพอร์ต MKT");
   }, [open, project]);
+
+  useEffect(() => {
+    if (brand && !brands.includes(brand as any)) {
+      setBrand("");
+    }
+  }, [type, brand, brands]);
 
   async function submit() {
     setErr("");
@@ -170,15 +192,15 @@ export default function EditProjectModal({ open, onClose, onSaved, project, memb
     setSubmitting(true);
     try {
       const payload: any = {
-        // ✅ NEW
         code: code.trim() || null,
-
         title: title.trim(),
         type,
+        department: type,
+        product_group: productGroup || null,
         brand: brand || null,
         assignee_id: assigneeId || null,
-        start_date: startDate || null,
-        due_date: dueDate || null,
+        start_date: startDate ? new Date(startDate).toISOString() : null,
+        due_date: dueDate ? new Date(dueDate).toISOString() : null,
         description: description?.trim() || null,
         video_priority: type === "VIDEO" ? videoPriority : null,
         video_purpose: type === "VIDEO" ? videoPurpose : null,
@@ -208,73 +230,106 @@ export default function EditProjectModal({ open, onClose, onSaved, project, memb
   if (!project) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-3xl overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0b0b] text-white shadow-[0_30px_120px_rgba(0,0,0,0.75)]">
-        <div className="flex items-start justify-between border-b border-white/10 px-6 py-5">
-          <div>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 p-3 md:flex md:items-center md:justify-center md:p-4">
+      <div className="mx-auto mt-0 flex min-h-[calc(100vh-24px)] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0b0b] text-white shadow-[0_30px_120px_rgba(0,0,0,0.75)] md:min-h-0 md:max-h-[92vh]">
+        <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-white/10 bg-[#0b0b0b] px-4 py-4 sm:flex-row sm:items-start sm:justify-between md:px-6 md:py-5">
+          <div className="min-w-0">
             <div className="text-lg font-extrabold tracking-tight">แก้ไขงาน</div>
             <div className="text-sm text-white/50">แก้ไขข้อมูล แล้วกดบันทึก</div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70 hover:bg-white/10"
+            className="w-fit rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70 hover:bg-white/10"
           >
             ปิด
           </button>
         </div>
 
-        <div className="px-6 py-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">
           {err ? (
             <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
               {err}
             </div>
           ) : null}
+
           {msg ? (
             <div className="mb-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
               {msg}
             </div>
           ) : null}
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-2 block text-sm text-white/70">ฝ่าย</label>
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value as any)}
-                className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-white/20"
-              >
-                <option value="VIDEO">VIDEO</option>
-                <option value="GRAPHIC">GRAPHIC</option>
-              </select>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="md:col-span-1">
+              <div className="text-xs font-semibold text-white/60">ฝ่าย</div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setType("VIDEO")}
+                  className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                    type === "VIDEO"
+                      ? "bg-[#e5ff78] text-black"
+                      : "border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                  }`}
+                >
+                  VIDEO
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setType("GRAPHIC")}
+                  className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                    type === "GRAPHIC"
+                      ? "bg-[#e5ff78] text-black"
+                      : "border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                  }`}
+                >
+                  GRAPHIC
+                </button>
+              </div>
             </div>
 
-            <div>
-              <label className="mb-2 block text-sm text-white/70">รหัสโปรเจกต์</label>
+            <div className="md:col-span-2">
+              <label className="mb-2 block text-xs font-semibold text-white/60">รหัสโปรเจกต์</label>
               <input
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-white/20"
+                className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-[#e5ff78]"
                 placeholder="เช่น 5x-1234 / 0001"
               />
             </div>
           </div>
 
           <div className="mt-4">
-            <label className="mb-2 block text-sm text-white/70">ชื่อโปรเจกต์</label>
+            <label className="mb-2 block text-xs font-semibold text-white/60">ชื่อโปรเจกต์</label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-white/20"
+              className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-[#e5ff78]"
             />
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-2 block text-sm text-white/70">แบรนด์</label>
+              <label className="mb-2 block text-xs font-semibold text-white/60">กลุ่มสินค้า</label>
+              <select
+                value={productGroup}
+                onChange={(e) => setProductGroup(e.target.value as any)}
+                className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-[#e5ff78]"
+              >
+                <option value="">-</option>
+                {PRODUCT_GROUPS.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-xs font-semibold text-white/60">แบรนด์</label>
               <select
                 value={brand}
                 onChange={(e) => setBrand(e.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-white/20"
+                className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-[#e5ff78]"
               >
                 <option value="">-</option>
                 {brands.map((b) => (
@@ -284,129 +339,131 @@ export default function EditProjectModal({ open, onClose, onSaved, project, memb
                 ))}
               </select>
             </div>
+          </div>
 
-            <div>
-              <label className="mb-2 block text-sm text-white/70">ผู้รับผิดชอบ</label>
-              <select
-                value={assigneeId}
-                onChange={(e) => setAssigneeId(e.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-white/20"
-              >
-                <option value="">-</option>
-                {displayAssignees.primary.length ? (
-                  <optgroup label={type}>
-                    {displayAssignees.primary.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.display_name || m.id}
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : null}
-                {displayAssignees.common.length ? (
-                  <optgroup label="ALL">
-                    {displayAssignees.common.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.display_name || m.id}
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : null}
-              </select>
-            </div>
+          <div className="mt-4">
+            <label className="mb-2 block text-xs font-semibold text-white/60">ผู้รับผิดชอบ</label>
+            <select
+              value={assigneeId}
+              onChange={(e) => setAssigneeId(e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-[#e5ff78]"
+            >
+              <option value="">-</option>
+              {displayAssignees.primary.length ? (
+                <optgroup label={type}>
+                  {displayAssignees.primary.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.display_name || m.id}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {displayAssignees.common.length ? (
+                <optgroup label="ALL">
+                  {displayAssignees.common.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.display_name || m.id}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+            </select>
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-2 block text-sm text-white/70">วันสั่งงาน</label>
+              <label className="mb-2 block text-xs font-semibold text-white/60">วันสั่งงาน</label>
               <input
-                type="date"
+                type="datetime-local"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-white/20"
+                className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-[#e5ff78] [color-scheme:dark]"
               />
             </div>
+
             <div>
-              <label className="mb-2 block text-sm text-white/70">Deadline</label>
+              <label className="mb-2 block text-xs font-semibold text-white/60">Deadline</label>
               <input
-                type="date"
+                type="datetime-local"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-white/20"
+                className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-[#e5ff78] [color-scheme:dark]"
               />
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-            {type === "VIDEO" ? (
-              <>
-                <div>
-                  <label className="mb-2 block text-sm text-white/70">ความสำคัญ</label>
-                  <select
-                    value={videoPriority}
-                    onChange={(e) => setVideoPriority(e.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-white/20"
-                  >
-                    {VIDEO_PRIORITIES.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm text-white/70">รูปแบบ</label>
-                  <select
-                    value={videoPurpose}
-                    onChange={(e) => setVideoPurpose(e.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-white/20"
-                  >
-                    {VIDEO_PURPOSES.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            ) : (
+          {type === "VIDEO" ? (
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-2 block text-sm text-white/70">ประเภทงานกราฟิก</label>
+                <label className="mb-2 block text-xs font-semibold text-white/60">ความสำคัญ</label>
                 <select
-                  value={graphicJobType}
-                  onChange={(e) => setGraphicJobType(e.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-white/20"
+                  value={videoPriority}
+                  onChange={(e) => setVideoPriority(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-[#e5ff78]"
                 >
-                  {GRAPHIC_JOB_TYPES.map((p) => (
+                  {VIDEO_PRIORITIES.map((p) => (
                     <option key={p} value={p}>
                       {p}
                     </option>
                   ))}
                 </select>
               </div>
-            )}
-          </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-semibold text-white/60">รูปแบบ</label>
+                <select
+                  value={videoPurpose}
+                  onChange={(e) => setVideoPurpose(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-[#e5ff78]"
+                >
+                  {VIDEO_PURPOSES.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4">
+              <label className="mb-2 block text-xs font-semibold text-white/60">ประเภทงานกราฟิก</label>
+              <select
+                value={graphicJobType}
+                onChange={(e) => setGraphicJobType(e.target.value)}
+                className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-[#e5ff78]"
+              >
+                {GRAPHIC_JOB_TYPES.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="mt-4">
-            <label className="mb-2 block text-sm text-white/70">รายละเอียด</label>
+            <label className="mb-2 block text-xs font-semibold text-white/60">รายละเอียด</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={4}
-              className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-white/20"
+              className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-[#e5ff78]"
             />
           </div>
+        </div>
 
-          <div className="mt-6 flex items-center justify-end gap-3">
+        <div className="sticky bottom-0 border-t border-white/10 bg-[#0b0b0b] px-4 py-4 md:px-6">
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
             <button
               onClick={onClose}
-              className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm text-white/70 hover:bg-white/10"
+              className="w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm text-white/70 hover:bg-white/10 sm:w-auto"
               disabled={submitting}
             >
               ยกเลิก
             </button>
             <button
               onClick={submit}
-              className="rounded-2xl bg-[#e5ff78] px-5 py-3 text-sm font-semibold text-black hover:brightness-95 disabled:opacity-60"
+              className="w-full rounded-2xl bg-[#e5ff78] px-5 py-3 text-sm font-semibold text-black hover:brightness-95 disabled:opacity-60 sm:w-auto"
               disabled={submitting}
             >
               {submitting ? "กำลังบันทึก..." : "บันทึก"}

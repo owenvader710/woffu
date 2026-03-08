@@ -8,7 +8,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen overflow-x-hidden bg-black text-white">
+    <div className="flex min-h-screen w-full overflow-x-hidden bg-black text-white">
       {/* Desktop Sidebar */}
       <div className="hidden shrink-0 lg:block">
         <Sidebar />
@@ -52,7 +52,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Content */}
       <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
         {/* Mobile Header */}
-        <header className="sticky top-0 z-[60] border-b border-white/10 bg-black/85 backdrop-blur lg:hidden">
+        <header className="fixed inset-x-0 top-0 z-[60] border-b border-white/10 bg-black/90 backdrop-blur lg:hidden">
           <div className="flex items-center justify-between gap-3 px-4 py-3">
             <button
               type="button"
@@ -83,7 +83,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <NotificationCenter />
         </div>
 
-        <main className="min-w-0 overflow-x-hidden px-4 pb-8 pt-5 md:px-6 lg:px-0 lg:pb-0 lg:pt-8">
+        <main className="min-w-0 overflow-x-hidden px-4 pb-8 pt-[84px] md:px-6 lg:px-0 lg:pb-0 lg:pt-8">
           {children}
         </main>
       </div>

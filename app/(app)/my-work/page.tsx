@@ -150,7 +150,13 @@ function StatusPill({ s }: { s: Status }) {
   const tone =
     s === "PRE_ORDER"
       ? "border-violet-500/30 bg-violet-500/10 text-violet-200"
-      : "border-white/10 bg-white/5 text-white/85";
+      : s === "IN_PROGRESS"
+        ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
+        : s === "BLOCKED"
+          ? "border-red-500/30 bg-red-500/10 text-red-200"
+          : s === "COMPLETED"
+            ? "border-green-500/30 bg-green-500/10 text-green-200"
+            : "border-white/10 bg-white/5 text-white/85";
 
   return (
     <span className={cn("inline-flex items-center rounded-full border px-3 py-1 text-xs font-extrabold", tone)}>
@@ -175,6 +181,17 @@ function fmtDeadline(iso?: string | null) {
     hour12: false,
   });
   return `${date} ${time}`;
+}
+
+function fmtDateTH(iso?: string | null) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("th-TH", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
 }
 
 function makeCode(w: WorkItem) {
@@ -258,6 +275,85 @@ type BlockedModalState = {
   projectId: string;
   projectTitle: string;
 };
+
+function MobileWorkCard({
+  w,
+  pending,
+  onBlocked,
+  onChange,
+}: {
+  w: WorkItem;
+  pending: PendingReq | null;
+  onBlocked: (projectId: string, projectTitle: string) => void;
+  onChange: (projectId: string, s: Status) => void;
+}) {
+  return (
+    <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
+              {makeCode(w)}
+            </span>
+
+            <Link
+              href={`/projects/${w.id}`}
+              className="min-w-0 break-words font-extrabold text-white underline-offset-4 hover:underline"
+            >
+              {w.title || "-"}
+            </Link>
+          </div>
+
+          {secondLine(w) ? (
+            <div className="mt-2 break-words text-xs leading-6 text-white/45">{secondLine(w)}</div>
+          ) : null}
+
+          {pending ? (
+            <div className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full border border-lime-400/20 bg-lime-400/10 px-4 py-1 text-xs font-extrabold text-lime-200">
+              <span className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_18px_rgba(163,230,53,0.9)]" />
+              <span className="truncate">
+                รออนุมัติ: {uiLabelFromDb(pending.from_status)} → {uiLabelFromDb(pending.to_status)}
+              </span>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <DeptPill dept={w.department} />
+        <StatusPill s={w.status} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+          <div className="text-[11px] text-white/40">วันเริ่มงาน</div>
+          <div className="mt-1 text-sm text-white/85">{fmtDateTH(w.start_date)}</div>
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+          <div className="text-[11px] text-white/40">Deadline</div>
+          <div className="mt-1 text-sm text-white/85">{fmtDeadline(w.due_date)}</div>
+        </div>
+      </div>
+
+      <div className={cn("mt-4", pending ? "opacity-60 pointer-events-none" : "")}>
+        <div className="text-[11px] font-bold tracking-widest text-white/35">จัดการ</div>
+        <div className="mt-2">
+          <StatusDropdown
+            value={w.status}
+            onChange={(s) => {
+              if (s === "BLOCKED") {
+                onBlocked(w.id, w.title || "-");
+                return;
+              }
+              onChange(w.id, s);
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function MyWorkPage() {
   const [items, setItems] = useState<WorkItem[]>([]);
@@ -508,9 +604,9 @@ export default function MyWorkPage() {
 
   return (
     <div className="w-full bg-black text-white">
-      <div className="w-full px-6 py-8 lg:px-10 lg:py-10">
+      <div className="w-full px-4 py-6 md:px-6 lg:px-10 lg:py-10">
         {toast ? (
-          <div className="fixed bottom-6 right-6 z-[99999]">
+          <div className="fixed bottom-5 right-3 z-[99999] md:bottom-6 md:right-6">
             <div className="rounded-2xl border border-white/10 bg-[#111] px-4 py-3 text-sm font-semibold text-white shadow-[0_30px_120px_rgba(0,0,0,0.7)]">
               {toast}
             </div>
@@ -519,16 +615,16 @@ export default function MyWorkPage() {
 
         {blockedModal.open ? (
           <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-            <div className="w-full max-w-xl rounded-[28px] border border-red-500/20 bg-[#0b0b0b] p-6 shadow-[0_0_60px_rgba(239,68,68,0.12)]">
+            <div className="w-full max-w-xl rounded-[28px] border border-red-500/20 bg-[#0b0b0b] p-5 md:p-6 shadow-[0_0_60px_rgba(239,68,68,0.12)]">
               <div className="flex items-start justify-between gap-4">
-                <div>
+                <div className="min-w-0">
                   <div className="text-sm font-extrabold tracking-[0.18em] text-red-300/80">ALERT</div>
-                  <h2 className="mt-2 text-2xl font-extrabold text-white">แจ้งเตือนงานติดปัญหา</h2>
+                  <h2 className="mt-2 text-xl font-extrabold text-white md:text-2xl">แจ้งเตือนงานติดปัญหา</h2>
                   <p className="mt-2 text-sm text-white/60">
                     กรุณาระบุรายละเอียดของปัญหา เพื่อให้หัวหน้าทีมหรือผู้อนุมัติเห็นสาเหตุชัดเจน
                   </p>
                   {blockedModal.projectTitle ? (
-                    <div className="mt-3 text-sm text-white/45">งาน: {blockedModal.projectTitle}</div>
+                    <div className="mt-3 break-words text-sm text-white/45">งาน: {blockedModal.projectTitle}</div>
                   ) : null}
                 </div>
 
@@ -552,7 +648,7 @@ export default function MyWorkPage() {
                 />
               </div>
 
-              <div className="mt-6 flex justify-end gap-3">
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={() => closeBlockedModal()}
@@ -575,10 +671,10 @@ export default function MyWorkPage() {
           </div>
         ) : null}
 
-        <div className="flex items-start justify-between gap-4">
-          <div>
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
             <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
-            <h1 className="mt-2 text-4xl font-extrabold tracking-tight">งานของฉัน</h1>
+            <h1 className="mt-2 break-words text-3xl font-extrabold tracking-tight md:text-4xl">งานของฉัน</h1>
             <div className="mt-2 text-sm text-white/50">รายการทั้งหมด: {filtered.length}</div>
           </div>
 
@@ -591,7 +687,7 @@ export default function MyWorkPage() {
           </button>
         </div>
 
-        <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-4">
+        <div className="mt-6 rounded-[24px] border border-white/10 bg-white/5 p-4 md:rounded-[30px]">
           <div className="flex flex-wrap items-center gap-2">
             {FILTERS.map((s) => {
               const active = statusFilter === s;
@@ -616,109 +712,134 @@ export default function MyWorkPage() {
         </div>
 
         {loading ? (
-          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">
+          <div className="mt-6 rounded-[24px] border border-white/10 bg-white/5 p-5 text-sm text-white/60 md:rounded-[30px]">
             กำลังโหลด...
           </div>
         ) : err ? (
-          <div className="mt-6 rounded-[30px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
+          <div className="mt-6 rounded-[24px] border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200 md:rounded-[30px]">
             {err}
           </div>
         ) : (
-          <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 overflow-visible">
-            <div className="w-full overflow-x-auto overflow-y-visible rounded-[30px]">
-              <table className="min-w-[980px] w-full overflow-visible">
-                <thead>
-                  <tr className="text-left text-xs font-semibold tracking-widest text-white/45">
-                    <th className="px-6 py-4">งาน</th>
-                    <th className="px-6 py-4 text-center">ฝ่าย</th>
-                    <th className="px-6 py-4 text-center">สถานะ</th>
-                    <th className="px-6 py-4 text-center">Deadline</th>
-                    <th className="px-6 py-4 text-right">จัดการ</th>
-                  </tr>
-                </thead>
+          <>
+            {/* Mobile / Tablet cards */}
+            <div className="mt-6 space-y-3 lg:hidden">
+              {filtered.length === 0 ? (
+                <div className="rounded-[24px] border border-white/10 bg-white/5 p-5 text-sm text-white/50">
+                  ไม่พบงานในสถานะนี้
+                </div>
+              ) : (
+                filtered.map((w) => {
+                  const pending = w.pending_request?.status === "PENDING" ? w.pending_request : null;
+                  return (
+                    <MobileWorkCard
+                      key={w.id}
+                      w={w}
+                      pending={pending}
+                      onBlocked={openBlockedModal}
+                      onChange={requestStatusChange}
+                    />
+                  );
+                })
+              )}
+            </div>
 
-                <tbody className="divide-y divide-white/10 overflow-visible">
-                  {filtered.map((w) => {
-                    const pending = w.pending_request?.status === "PENDING" ? w.pending_request : null;
+            {/* Desktop table */}
+            <div className="mt-6 hidden overflow-visible rounded-[30px] border border-white/10 bg-white/5 lg:block">
+              <div className="w-full overflow-x-auto overflow-y-visible rounded-[30px]">
+                <table className="min-w-[980px] w-full overflow-visible">
+                  <thead>
+                    <tr className="text-left text-xs font-semibold tracking-widest text-white/45">
+                      <th className="px-6 py-4">งาน</th>
+                      <th className="px-6 py-4 text-center">ฝ่าย</th>
+                      <th className="px-6 py-4 text-center">สถานะ</th>
+                      <th className="px-6 py-4 text-center">Deadline</th>
+                      <th className="px-6 py-4 text-right">จัดการ</th>
+                    </tr>
+                  </thead>
 
-                    return (
-                      <tr key={w.id} className="hover:bg-white/[0.03] overflow-visible">
-                        <td className="px-6 py-5">
-                          <div className="flex items-start gap-3">
-                            <span className="mt-[2px] inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
-                              {makeCode(w)}
-                            </span>
+                  <tbody className="divide-y divide-white/10 overflow-visible">
+                    {filtered.map((w) => {
+                      const pending = w.pending_request?.status === "PENDING" ? w.pending_request : null;
 
-                            <div className="min-w-0">
-                              <Link
-                                href={`/projects/${w.id}`}
-                                className="block truncate text-base font-extrabold text-white hover:underline"
-                              >
-                                {w.title || "-"}
-                              </Link>
+                      return (
+                        <tr key={w.id} className="hover:bg-white/[0.03] overflow-visible">
+                          <td className="px-6 py-5">
+                            <div className="flex items-start gap-3">
+                              <span className="mt-[2px] inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
+                                {makeCode(w)}
+                              </span>
 
-                              {secondLine(w) ? (
-                                <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div>
-                              ) : null}
+                              <div className="min-w-0">
+                                <Link
+                                  href={`/projects/${w.id}`}
+                                  className="block truncate text-base font-extrabold text-white hover:underline"
+                                >
+                                  {w.title || "-"}
+                                </Link>
 
-                              {pending ? (
-                                <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-lime-400/20 bg-lime-400/10 px-4 py-1 text-xs font-extrabold text-lime-200">
-                                  <span className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_18px_rgba(163,230,53,0.9)]" />
-                                  รออนุมัติ: {uiLabelFromDb(pending.from_status)} → {uiLabelFromDb(pending.to_status)}
-                                </div>
-                              ) : null}
+                                {secondLine(w) ? (
+                                  <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div>
+                                ) : null}
+
+                                {pending ? (
+                                  <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-lime-400/20 bg-lime-400/10 px-4 py-1 text-xs font-extrabold text-lime-200">
+                                    <span className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_18px_rgba(163,230,53,0.9)]" />
+                                    รออนุมัติ: {uiLabelFromDb(pending.from_status)} → {uiLabelFromDb(pending.to_status)}
+                                  </div>
+                                ) : null}
+                              </div>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        <td className="px-6 py-5 text-center">
-                          <DeptPill dept={w.department} />
-                        </td>
+                          <td className="px-6 py-5 text-center">
+                            <DeptPill dept={w.department} />
+                          </td>
 
-                        <td className="px-6 py-5 text-center">
-                          <StatusPill s={w.status} />
-                        </td>
+                          <td className="px-6 py-5 text-center">
+                            <StatusPill s={w.status} />
+                          </td>
 
-                        <td className="px-6 py-5 text-center text-sm text-white/80">
-                          {fmtDeadline(w.due_date)}
-                        </td>
+                          <td className="px-6 py-5 text-center text-sm text-white/80">
+                            {fmtDeadline(w.due_date)}
+                          </td>
 
-                        <td className="relative z-20 overflow-visible px-6 py-5 text-right">
-                          <div
-                            className={cn(
-                              "relative z-30 overflow-visible",
-                              pending ? "opacity-60 pointer-events-none" : ""
-                            )}
-                          >
-                            <div className="relative z-40 inline-block overflow-visible">
-                              <StatusDropdown
-                                value={w.status}
-                                onChange={(s) => {
-                                  if (s === "BLOCKED") {
-                                    openBlockedModal(w.id, w.title || "-");
-                                    return;
-                                  }
-                                  requestStatusChange(w.id, s);
-                                }}
-                              />
+                          <td className="relative z-20 overflow-visible px-6 py-5 text-right">
+                            <div
+                              className={cn(
+                                "relative z-30 overflow-visible",
+                                pending ? "opacity-60 pointer-events-none" : ""
+                              )}
+                            >
+                              <div className="relative z-40 inline-block overflow-visible">
+                                <StatusDropdown
+                                  value={w.status}
+                                  onChange={(s) => {
+                                    if (s === "BLOCKED") {
+                                      openBlockedModal(w.id, w.title || "-");
+                                      return;
+                                    }
+                                    requestStatusChange(w.id, s);
+                                  }}
+                                />
+                              </div>
                             </div>
-                          </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    {filtered.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-10 text-center text-sm text-white/50">
+                          ไม่พบงานในสถานะนี้
                         </td>
                       </tr>
-                    );
-                  })}
-
-                  {filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-10 text-center text-sm text-white/50">
-                        ไม่พบงานในสถานะนี้
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>

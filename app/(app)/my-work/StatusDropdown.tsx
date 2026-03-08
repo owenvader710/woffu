@@ -48,14 +48,23 @@ export default function StatusDropdown({ value, onChange }: Props) {
     if (!btn || !menu) return;
 
     const rect = btn.getBoundingClientRect();
-    const menuWidth = 240;
+    const viewportWidth = window.innerWidth;
+    const isMobile = viewportWidth < 640;
+
+    const horizontalPadding = 12;
     const gap = 10;
+
+    const preferredWidth = isMobile
+      ? Math.min(Math.max(rect.width, 220), viewportWidth - horizontalPadding * 2)
+      : 240;
+
     const menuHeight = menu.offsetHeight || 280;
 
-    let left = rect.right - menuWidth;
-    if (left < 12) left = 12;
-    if (left + menuWidth > window.innerWidth - 12) {
-      left = window.innerWidth - menuWidth - 12;
+    let left = isMobile ? rect.left : rect.right - preferredWidth;
+
+    if (left < horizontalPadding) left = horizontalPadding;
+    if (left + preferredWidth > viewportWidth - horizontalPadding) {
+      left = viewportWidth - preferredWidth - horizontalPadding;
     }
 
     const hasSpaceBelow = rect.bottom + gap + menuHeight <= window.innerHeight - 12;
@@ -67,7 +76,7 @@ export default function StatusDropdown({ value, onChange }: Props) {
       position: "fixed",
       top,
       left,
-      width: menuWidth,
+      width: preferredWidth,
       zIndex: 99999,
     });
   }
@@ -133,9 +142,9 @@ export default function StatusDropdown({ value, onChange }: Props) {
                     : "bg-[#171717] text-white hover:bg-[#222222]"
               )}
             >
-              <span>{opt.label}</span>
+              <span className="min-w-0 break-words">{opt.label}</span>
               {opt.note ? (
-                <span className="ml-4 text-[11px] font-black tracking-widest text-white/25">
+                <span className="ml-4 shrink-0 text-[11px] font-black tracking-widest text-white/25">
                   {opt.note}
                 </span>
               ) : null}
@@ -148,15 +157,15 @@ export default function StatusDropdown({ value, onChange }: Props) {
 
   return (
     <>
-      <div ref={wrapRef} className="relative inline-block text-left">
+      <div ref={wrapRef} className="relative inline-block w-full text-left sm:w-auto">
         <button
           ref={buttonRef}
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="inline-flex min-w-[170px] items-center justify-between rounded-[18px] border border-white/35 bg-[linear-gradient(180deg,#3a3a3a,#202020)] px-5 py-3 text-sm font-extrabold text-white shadow-[0_8px_24px_rgba(0,0,0,0.28)] transition hover:brightness-110"
+          className="inline-flex w-full min-w-0 items-center justify-between rounded-[18px] border border-white/35 bg-[linear-gradient(180deg,#3a3a3a,#202020)] px-4 py-3 text-sm font-extrabold text-white shadow-[0_8px_24px_rgba(0,0,0,0.28)] transition hover:brightness-110 sm:min-w-[170px] sm:px-5"
         >
-          <span>{current.label}</span>
-          <span className="ml-4 text-xs text-[#9eb3d1]">▼</span>
+          <span className="truncate">{current.label}</span>
+          <span className="ml-4 shrink-0 text-xs text-[#9eb3d1]">▼</span>
         </button>
       </div>
 

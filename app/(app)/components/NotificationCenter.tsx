@@ -490,7 +490,7 @@ export default function NotificationCenter() {
 
   return (
     <>
-      <div className="relative">
+      <div className="relative md:fixed md:bottom-6 md:right-6 md:z-[9998]">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}

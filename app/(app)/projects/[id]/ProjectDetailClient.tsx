@@ -143,7 +143,7 @@ function pillToneStatus(status: Project["status"]) {
 
 function parseDescriptionAndAttachment(raw?: string | null) {
   const text = raw || "";
-  const match = text.match(/\n*\[แนบไฟล์\]\s*(.+?)\n(https?:\/\/\S+)\s*$/s);
+  const match = text.match(/\n*\[แนบไฟล์\]\s*([^\n]+)\n(https?:\/\/\S+)\s*$/);
 
   if (!match) {
     return {

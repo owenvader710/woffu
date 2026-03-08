@@ -33,6 +33,8 @@ type Project = {
   projectNo?: string | null;
   ref?: string | null;
 
+  product_group?: string | null;
+
   type: "VIDEO" | "GRAPHIC";
   department: "VIDEO" | "GRAPHIC" | "ALL";
   status: "PRE_ORDER" | "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
@@ -137,6 +139,27 @@ function pillToneStatus(status: Project["status"]) {
   if (status === "BLOCKED") return "red";
   if (status === "IN_PROGRESS") return "blue";
   return "neutral";
+}
+
+function parseDescriptionAndAttachment(raw?: string | null) {
+  const text = raw || "";
+  const match = text.match(/\n*\[แนบไฟล์\]\s*(.+?)\n(https?:\/\/\S+)\s*$/s);
+
+  if (!match) {
+    return {
+      cleanDescription: text,
+      attachmentName: null as string | null,
+      attachmentUrl: null as string | null,
+    };
+  }
+
+  const cleanDescription = text.replace(match[0], "").trim();
+
+  return {
+    cleanDescription,
+    attachmentName: match[1]?.trim() || null,
+    attachmentUrl: match[2]?.trim() || null,
+  };
 }
 
 function Pill({
@@ -450,6 +473,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
     "-";
 
   const code = getProjectCode(project);
+  const parsedDescription = parseDescriptionAndAttachment(project.description);
 
   return (
     <div className="mx-auto w-full max-w-[1600px] px-4 py-6 md:px-6 md:py-8 lg:px-10 lg:py-10">
@@ -492,6 +516,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
             <div className="mt-3 flex flex-wrap gap-2">
               <Pill tone={project.type === "VIDEO" ? "blue" : "amber"}>{project.type}</Pill>
               {project.brand ? <Pill tone="neutral">{project.brand}</Pill> : <Pill tone="neutral">-</Pill>}
+              {project.product_group ? <Pill tone="violet">{`กลุ่ม ${project.product_group}`}</Pill> : null}
               <Pill tone={pillToneStatus(project.status)}>{project.status}</Pill>
               {pending ? <Pill tone="lime">มีคำขอรออนุมัติ</Pill> : null}
             </div>
@@ -511,7 +536,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-white/70 md:grid-cols-2">
+            <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-white/70 md:grid-cols-3">
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="text-xs text-white/40">ผู้รับผิดชอบ</div>
                 <div className="mt-1 break-words text-white/85">{assigneeName}</div>
@@ -519,6 +544,10 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="text-xs text-white/40">ผู้สร้างงาน</div>
                 <div className="mt-1 break-words text-white/85">{creatorName}</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-white/40">กลุ่มสินค้า</div>
+                <div className="mt-1 break-words text-white/85">{project.product_group || "-"}</div>
               </div>
             </div>
 
@@ -550,9 +579,25 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
               <div className="mt-4">
                 <div className="text-xs text-white/45">คำอธิบาย</div>
                 <div className="mt-2 whitespace-pre-wrap break-words rounded-xl border border-white/10 bg-black/30 p-4 text-sm text-white/85">
-                  {project.description?.trim() ? project.description : "-"}
+                  {parsedDescription.cleanDescription?.trim() ? parsedDescription.cleanDescription : "-"}
                 </div>
               </div>
+
+              {parsedDescription.attachmentUrl ? (
+                <div className="mt-4">
+                  <div className="text-xs text-white/45">ไฟล์แนบ</div>
+                  <a
+                    href={parsedDescription.attachmentUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-flex max-w-full items-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80 hover:bg-white/10"
+                  >
+                    <span className="truncate">
+                      เปิดไฟล์แนบ{parsedDescription.attachmentName ? `: ${parsedDescription.attachmentName}` : ""}
+                    </span>
+                  </a>
+                </div>
+              ) : null}
             </div>
 
             {msg && (

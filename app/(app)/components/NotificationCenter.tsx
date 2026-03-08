@@ -490,158 +490,169 @@ export default function NotificationCenter() {
 
   return (
     <>
-      <div className="fixed bottom-6 right-6 z-[9998]">
+      <div className="relative">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="relative inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-[#111] text-white shadow-[0_10px_40px_rgba(0,0,0,0.4)] hover:bg-white/10"
+          className="relative inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-[#111] text-white shadow-[0_10px_30px_rgba(0,0,0,0.28)] transition hover:bg-white/10 md:h-11 md:w-11"
           title="Notifications"
         >
-          🔔
+          <span className="text-[17px] leading-none md:text-[18px]">🔔</span>
           {unread > 0 ? (
-            <span className="absolute -right-1 -top-1 inline-flex min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[11px] font-extrabold text-white">
+            <span className="absolute -right-1 -top-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-extrabold text-white md:min-w-[20px] md:text-[11px]">
               {unread > 99 ? "99+" : unread}
             </span>
           ) : null}
         </button>
 
         {open ? (
-          <div className="absolute bottom-14 right-0 w-[360px] rounded-3xl border border-white/10 bg-[#0b0b0b] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-extrabold text-white">แจ้งเตือน</div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={clearVisibleList}
-                  className="text-xs font-semibold text-white/60 hover:text-white"
-                >
-                  เคลียร์รายการ
-                </button>
-                <button
-                  type="button"
-                  onClick={readAll}
-                  className="text-xs font-semibold text-white/60 hover:text-white"
-                >
-                  อ่านทั้งหมด
-                </button>
-              </div>
-            </div>
+          <>
+            <button
+              type="button"
+              aria-label="close notifications overlay"
+              onClick={() => setOpen(false)}
+              className="fixed inset-0 z-[9996] bg-black/45 md:hidden"
+            />
 
-            <div className="mt-2 space-y-2">
-              <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                <div className="text-[11px] text-white/50">
-                  realtime / poll active
-                  {desktopPermission === "granted" ? " · desktop on" : ""}
-                  {soundEnabled ? " · sound on" : ""}
-                </div>
-
-                {desktopPermission === "default" ? (
+            <div className="fixed inset-x-3 top-[68px] z-[9998] max-h-[calc(100vh-92px)] overflow-hidden rounded-3xl border border-white/10 bg-[#0b0b0b] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)] md:absolute md:inset-auto md:bottom-14 md:right-0 md:top-auto md:w-[360px] md:max-h-none">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-extrabold text-white">แจ้งเตือน</div>
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={enableDesktopNotifications}
-                    className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white/80 hover:bg-white/10"
+                    onClick={clearVisibleList}
+                    className="text-xs font-semibold text-white/60 hover:text-white"
                   >
-                    desktop alert
+                    เคลียร์รายการ
                   </button>
-                ) : desktopPermission === "denied" ? (
-                  <div className="text-[11px] text-red-300/70">desktop blocked</div>
-                ) : desktopPermission === "unsupported" ? (
-                  <div className="text-[11px] text-white/35">unsupported</div>
-                ) : null}
-              </div>
-
-              <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                <div className="text-[11px] text-white/50">
-                  push {pushEnabled ? "enabled" : "disabled"}
-                </div>
-
-                {!pushSupported ? (
-                  <div className="text-[11px] text-white/35">unsupported</div>
-                ) : pushEnabled ? (
                   <button
                     type="button"
-                    onClick={disablePush}
-                    disabled={pushBusy}
-                    className="rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-1.5 text-[11px] font-semibold text-red-200 hover:bg-red-500/15 disabled:opacity-50"
+                    onClick={readAll}
+                    className="text-xs font-semibold text-white/60 hover:text-white"
                   >
-                    {pushBusy ? "..." : "ปิด push"}
+                    อ่านทั้งหมด
                   </button>
+                </div>
+              </div>
+
+              <div className="mt-2 space-y-2">
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+                  <div className="text-[11px] text-white/50">
+                    realtime / poll active
+                    {desktopPermission === "granted" ? " · desktop on" : ""}
+                    {soundEnabled ? " · sound on" : ""}
+                  </div>
+
+                  {desktopPermission === "default" ? (
+                    <button
+                      type="button"
+                      onClick={enableDesktopNotifications}
+                      className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white/80 hover:bg-white/10"
+                    >
+                      desktop alert
+                    </button>
+                  ) : desktopPermission === "denied" ? (
+                    <div className="text-[11px] text-red-300/70">desktop blocked</div>
+                  ) : desktopPermission === "unsupported" ? (
+                    <div className="text-[11px] text-white/35">unsupported</div>
+                  ) : null}
+                </div>
+
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+                  <div className="text-[11px] text-white/50">
+                    push {pushEnabled ? "enabled" : "disabled"}
+                  </div>
+
+                  {!pushSupported ? (
+                    <div className="text-[11px] text-white/35">unsupported</div>
+                  ) : pushEnabled ? (
+                    <button
+                      type="button"
+                      onClick={disablePush}
+                      disabled={pushBusy}
+                      className="rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-1.5 text-[11px] font-semibold text-red-200 hover:bg-red-500/15 disabled:opacity-50"
+                    >
+                      {pushBusy ? "..." : "ปิด push"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={enablePush}
+                      disabled={pushBusy}
+                      className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white/80 hover:bg-white/10 disabled:opacity-50"
+                    >
+                      {pushBusy ? "..." : "เปิด push"}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-3 max-h-[calc(100vh-250px)] space-y-2 overflow-y-auto pr-1 md:max-h-[420px]">
+                {visibleItems.length === 0 ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-white/45">
+                    ยังไม่มีแจ้งเตือน
+                  </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={enablePush}
-                    disabled={pushBusy}
-                    className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white/80 hover:bg-white/10 disabled:opacity-50"
-                  >
-                    {pushBusy ? "..." : "เปิด push"}
-                  </button>
+                  visibleItems.map((n) => {
+                    const projectId = getProjectIdFromLink(n.link);
+                    const canAcknowledge = n.type === "JOB_ASSIGNED" && !!projectId;
+
+                    return (
+                      <div
+                        key={n.id}
+                        className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3"
+                      >
+                        <div
+                          className="cursor-pointer transition"
+                          onClick={() => readOne(n.id)}
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${toneClass(n.type)}`}>
+                              {n.type}
+                            </span>
+                            {!n.is_read ? <span className="mt-1 h-2 w-2 rounded-full bg-lime-300" /> : null}
+                          </div>
+
+                          <div className="mt-2 font-semibold text-white">{n.title}</div>
+                          {n.message ? (
+                            <div className="mt-1 text-sm leading-6 text-white/65">{n.message}</div>
+                          ) : null}
+                          <div className="mt-2 text-xs text-white/35">{formatDateTimeTH(n.created_at)}</div>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          {n.link ? (
+                            <Link
+                              href={n.link}
+                              onClick={() => readOne(n.id)}
+                              className="inline-flex rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
+                            >
+                              เปิดดู
+                            </Link>
+                          ) : null}
+
+                          {canAcknowledge ? (
+                            <button
+                              type="button"
+                              onClick={() => acknowledgeAssignment(n)}
+                              disabled={ackBusyId === n.id}
+                              className="inline-flex rounded-xl border border-lime-400/20 bg-lime-400/10 px-3 py-2 text-xs font-semibold text-lime-200 hover:bg-lime-400/15 disabled:opacity-50"
+                            >
+                              {ackBusyId === n.id ? "..." : "รับทราบ"}
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
-
-            <div className="mt-3 space-y-2">
-              {visibleItems.length === 0 ? (
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-white/45">
-                  ยังไม่มีแจ้งเตือน
-                </div>
-              ) : (
-                visibleItems.map((n) => {
-                  const projectId = getProjectIdFromLink(n.link);
-                  const canAcknowledge = n.type === "JOB_ASSIGNED" && !!projectId;
-
-                  return (
-                    <div
-                      key={n.id}
-                      className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3"
-                    >
-                      <div
-                        className="cursor-pointer transition hover:bg-white/0"
-                        onClick={() => readOne(n.id)}
-                      >
-                        <div className="flex items-start gap-2">
-                          <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${toneClass(n.type)}`}>
-                            {n.type}
-                          </span>
-                          {!n.is_read ? <span className="mt-1 h-2 w-2 rounded-full bg-lime-300" /> : null}
-                        </div>
-
-                        <div className="mt-2 font-semibold text-white">{n.title}</div>
-                        {n.message ? <div className="mt-1 text-sm leading-6 text-white/65">{n.message}</div> : null}
-                        <div className="mt-2 text-xs text-white/35">{formatDateTimeTH(n.created_at)}</div>
-                      </div>
-
-                      <div className="mt-3 flex items-center gap-2">
-                        {n.link ? (
-                          <Link
-                            href={n.link}
-                            onClick={() => readOne(n.id)}
-                            className="inline-flex rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
-                          >
-                            เปิดดู
-                          </Link>
-                        ) : null}
-
-                        {canAcknowledge ? (
-                          <button
-                            type="button"
-                            onClick={() => acknowledgeAssignment(n)}
-                            disabled={ackBusyId === n.id}
-                            className="inline-flex rounded-xl border border-lime-400/20 bg-lime-400/10 px-3 py-2 text-xs font-semibold text-lime-200 hover:bg-lime-400/15 disabled:opacity-50"
-                          >
-                            {ackBusyId === n.id ? "..." : "รับทราบ"}
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
+          </>
         ) : null}
       </div>
 
-      <div className="pointer-events-none fixed bottom-24 right-6 z-[9999] flex w-[360px] max-w-[calc(100vw-32px)] flex-col gap-3">
+      <div className="pointer-events-none fixed bottom-20 right-3 z-[9999] flex w-[min(360px,calc(100vw-24px))] flex-col gap-3 md:bottom-24 md:right-6 md:w-[360px] md:max-w-[calc(100vw-32px)]">
         {toasts.slice(-3).map((n) => (
           <div
             key={n.id}

@@ -120,6 +120,26 @@ function toDateTimeLocalValue(value?: string | null) {
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
 }
 
+function parseDescriptionAndAttachment(raw?: string | null) {
+  const text = raw || "";
+  const match = text.match(/\n*\[แนบไฟล์\]\s*(.+?)\n(https?:\/\/\S+)\s*$/s);
+
+  if (!match) {
+    return {
+      cleanDescription: text,
+      attachmentName: null as string | null,
+      attachmentUrl: null as string | null,
+    };
+  }
+
+  const cleanDescription = text.replace(match[0], "").trim();
+  return {
+    cleanDescription,
+    attachmentName: match[1]?.trim() || null,
+    attachmentUrl: match[2]?.trim() || null,
+  };
+}
+
 export default function EditProjectModal({ open, onClose, onSaved, project, members }: Props) {
   const [type, setType] = useState<"VIDEO" | "GRAPHIC">("VIDEO");
 
@@ -131,6 +151,10 @@ export default function EditProjectModal({ open, onClose, onSaved, project, memb
   const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [description, setDescription] = useState("");
+
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
+  const [attachmentName, setAttachmentName] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const [videoPriority, setVideoPriority] = useState("");
   const [videoPurpose, setVideoPurpose] = useState("");
@@ -152,6 +176,8 @@ export default function EditProjectModal({ open, onClose, onSaved, project, memb
   useEffect(() => {
     if (!open || !project) return;
 
+    const parsed = parseDescriptionAndAttachment(project.description);
+
     setErr("");
     setMsg("");
 
@@ -163,7 +189,9 @@ export default function EditProjectModal({ open, onClose, onSaved, project, memb
     setAssigneeId(project.assignee_id || "");
     setStartDate(toDateTimeLocalValue(project.start_date));
     setDueDate(toDateTimeLocalValue(project.due_date));
-    setDescription(project.description || "");
+    setDescription(parsed.cleanDescription || "");
+    setAttachmentName(parsed.attachmentName);
+    setAttachmentUrl(parsed.attachmentUrl);
     setVideoPriority(project.video_priority || "3ดาว");
     setVideoPurpose(project.video_purpose || "สร้างความต้องการ");
     setGraphicJobType(project.graphic_job_type || "ซัพพอร์ต MKT");
@@ -174,6 +202,37 @@ export default function EditProjectModal({ open, onClose, onSaved, project, memb
       setBrand("");
     }
   }, [type, brand, brands]);
+
+  async function uploadFile(file: File) {
+    setUploading(true);
+    setErr("");
+
+    try {
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error("ไฟล์มีขนาดเกิน 5MB");
+      }
+
+      const form = new FormData();
+      form.append("file", file);
+
+      const res = await fetch("/api/projects/upload", {
+        method: "POST",
+        body: form,
+      });
+
+      const json = await safeJson(res);
+      if (!res.ok) {
+        throw new Error((json && (json.error || json.message)) || "Upload failed");
+      }
+
+      setAttachmentUrl(json?.data?.url || null);
+      setAttachmentName(json?.data?.name || null);
+    } catch (e: any) {
+      setErr(e?.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function submit() {
     setErr("");
@@ -191,6 +250,13 @@ export default function EditProjectModal({ open, onClose, onSaved, project, memb
 
     setSubmitting(true);
     try {
+      const finalDescription = [
+        description.trim() || "",
+        attachmentUrl ? `\n\n[แนบไฟล์] ${attachmentName || "file"}\n${attachmentUrl}` : "",
+      ]
+        .join("")
+        .trim();
+
       const payload: any = {
         code: code.trim() || null,
         title: title.trim(),
@@ -201,7 +267,7 @@ export default function EditProjectModal({ open, onClose, onSaved, project, memb
         assignee_id: assigneeId || null,
         start_date: startDate ? new Date(startDate).toISOString() : null,
         due_date: dueDate ? new Date(dueDate).toISOString() : null,
-        description: description?.trim() || null,
+        description: finalDescription || null,
         video_priority: type === "VIDEO" ? videoPriority : null,
         video_purpose: type === "VIDEO" ? videoPurpose : null,
         graphic_job_type: type === "GRAPHIC" ? graphicJobType : null,
@@ -449,6 +515,28 @@ export default function EditProjectModal({ open, onClose, onSaved, project, memb
               rows={4}
               className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-[#e5ff78]"
             />
+
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <label className="inline-flex w-full cursor-pointer items-center gap-2 text-xs text-white/70 sm:w-auto">
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) uploadFile(file);
+                  }}
+                />
+                <span className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-center hover:bg-white/10 sm:w-auto">
+                  {uploading ? "กำลังอัปโหลด..." : "แนบรูปหรือไฟล์ (ไม่เกิน 5MB)"}
+                </span>
+              </label>
+            </div>
+
+            {attachmentName ? (
+              <div className="mt-3 break-words rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80">
+                แนบแล้ว: {attachmentName}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -464,7 +552,7 @@ export default function EditProjectModal({ open, onClose, onSaved, project, memb
             <button
               onClick={submit}
               className="w-full rounded-2xl bg-[#e5ff78] px-5 py-3 text-sm font-semibold text-black hover:brightness-95 disabled:opacity-60 sm:w-auto"
-              disabled={submitting}
+              disabled={submitting || uploading}
             >
               {submitting ? "กำลังบันทึก..." : "บันทึก"}
             </button>

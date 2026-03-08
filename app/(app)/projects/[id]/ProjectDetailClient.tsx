@@ -162,8 +162,8 @@ function Pill({
                 : "border-white/10 bg-white/5 text-white/70";
 
   return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs ${cls}`}>
-      {children}
+    <span className={`inline-flex max-w-full items-center rounded-full border px-2 py-1 text-xs ${cls}`}>
+      <span className="truncate">{children}</span>
     </span>
   );
 }
@@ -198,8 +198,8 @@ function getProjectCode(p: Project | null) {
 function CodeBadge({ code }: { code?: string | null }) {
   if (!code) return null;
   return (
-    <span className="inline-flex items-center rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs font-semibold text-white/80">
-      {code}
+    <span className="inline-flex max-w-full items-center rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs font-semibold text-white/80">
+      <span className="truncate">{code}</span>
     </span>
   );
 }
@@ -362,7 +362,9 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
   }
 
   const Card = ({ children }: { children: React.ReactNode }) => (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-6">{children}</div>
+    <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 md:p-6">
+      {children}
+    </div>
   );
 
   const GhostBtn = ({
@@ -380,7 +382,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-xl border px-4 py-2 text-sm transition disabled:opacity-50 ${
+      className={`rounded-xl border px-3 py-2 text-sm transition disabled:opacity-50 md:px-4 ${
         danger
           ? "border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/15"
           : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
@@ -392,7 +394,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
   if (!projectId) {
     return (
-      <div className="mx-auto w-full max-w-[1600px] px-6 py-8 md:px-10 md:py-10">
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-6 md:px-6 md:py-8 lg:px-10 lg:py-10">
         <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-yellow-200">
           Missing project id (client)
         </div>
@@ -402,7 +404,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
   if (loading) {
     return (
-      <div className="mx-auto w-full max-w-[1600px] px-6 py-8 md:px-10 md:py-10">
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-6 md:px-6 md:py-8 lg:px-10 lg:py-10">
         <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">กำลังโหลด...</div>
       </div>
     );
@@ -410,7 +412,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
   if (err) {
     return (
-      <div className="mx-auto w-full max-w-[1600px] px-6 py-8 md:px-10 md:py-10">
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-6 md:px-6 md:py-8 lg:px-10 lg:py-10">
         <div className="mb-4">
           <Link href="/projects" className="text-sm text-white/70 underline underline-offset-4 hover:text-white">
             ← กลับไปหน้าโปรเจกต์
@@ -423,7 +425,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
   if (!project) {
     return (
-      <div className="mx-auto w-full max-w-[1600px] px-6 py-8 md:px-10 md:py-10">
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-6 md:px-6 md:py-8 lg:px-10 lg:py-10">
         <div className="mb-4">
           <Link href="/projects" className="text-sm text-white/70 underline underline-offset-4 hover:text-white">
             ← กลับไปหน้าโปรเจกต์
@@ -450,7 +452,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
   const code = getProjectCode(project);
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-[1600px] px-4 py-6 md:px-6 md:py-8 lg:px-10 lg:py-10">
       <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <Link href="/projects" className="text-sm text-white/70 underline underline-offset-4 hover:text-white">
           ← กลับไปหน้าโปรเจกต์
@@ -474,13 +476,15 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
       </div>
 
       <Card>
-        <div className="flex flex-col gap-6">
+        <div className="flex min-w-0 flex-col gap-6">
           <div className="min-w-0">
             <div className="text-xs font-semibold tracking-widest text-white/50">PROJECT DETAIL</div>
 
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              <CodeBadge code={code} />
-              <h1 className="break-words text-2xl font-extrabold tracking-tight text-white md:text-3xl">
+            <div className="mt-2 flex min-w-0 flex-wrap items-start gap-3">
+              <div className="shrink-0">
+                <CodeBadge code={code} />
+              </div>
+              <h1 className="min-w-0 flex-1 break-words text-2xl font-extrabold tracking-tight text-white md:text-3xl">
                 {project.title}
               </h1>
             </div>
@@ -495,30 +499,30 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
             <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-white/70 md:grid-cols-3">
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="text-xs text-white/40">Created</div>
-                <div className="mt-1 text-white/85">{formatDateTimeTH(project.created_at)}</div>
+                <div className="mt-1 break-words text-white/85">{formatDateTimeTH(project.created_at)}</div>
               </div>
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="text-xs text-white/40">Start</div>
-                <div className="mt-1 text-white/85">{formatDateTH(project.start_date)}</div>
+                <div className="mt-1 break-words text-white/85">{formatDateTH(project.start_date)}</div>
               </div>
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="text-xs text-white/40">Deadline</div>
-                <div className="mt-1 text-white/85">{formatDateTimeTH(project.due_date)}</div>
+                <div className="mt-1 break-words text-white/85">{formatDateTimeTH(project.due_date)}</div>
               </div>
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-white/70 md:grid-cols-2">
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="text-xs text-white/40">ผู้รับผิดชอบ</div>
-                <div className="mt-1 text-white/85">{assigneeName}</div>
+                <div className="mt-1 break-words text-white/85">{assigneeName}</div>
               </div>
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="text-xs text-white/40">ผู้สร้างงาน</div>
-                <div className="mt-1 text-white/85">{creatorName}</div>
+                <div className="mt-1 break-words text-white/85">{creatorName}</div>
               </div>
             </div>
 
-            <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
+            <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4 md:p-5">
               <div className="text-sm font-semibold text-white">รายละเอียดงาน</div>
 
               {isVideo && (
@@ -545,7 +549,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
               <div className="mt-4">
                 <div className="text-xs text-white/45">คำอธิบาย</div>
-                <div className="mt-2 whitespace-pre-wrap rounded-xl border border-white/10 bg-black/30 p-4 text-sm text-white/85">
+                <div className="mt-2 whitespace-pre-wrap break-words rounded-xl border border-white/10 bg-black/30 p-4 text-sm text-white/85">
                   {project.description?.trim() ? project.description : "-"}
                 </div>
               </div>
@@ -564,10 +568,12 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
             {pending && (
               <div className="mt-4 rounded-2xl border border-[#e5ff78]/25 bg-[#e5ff78]/10 p-4 text-sm text-[#e5ff78]">
-                มีคำขอรออนุมัติ: <b className="text-white">{pending.from_status}</b> →{" "}
-                <b className="text-white">{pending.to_status}</b> · โดย{" "}
-                <b className="text-white">{pending.requester?.display_name || "-"}</b> ·{" "}
-                <span className="text-white/70">{formatDateTimeTH(pending.created_at)}</span>
+                <div className="break-words">
+                  มีคำขอรออนุมัติ: <b className="text-white">{pending.from_status}</b> →{" "}
+                  <b className="text-white">{pending.to_status}</b> · โดย{" "}
+                  <b className="text-white">{pending.requester?.display_name || "-"}</b> ·{" "}
+                  <span className="text-white/70">{formatDateTimeTH(pending.created_at)}</span>
+                </div>
                 <div className="mt-1 text-xs text-white/60">
                   (หัวหน้าไปที่{" "}
                   <Link className="underline underline-offset-4" href="/approvals">
@@ -583,8 +589,8 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
       <div className="mt-6">
         <Card>
-          <div className="flex items-start justify-between gap-3">
-            <div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
               <div className="text-sm font-semibold text-white">ประวัติคำขอเปลี่ยนสถานะ</div>
               <div className="text-xs text-white/50">ทั้งหมด: {requests.length}</div>
             </div>
@@ -604,9 +610,9 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
                 const open = !!expandedIds[r.id];
                 return (
                   <div key={r.id} className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                       <div className="flex flex-wrap items-center gap-2">
-                        <div className="font-semibold text-white">
+                        <div className="break-words font-semibold text-white">
                           {r.from_status} → {r.to_status}
                         </div>
                         <span className={`rounded-full border px-2 py-1 text-xs ${badgeClass(r.request_status)}`}>
@@ -616,7 +622,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
                       <div className="text-xs text-white/45">{formatDateTimeTH(r.created_at)}</div>
                     </div>
 
-                    <div className="mt-1 text-xs text-white/55">
+                    <div className="mt-1 break-words text-xs text-white/55">
                       โดย: {r.requester?.display_name || "-"}
                       {r.request_status !== "PENDING" && (
                         <>
@@ -628,7 +634,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
                     {showAllHistory && (
                       <button
-                        className="mt-2 text-xs text-white/50 underline underline-offset-2 hover:text-white"
+                        className="mt-2 text-left text-xs text-white/50 underline underline-offset-2 hover:text-white"
                         onClick={() => setExpandedIds((prev) => ({ ...prev, [r.id]: !prev[r.id] }))}
                       >
                         {open ? "ซ่อนรายละเอียด" : "ดูรายละเอียด"}
@@ -636,7 +642,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
                     )}
 
                     {showAllHistory && open && (
-                      <div className="mt-2 text-[11px] text-white/35">
+                      <div className="mt-2 break-all text-[11px] text-white/35">
                         request id: {r.id} · project id: {r.project_id}
                       </div>
                     )}
@@ -650,8 +656,8 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
       <div className="mt-6">
         <Card>
-          <div className="flex items-start justify-between gap-3">
-            <div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
               <div className="text-sm font-semibold text-white">Activity Log</div>
               <div className="text-xs text-white/50">ทั้งหมด: {logs.length}</div>
             </div>
@@ -669,14 +675,14 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
             <div className="mt-4 space-y-2">
               {visibleLogs.map((l) => (
                 <div key={l.id} className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-semibold text-white">{l.action}</div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                    <div className="break-words font-semibold text-white">{l.action}</div>
                     <div className="text-xs text-white/45">{formatDateTimeTH(l.created_at)}</div>
                   </div>
-                  <div className="mt-1 text-xs text-white/55">
+                  <div className="mt-1 break-words text-xs text-white/55">
                     โดย: <span className="font-medium text-white/80">{l.actor?.display_name || l.actor_id || "-"}</span>
                   </div>
-                  {l.message && <div className="mt-2 text-sm text-white/85">{l.message}</div>}
+                  {l.message && <div className="mt-2 break-words text-sm text-white/85">{l.message}</div>}
                 </div>
               ))}
             </div>

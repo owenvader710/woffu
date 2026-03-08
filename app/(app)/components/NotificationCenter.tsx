@@ -613,9 +613,9 @@ export default function NotificationCenter() {
                             {!n.is_read ? <span className="mt-1 h-2 w-2 rounded-full bg-lime-300" /> : null}
                           </div>
 
-                          <div className="mt-2 font-semibold text-white">{n.title}</div>
+                          <div className="mt-2 break-words font-semibold text-white">{n.title}</div>
                           {n.message ? (
-                            <div className="mt-1 text-sm leading-6 text-white/65">{n.message}</div>
+                            <div className="mt-1 break-words text-sm leading-6 text-white/65">{n.message}</div>
                           ) : null}
                           <div className="mt-2 text-xs text-white/35">{formatDateTimeTH(n.created_at)}</div>
                         </div>
@@ -652,44 +652,48 @@ export default function NotificationCenter() {
         ) : null}
       </div>
 
-      <div className="pointer-events-none fixed bottom-20 right-3 z-[9999] flex w-[min(360px,calc(100vw-24px))] flex-col gap-3 md:bottom-24 md:right-6 md:w-[360px] md:max-w-[calc(100vw-32px)]">
-        {toasts.slice(-3).map((n) => (
-          <div
-            key={n.id}
-            className="pointer-events-auto rounded-3xl border border-white/10 bg-[#0d0d0d] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${toneClass(n.type)}`}>
-                  {n.type}
+      {toasts.length > 0 ? (
+        <div className="pointer-events-none fixed bottom-20 right-3 z-[9999] flex w-[min(92vw,360px)] flex-col gap-3 md:bottom-24 md:right-6 md:w-[360px]">
+          {toasts.slice(-3).map((n) => (
+            <div
+              key={n.id}
+              className="pointer-events-auto rounded-3xl border border-white/10 bg-[#0d0d0d] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${toneClass(n.type)}`}>
+                    {n.type}
+                  </div>
+                  <div className="mt-2 break-words font-bold text-white">{n.title}</div>
+                  {n.message ? (
+                    <div className="mt-1 break-words text-sm leading-6 text-white/65">{n.message}</div>
+                  ) : null}
                 </div>
-                <div className="mt-2 font-bold text-white">{n.title}</div>
-                {n.message ? <div className="mt-1 text-sm leading-6 text-white/65">{n.message}</div> : null}
-              </div>
 
-              <button
-                type="button"
-                onClick={() => setToasts((prev) => prev.filter((x) => x.id !== n.id))}
-                className="rounded-xl px-2 py-1 text-sm text-white/50 hover:bg-white/10 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-
-            {n.link ? (
-              <div className="mt-3">
-                <Link
-                  href={n.link}
-                  onClick={() => readOne(n.id)}
-                  className="inline-flex rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
+                <button
+                  type="button"
+                  onClick={() => setToasts((prev) => prev.filter((x) => x.id !== n.id))}
+                  className="rounded-xl px-2 py-1 text-sm text-white/50 hover:bg-white/10 hover:text-white"
                 >
-                  เปิดดู
-                </Link>
+                  ✕
+                </button>
               </div>
-            ) : null}
-          </div>
-        ))}
-      </div>
+
+              {n.link ? (
+                <div className="mt-3">
+                  <Link
+                    href={n.link}
+                    onClick={() => readOne(n.id)}
+                    className="inline-flex rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
+                  >
+                    เปิดดู
+                  </Link>
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </>
   );
 }

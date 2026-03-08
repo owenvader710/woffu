@@ -8,9 +8,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-black text-white">
+    <div className="flex min-h-screen overflow-x-hidden bg-black text-white">
       {/* Desktop Sidebar */}
-      <div className="hidden lg:block">
+      <div className="hidden shrink-0 lg:block">
         <Sidebar />
       </div>
 
@@ -24,7 +24,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             onClick={() => setMobileOpen(false)}
           />
 
-          <div className="absolute left-0 top-0 h-full w-[84%] max-w-[340px] border-r border-white/10 bg-[#0b0b0b] shadow-[0_0_80px_rgba(0,0,0,0.55)]">
+          <div className="absolute left-0 top-0 h-full w-[84%] max-w-[340px] overflow-hidden border-r border-white/10 bg-[#0b0b0b] shadow-[0_0_80px_rgba(0,0,0,0.55)]">
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-4">
               <div>
                 <div className="text-[11px] font-semibold tracking-[0.24em] text-white/35">
@@ -42,7 +42,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </button>
             </div>
 
-            <div className="h-[calc(100%-73px)] overflow-y-auto">
+            <div className="h-[calc(100%-73px)] overflow-y-auto overflow-x-hidden">
               <Sidebar />
             </div>
           </div>
@@ -50,7 +50,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       ) : null}
 
       {/* Content */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
         {/* Mobile Header */}
         <header className="sticky top-0 z-[60] border-b border-white/10 bg-black/85 backdrop-blur lg:hidden">
           <div className="flex items-center justify-between gap-3 px-4 py-3">
@@ -83,7 +83,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <NotificationCenter />
         </div>
 
-        <main className="px-4 pb-8 pt-5 md:px-6 lg:px-0 lg:pb-0 lg:pt-8">
+        <main className="min-w-0 overflow-x-hidden px-4 pb-8 pt-5 md:px-6 lg:px-0 lg:pb-0 lg:pt-8">
           {children}
         </main>
       </div>

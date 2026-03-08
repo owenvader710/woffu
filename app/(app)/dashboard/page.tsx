@@ -140,8 +140,13 @@ function Pill({
               : "border-white/10 bg-white/5 text-white/70";
 
   return (
-    <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", cls)}>
-      {children}
+    <span
+      className={cn(
+        "inline-flex max-w-full items-center rounded-full border px-2 py-1 text-xs font-semibold",
+        cls
+      )}
+    >
+      <span className="truncate">{children}</span>
     </span>
   );
 }
@@ -149,8 +154,8 @@ function Pill({
 function CodeBadge({ code }: { code?: string | null }) {
   if (!code) return null;
   return (
-    <span className="inline-flex items-center rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-[11px] font-semibold text-white/80">
-      {code}
+    <span className="inline-flex max-w-full items-center rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-[11px] font-semibold text-white/80">
+      <span className="truncate">{code}</span>
     </span>
   );
 }
@@ -172,16 +177,16 @@ function DashboardCard({
     <section
       onClick={onClick}
       className={cn(
-        "rounded-[24px] border border-white/10 bg-white/5 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.18)] md:rounded-[28px] md:p-5",
+        "min-w-0 overflow-hidden rounded-[24px] border border-white/10 bg-white/5 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.18)] md:rounded-[28px] md:p-5",
         onClick && "cursor-pointer transition hover:bg-white/[0.07] hover:border-white/15",
         className
       )}
     >
-      <div className="mb-4">
+      <div className="mb-4 min-w-0">
         <div className="break-words text-lg font-extrabold tracking-tight text-white md:text-xl">{title}</div>
-        {desc ? <div className="mt-1 text-sm leading-6 text-white/45">{desc}</div> : null}
+        {desc ? <div className="mt-1 break-words text-sm leading-6 text-white/45">{desc}</div> : null}
       </div>
-      {children}
+      <div className="min-w-0">{children}</div>
     </section>
   );
 }
@@ -201,13 +206,13 @@ function SummaryStat({
     <button
       type="button"
       onClick={onClick}
-      className="min-h-[86px] rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-left transition hover:bg-white/10 md:min-h-[116px] md:px-4 md:py-4"
+      className="min-h-[86px] min-w-0 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-left transition hover:bg-white/10 md:min-h-[116px] md:px-4 md:py-4"
     >
       <div className="text-[10px] font-semibold tracking-[0.18em] text-white/45 md:text-[11px] md:tracking-widest">
         {label}
       </div>
       <div className="mt-2 text-2xl font-extrabold leading-none text-white md:mt-3 md:text-3xl">{value}</div>
-      <div className="mt-2 text-[11px] leading-5 text-white/45 md:mt-3 md:text-xs">{hint || "-"}</div>
+      <div className="mt-2 break-words text-[11px] leading-5 text-white/45 md:mt-3 md:text-xs">{hint || "-"}</div>
     </button>
   );
 }
@@ -224,12 +229,12 @@ function ProjectMiniList({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
       {items.map((p) => (
         <Link
           key={p.id}
           href={`/projects/${p.id}`}
-          className="block rounded-2xl border border-white/10 bg-black/20 px-4 py-3 transition hover:bg-white/10"
+          className="block min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 px-4 py-3 transition hover:bg-white/10"
         >
           <div className="flex min-w-0 items-start gap-2">
             <div className="shrink-0">
@@ -237,18 +242,22 @@ function ProjectMiniList({
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="truncate font-semibold text-white">{p.title || "-"}</div>
+              <div className="break-words text-sm font-semibold leading-6 text-white line-clamp-2 md:text-base">
+                {p.title || "-"}
+              </div>
             </div>
           </div>
 
           {secondLine(p) ? (
-            <div className="mt-1 truncate text-xs text-white/45">{secondLine(p)}</div>
+            <div className="mt-1 break-words text-xs leading-5 text-white/45 line-clamp-2">
+              {secondLine(p)}
+            </div>
           ) : null}
 
           <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
             <Pill tone={p.type === "VIDEO" ? "blue" : "amber"}>{p.type || "-"}</Pill>
             <Pill tone={statusTone(p.status)}>{p.status || "-"}</Pill>
-            <span className="truncate text-xs text-white/40 sm:ml-auto">
+            <span className="max-w-full break-words text-xs text-white/40 sm:ml-auto">
               {formatDateTH(p.start_date || p.created_at)}
             </span>
           </div>
@@ -276,29 +285,31 @@ function ApprovalMiniList({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
       {items.map((item) => {
         const busy = submittingId === item.id;
 
         return (
           <div
             key={item.id}
-            className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3"
+            className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 px-4 py-3"
           >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start">
               <div className="min-w-0 flex-1">
                 <Link
                   href="/approvals"
-                  className="block transition hover:opacity-90"
+                  className="block min-w-0 transition hover:opacity-90"
                 >
-                  <div className="flex items-center gap-2">
-                    <CodeBadge code={getProjectCode(item.project)} />
-                    <div className="min-w-0 truncate font-semibold text-white">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <div className="shrink-0">
+                      <CodeBadge code={getProjectCode(item.project)} />
+                    </div>
+                    <div className="min-w-0 break-words font-semibold text-white line-clamp-2">
                       {item.project?.title || "-"}
                     </div>
                   </div>
 
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
                     <Pill
                       tone={
                         item.project?.department === "VIDEO"
@@ -311,7 +322,7 @@ function ApprovalMiniList({
                       {item.project?.department || "-"}
                     </Pill>
                     <Pill tone="violet">PENDING</Pill>
-                    <span className="text-xs text-white/40 sm:ml-auto">
+                    <span className="max-w-full break-words text-xs text-white/40 sm:ml-auto">
                       {formatDateTimeTH(item.created_at)}
                     </span>
                   </div>
@@ -788,8 +799,8 @@ export default function DashboardPage() {
         desc="จำนวนงานทั้งหมด จำนวนของแต่ละสถานะ และเปอร์เซ็นต์งานที่ทำเสร็จแล้ว"
         className="mt-6"
       >
-        <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)] xl:gap-8">
-          <div className="flex flex-col items-center">
+        <div className="grid min-w-0 gap-6 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)] xl:gap-8">
+          <div className="flex min-w-0 flex-col items-center">
             <StatusDonut
               total={projects.length}
               counts={{
@@ -829,7 +840,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-3 md:gap-4">
+          <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-3 md:gap-4">
             <SummaryStat
               label="ALL ACTIVE"
               value={projectCounts.total}
@@ -884,7 +895,7 @@ export default function DashboardPage() {
       </DashboardCard>
 
       {!isLeader ? (
-        <div className="mt-6 grid gap-6 xl:grid-cols-2">
+        <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-2">
           <DashboardCard
             title="โปรเจกต์ล่าสุดของฉัน"
             desc="รายการงานล่าสุดที่ยังไม่ปิด และกดเพื่อไปหน้า my work"
@@ -908,7 +919,7 @@ export default function DashboardPage() {
           </DashboardCard>
         </div>
       ) : (
-        <div className="mt-6 grid gap-6 xl:grid-cols-12">
+        <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-12">
           <DashboardCard
             title="รออนุมัติ"
             desc="คำขอเปลี่ยนสถานะที่กำลังรอหัวหน้าอนุมัติ"

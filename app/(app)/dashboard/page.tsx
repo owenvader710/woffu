@@ -43,7 +43,7 @@ type ApprovalItem = {
   request_status: "PENDING" | "APPROVED" | "REJECTED";
   created_at?: string | null;
   project?: {
-    id?: string;
+    id?: string | null;
     title?: string | null;
     code?: string | null;
     department?: "VIDEO" | "GRAPHIC" | "ALL" | string | null;
@@ -201,11 +201,13 @@ function SummaryStat({
     <button
       type="button"
       onClick={onClick}
-      className="min-h-[104px] rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-left transition hover:bg-white/10 md:min-h-[116px]"
+      className="min-h-[86px] rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-left transition hover:bg-white/10 md:min-h-[116px] md:px-4 md:py-4"
     >
-      <div className="text-[11px] font-semibold tracking-widest text-white/45">{label}</div>
-      <div className="mt-3 text-2xl font-extrabold leading-none text-white md:text-3xl">{value}</div>
-      <div className="mt-3 text-xs leading-5 text-white/45">{hint || "-"}</div>
+      <div className="text-[10px] font-semibold tracking-[0.18em] text-white/45 md:text-[11px] md:tracking-widest">
+        {label}
+      </div>
+      <div className="mt-2 text-2xl font-extrabold leading-none text-white md:mt-3 md:text-3xl">{value}</div>
+      <div className="mt-2 text-[11px] leading-5 text-white/45 md:mt-3 md:text-xs">{hint || "-"}</div>
     </button>
   );
 }
@@ -229,19 +231,26 @@ function ProjectMiniList({
           href={`/projects/${p.id}`}
           className="block rounded-2xl border border-white/10 bg-black/20 px-4 py-3 transition hover:bg-white/10"
         >
-          <div className="flex items-center gap-2">
-            <CodeBadge code={getProjectCode(p)} />
-            <div className="min-w-0 truncate font-semibold text-white">{p.title || "-"}</div>
+          <div className="flex min-w-0 items-start gap-2">
+            <div className="shrink-0">
+              <CodeBadge code={getProjectCode(p)} />
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-semibold text-white">{p.title || "-"}</div>
+            </div>
           </div>
 
           {secondLine(p) ? (
             <div className="mt-1 truncate text-xs text-white/45">{secondLine(p)}</div>
           ) : null}
 
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
             <Pill tone={p.type === "VIDEO" ? "blue" : "amber"}>{p.type || "-"}</Pill>
             <Pill tone={statusTone(p.status)}>{p.status || "-"}</Pill>
-            <span className="text-xs text-white/40 sm:ml-auto">{formatDateTH(p.start_date || p.created_at)}</span>
+            <span className="truncate text-xs text-white/40 sm:ml-auto">
+              {formatDateTH(p.start_date || p.created_at)}
+            </span>
           </div>
         </Link>
       ))}
@@ -820,7 +829,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-3 md:gap-4">
             <SummaryStat
               label="ALL ACTIVE"
               value={projectCounts.total}
@@ -831,7 +840,7 @@ export default function DashboardPage() {
             <SummaryStat
               label="PRE_ORDER"
               value={projectCounts.preOrder}
-              hint="งานสั่งล่วงหน้า"
+              hint="สั่งล่วงหน้า"
               onClick={() => router.push("/projects")}
             />
 
@@ -845,21 +854,21 @@ export default function DashboardPage() {
             <SummaryStat
               label="IN_PROGRESS"
               value={projectCounts.inProgress}
-              hint="งานที่กำลังทำ"
+              hint="กำลังทำ"
               onClick={() => router.push("/my-work")}
             />
 
             <SummaryStat
               label="BLOCKED"
               value={projectCounts.blocked}
-              hint="งานติดปัญหา"
+              hint="ติดปัญหา"
               onClick={() => router.push("/blocked")}
             />
 
             <SummaryStat
               label="DONE %"
               value={projectCounts.progressPercent}
-              hint={`${projectCounts.completed} งานที่ปิดแล้ว`}
+              hint={`${projectCounts.completed} ปิดแล้ว`}
               onClick={() => router.push("/completed")}
             />
           </div>

@@ -81,11 +81,11 @@ function NoticeTypePill({ type }: { type?: string | null }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold",
+        "inline-flex max-w-full items-center rounded-full border px-2 py-1 text-[11px] font-semibold",
         cls
       )}
     >
-      {label}
+      <span className="truncate">{label}</span>
     </span>
   );
 }
@@ -263,14 +263,14 @@ export default function TeamNoticesPage() {
   }
 
   return (
-    <div className="space-y-6 px-6 py-8 lg:px-10">
+    <div className="space-y-6 px-4 py-6 md:px-6 md:py-8 lg:px-10">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
+        <div className="min-w-0">
           <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
-          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-white">
+          <h1 className="mt-2 break-words text-3xl font-extrabold tracking-tight text-white">
             Team Notice Board
           </h1>
-          <div className="mt-2 text-sm text-white/60">
+          <div className="mt-2 break-words text-sm text-white/60">
             กระดานประกาศกลางของทีม สำหรับแจ้งลา ประชุม ปัญหา และงานด่วน
           </div>
         </div>
@@ -283,9 +283,9 @@ export default function TeamNoticesPage() {
         </button>
       </div>
 
-      <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-          <div className="space-y-4">
+      <div className="rounded-3xl border border-white/10 bg-white/5 p-4 md:p-5">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px] 2xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="min-w-0 space-y-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center">
               <input
                 value={search}
@@ -297,7 +297,7 @@ export default function TeamNoticesPage() {
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value as "ALL" | NoticeType)}
-                className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+                className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none md:w-[180px]"
               >
                 <option value="ALL">ทั้งหมด</option>
                 <option value="GENERAL">{NOTICE_LABEL.GENERAL}</option>
@@ -332,8 +332,8 @@ export default function TeamNoticesPage() {
                       key={n.id}
                       className="rounded-2xl border border-white/10 bg-black/20 p-4"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <NoticeTypePill type={n.notice_type} />
                             {n.is_pinned ? (
@@ -343,15 +343,17 @@ export default function TeamNoticesPage() {
                             ) : null}
                           </div>
 
-                          <div className="mt-3 font-semibold text-white">{n.title}</div>
+                          <div className="mt-3 break-words font-semibold text-white">
+                            {n.title}
+                          </div>
 
                           {n.content ? (
-                            <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/70">
+                            <div className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-white/70">
                               {n.content}
                             </div>
                           ) : null}
 
-                          <div className="mt-3 text-xs text-white/40">
+                          <div className="mt-3 break-words text-xs text-white/40">
                             โดย {n.creator?.display_name || "ไม่ทราบชื่อ"} ·{" "}
                             {formatDateTimeTH(n.created_at)}
                           </div>
@@ -361,14 +363,16 @@ export default function TeamNoticesPage() {
                               href={n.attachment_url}
                               target="_blank"
                               rel="noreferrer"
-                              className="mt-3 inline-flex rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80 hover:bg-white/10"
+                              className="mt-3 inline-flex max-w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80 hover:bg-white/10"
                             >
-                              เปิดไฟล์แนบ {n.attachment_name ? `: ${n.attachment_name}` : ""}
+                              <span className="truncate">
+                                เปิดไฟล์แนบ {n.attachment_name ? `: ${n.attachment_name}` : ""}
+                              </span>
                             </a>
                           ) : null}
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-2">
+                        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
                           {isLeader ? (
                             <button
                               type="button"
@@ -437,8 +441,8 @@ export default function TeamNoticesPage() {
                 })}
               </div>
 
-              <div className="flex items-center justify-between gap-3">
-                <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-white/70">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <label className="inline-flex max-w-full cursor-pointer items-center gap-2 text-xs text-white/70">
                   <input
                     type="file"
                     className="hidden"
@@ -465,7 +469,7 @@ export default function TeamNoticesPage() {
               </div>
 
               {attachmentName ? (
-                <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80">
+                <div className="break-words rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80">
                   แนบแล้ว: {attachmentName}
                 </div>
               ) : null}

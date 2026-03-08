@@ -50,19 +50,19 @@ type DbStatus =
   | "PRE_ORDER"
   | "TODO"
   | "IN_PROGRESS"
-  | "DONE"
+  | "COMPLETED"
   | "BLOCKED"
   | "REVIEW";
 
 function toDbStatus(s: Status): DbStatus {
-  if (s === "COMPLETED") return "DONE";
+  if (s === "COMPLETED") return "COMPLETED";
   if (s === "BLOCKED") return "BLOCKED";
   if (s === "PRE_ORDER") return "PRE_ORDER";
   return s as DbStatus;
 }
 
 function toUiStatus(s: any): Status {
-  if (s === "DONE") return "COMPLETED";
+  if (s === "COMPLETED") return "COMPLETED";
   if (s === "BLOCKED") return "BLOCKED";
   if (s === "PRE_ORDER") return "PRE_ORDER";
   return s as Status;
@@ -198,7 +198,7 @@ function secondLine(w: WorkItem) {
 }
 
 function uiLabelFromDb(db: string) {
-  if (db === "DONE") return "COMPLETED";
+  if (db === "COMPLETED") return "COMPLETED";
   if (db === "BLOCKED") return "BLOCKED";
   if (db === "PRE_ORDER") return "PRE_ORDER";
   return db;

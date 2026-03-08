@@ -8,7 +8,7 @@ type Project = {
   code?: string | null;
   title: string;
   type: "VIDEO" | "GRAPHIC";
-  status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED" | "DONE";
+  status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
   created_at: string;
   start_date: string | null;
   due_date: string | null;
@@ -73,7 +73,7 @@ function statusTone(status: Project["status"]) {
   if (status === "TODO") return "neutral";
   if (status === "IN_PROGRESS") return "blue";
   if (status === "BLOCKED") return "red";
-  if (status === "COMPLETED" || status === "DONE") return "green";
+  if (status === "COMPLETED") return "green";
   return "neutral";
 }
 
@@ -260,8 +260,8 @@ export default function ProjectListView({
   const filteredItems = useMemo(() => {
     let list = items;
 
-    if (mode === "ACTIVE") list = list.filter((p) => p.status !== "COMPLETED" && p.status !== "DONE" && p.status !== "BLOCKED");
-    if (mode === "COMPLETED") list = list.filter((p) => p.status === "COMPLETED" || p.status === "DONE");
+    if (mode === "ACTIVE") list = list.filter((p) => p.status !== "COMPLETED" && p.status !== "BLOCKED");
+    if (mode === "COMPLETED") list = list.filter((p) => p.status === "COMPLETED");
     if (mode === "BLOCKED") list = list.filter((p) => p.status === "BLOCKED");
 
     if (q.trim()) {
@@ -391,7 +391,7 @@ export default function ProjectListView({
 
                       <td className="p-4">
                         <Pill tone={statusTone(p.status) as any}>
-                          {p.status === "DONE" ? "COMPLETED" : p.status}
+                          {p.status === "COMPLETED" ? "COMPLETED" : p.status}
                         </Pill>
                       </td>
 

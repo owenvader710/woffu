@@ -18,7 +18,7 @@ async function getParamId(
   return m?.[1] ? decodeURIComponent(m[1]) : "";
 }
 
-type DbStatus = "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED";
+type DbStatus = "TODO" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 
 export async function PATCH(
   req: NextRequest,
@@ -43,7 +43,7 @@ export async function PATCH(
     if (!to_status) return NextResponse.json({ error: "Missing status" }, { status: 400 });
 
     // จำกัดสถานะที่อนุญาตใน my-work เท่านั้น (ไม่ไปยุ่งระบบอื่น)
-    const allowed: DbStatus[] = ["TODO", "IN_PROGRESS", "DONE", "CANCELLED"];
+    const allowed: DbStatus[] = ["TODO", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
     if (!allowed.includes(to_status)) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }

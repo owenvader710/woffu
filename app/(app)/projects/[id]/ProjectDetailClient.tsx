@@ -24,10 +24,7 @@ type Project = {
   id: string;
   title: string;
 
-  // ✅ รหัสโปรเจกต์ (ตามที่นายท่านบอกชื่อฟิลด์คือ code)
   code?: string | null;
-
-  // (กันพัง เผื่อบางทีมีชื่อคอลัมน์อื่น)
   project_code?: string | null;
   projectCode?: string | null;
   product_code?: string | null;
@@ -38,7 +35,7 @@ type Project = {
 
   type: "VIDEO" | "GRAPHIC";
   department: "VIDEO" | "GRAPHIC" | "ALL";
-  status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
+  status: "PRE_ORDER" | "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
 
   created_at: string;
   start_date: string | null;
@@ -70,7 +67,6 @@ type Project = {
     | "Special Job"
     | null;
 
-  // บาง endpoint อาจ join มาให้
   assignee?: ProfileMini | null;
   creator?: ProfileMini | null;
 };
@@ -112,8 +108,6 @@ type Member = {
   avatar_url?: string | null;
 };
 
-const STATUSES: Project["status"][] = ["TODO", "IN_PROGRESS", "BLOCKED", "COMPLETED"];
-
 function formatDateTH(iso?: string | null) {
   if (!iso) return "-";
   const d = new Date(iso);
@@ -138,6 +132,7 @@ async function safeJson(res: Response) {
 }
 
 function pillToneStatus(status: Project["status"]) {
+  if (status === "PRE_ORDER") return "violet";
   if (status === "COMPLETED") return "green";
   if (status === "BLOCKED") return "red";
   if (status === "IN_PROGRESS") return "blue";
@@ -149,22 +144,28 @@ function Pill({
   tone = "neutral",
 }: {
   children: React.ReactNode;
-  tone?: "neutral" | "green" | "amber" | "red" | "blue" | "lime";
+  tone?: "neutral" | "green" | "amber" | "red" | "blue" | "lime" | "violet";
 }) {
   const cls =
     tone === "green"
       ? "border-green-500/30 bg-green-500/10 text-green-200"
       : tone === "amber"
-      ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
-      : tone === "red"
-      ? "border-red-500/30 bg-red-500/10 text-red-200"
-      : tone === "blue"
-      ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
-      : tone === "lime"
-      ? "border-[#e5ff78]/30 bg-[#e5ff78]/10 text-[#e5ff78]"
-      : "border-white/10 bg-white/5 text-white/70";
+        ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+        : tone === "red"
+          ? "border-red-500/30 bg-red-500/10 text-red-200"
+          : tone === "blue"
+            ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
+            : tone === "lime"
+              ? "border-[#e5ff78]/30 bg-[#e5ff78]/10 text-[#e5ff78]"
+              : tone === "violet"
+                ? "border-violet-500/30 bg-violet-500/10 text-violet-200"
+                : "border-white/10 bg-white/5 text-white/70";
 
-  return <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs ${cls}`}>{children}</span>;
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs ${cls}`}>
+      {children}
+    </span>
+  );
 }
 
 function badgeClass(status: StatusRequest["request_status"]) {
@@ -179,7 +180,6 @@ function priorityLabel(p?: Project["video_priority"] | null) {
   return `${p}`;
 }
 
-// ✅ ดึงรหัสโปรเจกต์ รองรับหลายชื่อ
 function getProjectCode(p: Project | null) {
   if (!p) return null;
   return (
@@ -208,12 +208,8 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
   const router = useRouter();
 
   const [me, setMe] = useState<MeProfile | null>(null);
-
-  // ✅ สำหรับ edit modal (โหลดเฉพาะ leader ตามเดิม)
   const [editOpen, setEditOpen] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
-
-  // ✅ สำหรับแสดงชื่อ assignee/creator ให้ขึ้นเสมอ (โหลดทุกคน)
   const [people, setPeople] = useState<Member[]>([]);
 
   const [project, setProject] = useState<Project | null>(null);
@@ -224,9 +220,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
-
-  const [draftStatus, setDraftStatus] = useState<Project["status"]>("TODO");
-  const [submitting, setSubmitting] = useState(false);
 
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
@@ -269,12 +262,9 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
       if (!r.ok) return;
       const data = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
       setMembers(data.filter((m: Member) => m.is_active !== false));
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
-  // ✅ โหลดรายชื่อไว้ใช้โชว์ assignee/creator (ทุกคน)
   async function loadPeople() {
     try {
       const r = await fetch("/api/members", { cache: "no-store" });
@@ -295,10 +285,8 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
     setMsg("");
 
     try {
-      // ✅ โหลด people ไปพร้อมกัน (เพื่อชื่อ assignee/creator)
       await loadPeople();
 
-      // 0) me first
       const rMe = await fetch("/api/me-profile", { cache: "no-store" });
       const jMe = await safeJson(rMe);
       const m = (jMe?.data ?? jMe) as MeProfile | null;
@@ -308,7 +296,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
       const leaderNow = meObj?.role === "LEADER" && meObj?.is_active === true;
       await loadMembersIfLeader(leaderNow);
 
-      // 1) project
       const r1 = await fetch(`/api/projects/${projectId}`, { cache: "no-store" });
       const j1 = await safeJson(r1);
 
@@ -322,14 +309,11 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
       const p: Project | null = j1?.data ?? null;
       setProject(p);
-      setDraftStatus(p?.status ?? "TODO");
 
-      // 2) status requests
       const r2 = await fetch(`/api/projects/${projectId}/status-requests`, { cache: "no-store" });
       const j2 = await safeJson(r2);
       setRequests(r2.ok && Array.isArray(j2?.data) ? j2.data : []);
 
-      // 3) logs
       const r3 = await fetch(`/api/projects/${projectId}/logs`, { cache: "no-store" });
       const j3 = await safeJson(r3);
       setLogs(r3.ok && Array.isArray(j3?.data) ? j3.data : []);
@@ -344,38 +328,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
-
-  async function requestChange() {
-    setErr("");
-    setMsg("");
-
-    if (!projectId) return setErr("Missing project id (client)");
-    if (!project) return;
-    if (draftStatus === project.status) return setErr("สถานะยังไม่เปลี่ยน");
-
-    setSubmitting(true);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/request-status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from_status: project.status, to_status: draftStatus }),
-      });
-
-      const json = await safeJson(res);
-      if (!res.ok) {
-        setErr((json && (json.error || json.message)) || `Request failed (${res.status})`);
-        return;
-      }
-
-      const mode = json?.mode || "OK";
-      setMsg(mode === "APPLIED" ? "หัวหน้า: เปลี่ยนสถานะให้แล้ว" : "ส่งคำขอเปลี่ยนสถานะแล้ว (รอหัวหน้าอนุมัติ)");
-      await loadAll();
-    } catch (e: any) {
-      setErr(e?.message || "Request failed");
-    } finally {
-      setSubmitting(false);
-    }
-  }
 
   async function deleteProject() {
     setErr("");
@@ -438,25 +390,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
     </button>
   );
 
-  const LimeBtn = ({
-    children,
-    onClick,
-    disabled,
-  }: {
-    children: React.ReactNode;
-    onClick?: () => void;
-    disabled?: boolean;
-  }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="rounded-xl bg-[#e5ff78] px-4 py-2 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
-    >
-      {children}
-    </button>
-  );
-
   if (!projectId) {
     return (
       <div className="mx-auto w-full max-w-[1600px] px-6 py-8 md:px-10 md:py-10">
@@ -504,20 +437,20 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
   const isVideo = project.type === "VIDEO";
   const isGraphic = project.type === "GRAPHIC";
 
-  // ✅ ชื่อผู้รับผิดชอบ/ผู้สร้างงาน (fallback จาก peopleMap)
   const assigneeName =
     project.assignee?.display_name ||
     (project.assignee_id ? peopleMap.get(project.assignee_id)?.display_name : null) ||
     "-";
 
   const creatorName =
-    project.creator?.display_name || (project.created_by ? peopleMap.get(project.created_by)?.display_name : null) || "-";
+    project.creator?.display_name ||
+    (project.created_by ? peopleMap.get(project.created_by)?.display_name : null) ||
+    "-";
 
   const code = getProjectCode(project);
 
   return (
     <div className="mx-auto w-full max-w-[1600px] px-6 py-8 md:px-10 md:py-10">
-      {/* Top Bar */}
       <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <Link href="/projects" className="text-sm text-white/70 underline underline-offset-4 hover:text-white">
           ← กลับไปหน้าโปรเจกต์
@@ -540,14 +473,11 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
         </div>
       </div>
 
-      {/* Main Card */}
       <Card>
-        <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-          {/* Left */}
+        <div className="flex flex-col gap-6">
           <div className="min-w-0">
             <div className="text-xs font-semibold tracking-widest text-white/50">PROJECT DETAIL</div>
 
-            {/* ✅ ชื่อ + รหัสโปรเจกต์ */}
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <CodeBadge code={code} />
               <h1 className="break-words text-2xl font-extrabold tracking-tight text-white md:text-3xl">
@@ -588,7 +518,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
               </div>
             </div>
 
-            {/* Details */}
             <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
               <div className="text-sm font-semibold text-white">รายละเอียดงาน</div>
 
@@ -649,37 +578,9 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
               </div>
             )}
           </div>
-
-          {/* Right */}
-          <div className="w-full md:w-[380px]">
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-5">
-              <div className="text-sm font-semibold text-white">เปลี่ยนสถานะ</div>
-              <div className="mt-3 flex gap-2">
-                <select
-                  className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-[#e5ff78]"
-                  value={draftStatus}
-                  onChange={(e) => setDraftStatus(e.target.value as any)}
-                  disabled={submitting || deleting}
-                >
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s} className="bg-black text-white">
-                      {s}
-                    </option>
-                  ))}
-                </select>
-                <LimeBtn onClick={requestChange} disabled={submitting || deleting}>
-                  {submitting ? "กำลังส่ง..." : "ส่ง"}
-                </LimeBtn>
-              </div>
-              <div className="mt-3 text-xs text-white/40">
-                * สมาชิกจะเป็น “ส่งคำขอ” ส่วนหัวหน้าจะ “เปลี่ยนสถานะได้ทันที”
-              </div>
-            </div>
-          </div>
         </div>
       </Card>
 
-      {/* History */}
       <div className="mt-6">
         <Card>
           <div className="flex items-start justify-between gap-3">
@@ -747,7 +648,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
         </Card>
       </div>
 
-      {/* Activity Log */}
       <div className="mt-6">
         <Card>
           <div className="flex items-start justify-between gap-3">

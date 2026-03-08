@@ -172,13 +172,13 @@ function DashboardCard({
     <section
       onClick={onClick}
       className={cn(
-        "rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-[0_10px_30px_rgba(0,0,0,0.18)]",
+        "rounded-[24px] border border-white/10 bg-white/5 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.18)] md:rounded-[28px] md:p-5",
         onClick && "cursor-pointer transition hover:bg-white/[0.07] hover:border-white/15",
         className
       )}
     >
       <div className="mb-4">
-        <div className="text-xl font-extrabold tracking-tight text-white">{title}</div>
+        <div className="break-words text-lg font-extrabold tracking-tight text-white md:text-xl">{title}</div>
         {desc ? <div className="mt-1 text-sm leading-6 text-white/45">{desc}</div> : null}
       </div>
       {children}
@@ -201,10 +201,10 @@ function SummaryStat({
     <button
       type="button"
       onClick={onClick}
-      className="min-h-[116px] rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-left transition hover:bg-white/10"
+      className="min-h-[104px] rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-left transition hover:bg-white/10 md:min-h-[116px]"
     >
       <div className="text-[11px] font-semibold tracking-widest text-white/45">{label}</div>
-      <div className="mt-3 text-3xl font-extrabold leading-none text-white">{value}</div>
+      <div className="mt-3 text-2xl font-extrabold leading-none text-white md:text-3xl">{value}</div>
       <div className="mt-3 text-xs leading-5 text-white/45">{hint || "-"}</div>
     </button>
   );
@@ -231,17 +231,17 @@ function ProjectMiniList({
         >
           <div className="flex items-center gap-2">
             <CodeBadge code={getProjectCode(p)} />
-            <div className="truncate font-semibold text-white">{p.title || "-"}</div>
+            <div className="min-w-0 truncate font-semibold text-white">{p.title || "-"}</div>
           </div>
 
           {secondLine(p) ? (
             <div className="mt-1 truncate text-xs text-white/45">{secondLine(p)}</div>
           ) : null}
 
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <Pill tone={p.type === "VIDEO" ? "blue" : "amber"}>{p.type || "-"}</Pill>
             <Pill tone={statusTone(p.status)}>{p.status || "-"}</Pill>
-            <span className="ml-auto text-xs text-white/40">{formatDateTH(p.start_date || p.created_at)}</span>
+            <span className="text-xs text-white/40 sm:ml-auto">{formatDateTH(p.start_date || p.created_at)}</span>
           </div>
         </Link>
       ))}
@@ -276,7 +276,7 @@ function ApprovalMiniList({
             key={item.id}
             className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3"
           >
-            <div className="flex items-start gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
               <div className="min-w-0 flex-1">
                 <Link
                   href="/approvals"
@@ -284,12 +284,12 @@ function ApprovalMiniList({
                 >
                   <div className="flex items-center gap-2">
                     <CodeBadge code={getProjectCode(item.project)} />
-                    <div className="truncate font-semibold text-white">
+                    <div className="min-w-0 truncate font-semibold text-white">
                       {item.project?.title || "-"}
                     </div>
                   </div>
 
-                  <div className="mt-2 flex items-center gap-2">
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     <Pill
                       tone={
                         item.project?.department === "VIDEO"
@@ -302,14 +302,14 @@ function ApprovalMiniList({
                       {item.project?.department || "-"}
                     </Pill>
                     <Pill tone="violet">PENDING</Pill>
-                    <span className="ml-auto text-xs text-white/40">
+                    <span className="text-xs text-white/40 sm:ml-auto">
                       {formatDateTimeTH(item.created_at)}
                     </span>
                   </div>
                 </Link>
               </div>
 
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
                 <button
                   type="button"
                   disabled={busy}
@@ -387,11 +387,11 @@ function StatusDonut({
 
   return (
     <div className="flex flex-col items-center">
-      <div className="relative h-44 w-44 shrink-0 rounded-full" style={style}>
-        <div className="absolute inset-[18px] flex items-center justify-center rounded-full border border-white/10 bg-[#090909]">
+      <div className="relative h-36 w-36 shrink-0 rounded-full md:h-44 md:w-44" style={style}>
+        <div className="absolute inset-[15px] flex items-center justify-center rounded-full border border-white/10 bg-[#090909] md:inset-[18px]">
           <div className="text-center">
-            <div className="text-3xl font-extrabold text-white">{total}</div>
-            <div className="mt-1 text-xs tracking-widest text-white/45">TOTAL</div>
+            <div className="text-2xl font-extrabold text-white md:text-3xl">{total}</div>
+            <div className="mt-1 text-[10px] tracking-widest text-white/45 md:text-xs">TOTAL</div>
           </div>
         </div>
       </div>
@@ -514,13 +514,13 @@ function DashboardNoticePreview() {
           href="/team-notices"
           className="block rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/10"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <NoticeTypePill type={n.notice_type} />
             {n.is_pinned ? <Pill tone="violet">PINNED</Pill> : null}
-            <span className="ml-auto text-xs text-white/40">{formatDateTimeTH(n.created_at)}</span>
+            <span className="text-xs text-white/40 sm:ml-auto">{formatDateTimeTH(n.created_at)}</span>
           </div>
 
-          <div className="mt-3 font-semibold text-white">{n.title}</div>
+          <div className="mt-3 break-words font-semibold text-white">{n.title}</div>
           {n.content ? (
             <div className="mt-2 line-clamp-2 text-sm leading-6 text-white/65">
               {n.content}
@@ -731,7 +731,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="px-6 py-8 lg:px-10">
+      <div className="px-4 py-6 md:px-6 md:py-8 lg:px-10">
         <div className="rounded-3xl border border-white/10 bg-white/5 p-6 text-white/60">
           กำลังโหลด Dashboard...
         </div>
@@ -741,7 +741,7 @@ export default function DashboardPage() {
 
   if (error) {
     return (
-      <div className="px-6 py-8 lg:px-10">
+      <div className="px-4 py-6 md:px-6 md:py-8 lg:px-10">
         <div className="rounded-3xl border border-red-500/30 bg-red-500/10 p-6 text-red-200">
           {error}
         </div>
@@ -750,11 +750,13 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="px-6 py-8 lg:px-10">
+    <div className="px-4 py-6 md:px-6 md:py-8 lg:px-10">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
+        <div className="min-w-0">
           <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
-          <h1 className="mt-2 text-4xl font-extrabold tracking-tight text-white">Dashboard</h1>
+          <h1 className="mt-2 break-words text-3xl font-extrabold tracking-tight text-white md:text-4xl">
+            Dashboard
+          </h1>
         </div>
 
         <button
@@ -765,7 +767,7 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      <div className="mt-4 max-w-xl rounded-2xl border border-white/10 bg-white/5 px-5 py-4">
+      <div className="mt-4 max-w-xl rounded-2xl border border-white/10 bg-white/5 px-4 py-4 md:px-5">
         <div className="text-sm font-semibold text-white">{me?.display_name || "-"}</div>
         <div className="mt-1 text-sm text-white/45">
           {isLeader ? "หัวหน้าทีม" : "สมาชิกทีม"} · {me?.department || "-"}
@@ -777,7 +779,7 @@ export default function DashboardPage() {
         desc="จำนวนงานทั้งหมด จำนวนของแต่ละสถานะ และเปอร์เซ็นต์งานที่ทำเสร็จแล้ว"
         className="mt-6"
       >
-        <div className="grid gap-8 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)] xl:gap-8">
           <div className="flex flex-col items-center">
             <StatusDonut
               total={projects.length}
@@ -790,7 +792,7 @@ export default function DashboardPage() {
               }}
             />
 
-            <div className="mt-6 grid grid-cols-2 gap-2 text-xs text-white/70">
+            <div className="mt-5 grid w-full max-w-[260px] grid-cols-2 gap-2 text-xs text-white/70 md:mt-6">
               <div className="flex items-center gap-2">
                 <div className="h-3 w-3 rounded-full bg-violet-400" />
                 PRE_ORDER

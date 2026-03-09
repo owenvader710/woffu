@@ -44,7 +44,7 @@ type StatusRequest = {
   project_id: string;
   from_status: string;
   to_status: string;
-  request_status: "PENDING" | "APPROVED" | "REJECTED";
+  status: "PENDING" | "APPROVED" | "REJECTED";
   created_at: string;
   approved_at?: string | null;
 };
@@ -365,8 +365,8 @@ export default function ProjectListView({
             const rows = Array.isArray(json?.data) ? (json.data as StatusRequest[]) : [];
 
             const completedApproved = rows.find(
-              (r) => r.to_status === "COMPLETED" && r.request_status === "APPROVED"
-            );
+  (r) => r.to_status === "COMPLETED" && r.status === "APPROVED"
+);
 
             return [p.id, completedApproved?.approved_at || ""] as const;
           } catch {

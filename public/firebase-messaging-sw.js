@@ -15,9 +15,22 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  const title = payload?.notification?.title || payload?.data?.title || "WOFFU";
-  const body = payload?.notification?.body || payload?.data?.body || "";
-  const link = payload?.data?.link || "/";
+  console.log("[firebase-messaging-sw] payload =", payload);
+
+  const title =
+    payload?.notification?.title ||
+    payload?.data?.title ||
+    "WOFFU Notification";
+
+  const body =
+    payload?.notification?.body ||
+    payload?.data?.body ||
+    "มีการแจ้งเตือนใหม่";
+
+  const link =
+    payload?.data?.link ||
+    payload?.fcmOptions?.link ||
+    "/";
 
   self.registration.showNotification(title, {
     body,

@@ -1,31 +1,91 @@
-export async function sendPushToUser(params: {
+import admin from "firebase-admin";
+import { createSupabaseAdmin } from "./_supabaseAdmin";
+
+function getFirebaseAdmin() {
+  if (admin.apps.length) return admin.app();
+
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error("Missing Firebase Admin env");
+  }
+
+  return admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId,
+      clientEmail,
+      privateKey,
+    }),
+  });
+}
+
+export async function sendPushToUser({
+  userId,
+  title,
+  message,
+  url,
+}: {
   userId: string;
   title: string;
-  message?: string;
+  message: string;
   url?: string;
 }) {
-  try {
-    const base =
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      process.env.SITE_URL ||
-      process.env.VERCEL_PROJECT_PRODUCTION_URL ||
-      "";
+  getFirebaseAdmin();
 
-    if (!base) return;
+  const supabase = createSupabaseAdmin();
 
-    const normalizedBase = base.startsWith("http") ? base : `https://${base}`;
+  const { data, error } = await supabase
+    .from("push_tokens")
+    .select("token")
+    .eq("user_id", userId);
 
-    await fetch(`${normalizedBase}/api/push/send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: params.userId,
-        title: params.title,
-        message: params.message || "",
-        url: params.url || "/notifications",
-      }),
-    });
-  } catch {
-    // ignore
+  if (error) throw new Error(error.message);
+
+  const tokens = (data ?? []).map((x: any) => x.token).filter(Boolean);
+  if (tokens.length === 0) return { ok: true, sent: 0 };
+
+  const result = await admin.messaging().sendEachForMulticast({
+    tokens,
+    notification: {
+      title,
+      body: message,
+    },
+    data: {
+      title,
+      body: message,
+      link: url || "/",
+    },
+    webpush: {
+      fcmOptions: {
+        link: url || "/",
+      },
+      notification: {
+        title,
+        body: message,
+        icon: "/icon-192.png",
+        badge: "/badge-72.png",
+      },
+    },
+  });
+
+  const invalidTokens: string[] = [];
+  result.responses.forEach((r, i) => {
+    if (!r.success) {
+      const code = (r.error as any)?.code || "";
+      if (
+        code.includes("registration-token-not-registered") ||
+        code.includes("invalid-registration-token")
+      ) {
+        invalidTokens.push(tokens[i]);
+      }
+    }
+  });
+
+  if (invalidTokens.length > 0) {
+    await supabase.from("push_tokens").delete().in("token", invalidTokens);
   }
+
+  return { ok: true, sent: result.successCount };
 }

@@ -10,15 +10,22 @@ export default function PushBootstrap() {
     (async () => {
       try {
         const token = await getFcmToken();
+        console.log("FCM TOKEN:", token);
+
         if (token) {
-          await fetch("/api/push/register", {
+          const res = await fetch("/api/push/register", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ token }),
           });
+
+          const text = await res.text();
+          console.log("REGISTER PUSH RESULT:", res.status, text);
         }
 
         unsub = await subscribeForegroundMessages((payload) => {
+          console.log("FOREGROUND MESSAGE:", payload);
+
           const title = payload?.notification?.title || payload?.data?.title || "WOFFU";
           const body = payload?.notification?.body || payload?.data?.body || "";
 

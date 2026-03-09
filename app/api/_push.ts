@@ -8,6 +8,15 @@ function getFirebaseAdmin() {
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
+  console.log("FIREBASE ENV CHECK", {
+    hasProjectId: !!projectId,
+    hasClientEmail: !!clientEmail,
+    hasPrivateKey: !!privateKey,
+    projectId,
+    clientEmail,
+    privateKeyLength: privateKey?.length || 0,
+  });
+
   if (!projectId || !clientEmail || !privateKey) {
     throw new Error("Missing Firebase Admin env");
   }
@@ -41,10 +50,15 @@ export async function sendPushToUser({
     .select("token")
     .eq("user_id", userId);
 
+  console.log("PUSH TOKENS:", data, error);
+
   if (error) throw new Error(error.message);
 
   const tokens = (data ?? []).map((x: any) => x.token).filter(Boolean);
-  if (tokens.length === 0) return { ok: true, sent: 0 };
+  if (tokens.length === 0) {
+    console.log("NO TOKENS FOUND FOR USER:", userId);
+    return { ok: true, sent: 0 };
+  }
 
   const result = await admin.messaging().sendEachForMulticast({
     tokens,
@@ -70,10 +84,14 @@ export async function sendPushToUser({
     },
   });
 
+  console.log("FCM SEND RESULT:", result);
+
   const invalidTokens: string[] = [];
   result.responses.forEach((r, i) => {
     if (!r.success) {
       const code = (r.error as any)?.code || "";
+      console.log("FCM TOKEN ERROR:", tokens[i], code, r.error?.message);
+
       if (
         code.includes("registration-token-not-registered") ||
         code.includes("invalid-registration-token")

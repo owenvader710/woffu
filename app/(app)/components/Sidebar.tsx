@@ -5,7 +5,19 @@ import { usePathname, useRouter } from "next/navigation";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/utils/supabase/client";
 
-type NavItem = { label: string; href: string };
+type MeProfile = {
+  id: string;
+  display_name: string | null;
+  role: "LEADER" | "MEMBER" | "ADMIN";
+  department: "VIDEO" | "GRAPHIC" | "ALL";
+  email?: string | null;
+  is_active?: boolean;
+};
+
+type NavItem = {
+  label: string;
+  href: string;
+};
 
 type SidebarProps = {
   mobile?: boolean;
@@ -13,27 +25,40 @@ type SidebarProps = {
 };
 
 async function safeJson(res: Response) {
-  const t = await res.text();
-  return t ? JSON.parse(t) : null;
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+function cn(...xs: Array<string | false | null | undefined>) {
+  return xs.filter(Boolean).join(" ");
 }
 
 export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [isLeader, setIsLeader] = useState(false);
-  const [openProjects, setOpenProjects] = useState(false);
+  const [me, setMe] = useState<MeProfile | null>(null);
+  const [isProjectOpen, setIsProjectOpen] = useState(false);
 
-  const projectChildren: NavItem[] = useMemo(
-    () => [
-      { label: "PROJECTS", href: "/projects" },
-      { label: "COMPLETED", href: "/completed" },
-      { label: "BLOCKED", href: "/blocked" },
-    ],
-    []
+  const isLeader = useMemo(
+    () => (me?.role === "LEADER" || me?.role === "ADMIN") && me?.is_active !== false,
+    [me]
   );
 
-  const shouldOpenProjects = useMemo(() => {
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch("/api/me-profile", { cache: "no-store" });
+        const j = await safeJson(r);
+        const m = (j?.data ?? j) as MeProfile | null;
+        setMe(r.ok && m?.id ? m : null);
+      } catch {
+        setMe(null);
+      }
+    })();
+  }, []);
+
+  const projectActive = useMemo(() => {
     return (
       pathname === "/projects" ||
       pathname?.startsWith("/projects/") ||
@@ -43,138 +68,190 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
   }, [pathname]);
 
   useEffect(() => {
-    setOpenProjects(shouldOpenProjects);
-  }, [shouldOpenProjects]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch("/api/me-profile", { cache: "no-store" });
-        const j = await safeJson(r);
-        const me = j?.data ?? j;
-        setIsLeader((me?.role === "LEADER" || me?.role === "ADMIN") && me?.is_active === true);
-      } catch {
-        setIsLeader(false);
-      }
-    })();
-  }, []);
-
-  const isActive = useCallback((href: string) => pathname === href, [pathname]);
-
-  const handleNavClick = useCallback(() => {
-    if (mobile) {
-      onNavigate?.();
-      return;
+    if (projectActive) {
+      setIsProjectOpen(true);
     }
-    setOpenProjects(false);
+  }, [projectActive]);
+
+  const handleNavigate = useCallback(() => {
+    if (mobile) onNavigate?.();
   }, [mobile, onNavigate]);
+
+  const handleProjectToggle = useCallback(() => {
+    setIsProjectOpen((prev) => !prev);
+  }, []);
 
   async function logout() {
     try {
       await supabaseBrowser.auth.signOut();
     } catch {}
+    if (mobile) onNavigate?.();
     router.push("/login");
     router.refresh();
   }
 
-  const baseBtn =
-    "flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold tracking-wide transition-all duration-200";
-  const activeBtn = "bg-[#e5ff78] text-black";
-  const idleBtn = "text-white/80 hover:bg-white/5 hover:text-white";
+  const linkCls = (active: boolean) =>
+    cn(
+      "flex items-center justify-between rounded-2xl px-4 py-3 text-[15px] font-extrabold tracking-[0.04em] transition-all duration-200",
+      active
+        ? "bg-[#e5ff78] text-black shadow-[0_10px_30px_rgba(229,255,120,0.18)]"
+        : "text-white/72 hover:bg-white/10 hover:text-white"
+    );
 
-  const subBtn =
-    "flex w-full items-center rounded-xl px-4 py-2 text-xs font-semibold tracking-wide transition-all duration-200";
-  const activeSub = "bg-[#e5ff78] text-black";
-  const idleSub = "text-white/70 hover:bg-white/5 hover:text-white";
+  const subLinkCls = (active: boolean) =>
+    cn(
+      "ml-3 flex items-center rounded-xl px-4 py-2.5 text-[11px] font-black tracking-[0.16em] transition-all duration-200",
+      active
+        ? "bg-white/10 text-[#e5ff78]"
+        : "text-white/42 hover:bg-white/5 hover:text-white/80"
+    );
 
   return (
-    <aside className="sticky top-0 flex h-screen w-[260px] flex-col overflow-hidden bg-[#0B0F0F] px-5 py-6">
-      <div className="mb-5 select-none text-3xl font-extrabold tracking-tight text-[#e5ff78]">
-        WOFFU
-      </div>
-
-      <div className="mb-6 h-px w-full bg-white/10" />
-
-      <nav className="flex flex-1 flex-col gap-2 overflow-y-auto pr-1">
-        <Link
-          className={`${baseBtn} ${isActive("/dashboard") ? activeBtn : idleBtn}`}
-          href="/dashboard"
-          onClick={handleNavClick}
-        >
-          DASHBOARD
-        </Link>
-
-        <button
-          type="button"
-          onClick={() => setOpenProjects((v) => !v)}
-          className={`${baseBtn} ${shouldOpenProjects ? activeBtn : idleBtn} text-left`}
-        >
-          PROJECT
-          <span
-            className={`ml-auto text-xs opacity-70 transition-transform duration-200 ${
-              openProjects ? "rotate-90" : "rotate-0"
-            }`}
-          >
-            ▸
-          </span>
-        </button>
-
-        <div
-          className={`ml-2 grid transition-all duration-200 ${
-            openProjects ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-          }`}
-        >
-          <div className="overflow-hidden">
-            <div className="flex flex-col gap-1 pt-1">
-              {projectChildren.map((c) => (
-                <Link
-                  key={c.href}
-                  href={c.href}
-                  onClick={handleNavClick}
-                  className={`${subBtn} ${isActive(c.href) ? activeSub : idleSub}`}
-                >
-                  {c.label}
-                </Link>
-              ))}
-            </div>
+    <aside
+      className={cn(
+        "w-full shrink-0",
+        mobile
+          ? "h-auto min-h-full px-0 py-0"
+          : "lg:sticky lg:top-0 lg:h-screen lg:w-[320px] lg:p-5"
+      )}
+    >
+      <div
+        className={cn(
+          "flex h-full flex-col border-white/10 bg-[#0a0a0a] bg-gradient-to-b from-white/5 to-transparent",
+          mobile ? "min-h-full px-0" : "lg:rounded-[40px] lg:border lg:shadow-2xl"
+        )}
+      >
+        <div className="px-5 pt-5 sm:px-6 sm:pt-6 lg:px-10 lg:pt-12">
+          <div className="text-[30px] font-black leading-none tracking-tighter text-[#e5ff78] lg:text-3xl">
+            WOFFU OS
           </div>
+
+          <div className="mt-2 text-[9px] font-bold uppercase tracking-[0.28em] text-white/28 sm:text-[10px] lg:mt-1 lg:text-[10px] lg:tracking-[0.3em]">
+            Production Workflow
+          </div>
+
+          {me?.display_name ? (
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 lg:mt-6">
+              <div className="truncate text-sm font-bold text-white">{me.display_name}</div>
+              <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-white/35">
+                {me.role || "-"} · {me.department || "-"}
+              </div>
+            </div>
+          ) : null}
         </div>
 
-        <Link
-          className={`${baseBtn} ${isActive("/my-work") ? activeBtn : idleBtn}`}
-          href="/my-work"
-          onClick={handleNavClick}
-        >
-          MY WORK
-        </Link>
-
-        <Link
-          className={`${baseBtn} ${isActive("/members") ? activeBtn : idleBtn}`}
-          href="/members"
-          onClick={handleNavClick}
-        >
-          MEMBERS
-        </Link>
-
-        {isLeader && (
+        <nav className="mt-6 flex-1 space-y-2 overflow-y-auto px-4 pb-6 sm:px-5 lg:mt-12 lg:px-6">
           <Link
-            className={`${baseBtn} ${isActive("/approvals") ? activeBtn : idleBtn}`}
-            href="/approvals"
-            onClick={handleNavClick}
+            href="/dashboard"
+            className={linkCls(pathname === "/dashboard")}
+            onClick={handleNavigate}
           >
-            APPROVALS
+            <span>DASHBOARD</span>
           </Link>
-        )}
-      </nav>
 
-      <div className="pt-4">
-        <button
-          type="button"
-          onClick={logout}
-          className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-semibold text-white/85 hover:bg-white/5"
-        >
-          ออกจากระบบ
-        </button>
+          <div className="space-y-1">
+            <button
+              type="button"
+              onClick={handleProjectToggle}
+              className={cn(linkCls(projectActive), "w-full text-left")}
+            >
+              <span>PROJECT</span>
+              <span
+                className={cn(
+                  "text-[10px] opacity-55 transition-transform duration-200",
+                  isProjectOpen ? "rotate-90" : "rotate-0"
+                )}
+              >
+                ▶
+              </span>
+            </button>
+
+            <div
+              className={cn(
+                "grid transition-all duration-200 ease-out",
+                isProjectOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+              )}
+            >
+              <div className="overflow-hidden">
+                <div className="space-y-1 py-1">
+                  <Link
+                    href="/projects"
+                    className={subLinkCls(pathname === "/projects")}
+                    onClick={handleNavigate}
+                  >
+                    ALL PROJECT
+                  </Link>
+
+                  <Link
+                    href="/completed"
+                    className={subLinkCls(pathname === "/completed")}
+                    onClick={handleNavigate}
+                  >
+                    COMPLETED
+                  </Link>
+
+                  <Link
+                    href="/blocked"
+                    className={subLinkCls(pathname === "/blocked")}
+                    onClick={handleNavigate}
+                  >
+                    BLOCKED
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <Link
+            href="/my-work"
+            className={linkCls(pathname === "/my-work")}
+            onClick={handleNavigate}
+          >
+            <span>MY WORK</span>
+          </Link>
+
+          <Link
+            href="/team-notices"
+            className={linkCls(pathname === "/team-notices")}
+            onClick={handleNavigate}
+          >
+            <span>TEAM NOTICES</span>
+          </Link>
+
+          <Link
+            href="/members"
+            className={linkCls(pathname === "/members")}
+            onClick={handleNavigate}
+          >
+            <span>MEMBERS</span>
+          </Link>
+
+          {isLeader ? (
+            <Link
+              href="/approvals"
+              className={linkCls(pathname === "/approvals")}
+              onClick={handleNavigate}
+            >
+              <span>APPROVALS</span>
+            </Link>
+          ) : null}
+        </nav>
+
+        <div className="px-5 pb-6 pt-2 sm:px-6 lg:px-8 lg:pb-10">
+          <div className="mb-4 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent lg:mb-6" />
+
+          <button
+            type="button"
+            onClick={logout}
+            className="w-full rounded-2xl bg-[#e5ff78] px-4 py-3 text-sm font-extrabold text-black transition-transform hover:scale-[1.02] active:scale-[0.99]"
+          >
+            Logout
+          </button>
+
+          <div className="mt-4 text-center text-[9px] font-bold uppercase tracking-[0.2em] text-white/18 lg:mt-6 lg:text-[10px] lg:tracking-widest">
+            © 2026 WOFFU OS
+          </div>
+        </div>
       </div>
     </aside>
   );

@@ -66,6 +66,7 @@ export async function POST(
     .update({
       request_status: "APPROVED",
       approved_by: user.id,
+      approved_at: new Date().toISOString(),
     })
     .eq("id", id);
 
@@ -83,30 +84,6 @@ export async function POST(
   }
 
   try {
-  await admin.from("notifications").insert({
-    user_id: reqRow.requested_by,
-    type: "JOB_STATUS_CHANGED",
-    title: "สถานะงานของคุณถูกอนุมัติแล้ว",
-    message: `${reqRow.from_status} → ${reqRow.to_status}`,
-    link: "/my-work",
-    is_read: false,
-  });
-} catch {
-  // ignore
-}
-
-try {
-  await sendPushToUser({
-    userId: reqRow.requested_by,
-    title: "สถานะงานของคุณถูกอนุมัติแล้ว",
-    message: `${reqRow.from_status} → ${reqRow.to_status}`,
-    url: "/my-work",
-  });
-} catch {
-  // ignore
-}
-
-  try {
     await admin.from("notifications").insert({
       user_id: reqRow.requested_by,
       type: "JOB_STATUS_CHANGED",
@@ -116,7 +93,18 @@ try {
       is_read: false,
     });
   } catch {
-    // ไม่ให้ notification พลาดแล้วทำให้ approve ล้ม
+    // ignore notification error
+  }
+
+  try {
+    await sendPushToUser({
+      userId: reqRow.requested_by,
+      title: "สถานะงานของคุณถูกอนุมัติแล้ว",
+      message: `${reqRow.from_status} → ${reqRow.to_status}`,
+      url: "/my-work",
+    });
+  } catch {
+    // ignore push error
   }
 
   return NextResponse.json({ ok: true });

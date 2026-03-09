@@ -366,15 +366,15 @@ export default function ProjectListView({
             const rows = Array.isArray(json?.data) ? (json.data as StatusRequest[]) : [];
 
             const completedApproved = [...rows]
-  .filter((r) => r.to_status === "COMPLETED")
-  .filter((r) => r.request_status === "APPROVED" || r.status === "APPROVED")
-  .sort(
-    (a, b) =>
-      new Date(b.approved_at || b.created_at || 0).getTime() -
-      new Date(a.approved_at || a.created_at || 0).getTime()
-  )[0];
+              .filter((r) => r.to_status === "COMPLETED")
+              .filter((r) => r.request_status === "APPROVED" || r.status === "APPROVED")
+              .sort(
+                (a, b) =>
+                  new Date(b.approved_at || b.created_at || 0).getTime() -
+                  new Date(a.approved_at || a.created_at || 0).getTime()
+              )[0];
 
-            return [p.id, completedApproved?.approved_at || ""] as const;
+            return [p.id, completedApproved?.approved_at || completedApproved?.created_at || ""] as const;
           } catch {
             return [p.id, ""] as const;
           }

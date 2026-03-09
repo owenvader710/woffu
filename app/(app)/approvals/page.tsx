@@ -176,7 +176,7 @@ function ApprovalCard({
           {onApprove && (
             <button
               onClick={onApprove}
-              className="w-full rounded-2xl border border-emerald-300/40 bg-emerald-400 px-5 py-2.5 text-sm font-extrabold text-black shadow-[0_0_18px_rgba(52,211,153,0.58),0_0_40px_rgba(16,185,129,0.24)] transition duration-200 hover:scale-[1.02] hover:bg-emerald-300 hover:shadow-[0_0_26px_rgba(110,231,183,0.78),0_0_50px_rgba(16,185,129,0.32)] active:scale-[0.98] sm:w-auto"
+              className="w-full rounded-2xl border border-[#e5ff78]/40 bg-[#e5ff78] px-5 py-2.5 text-sm font-extrabold text-black shadow-[0_0_18px_rgba(229,255,120,0.55),0_0_40px_rgba(229,255,120,0.25)] transition duration-200 hover:scale-[1.02] hover:bg-[#dfff5c] hover:shadow-[0_0_26px_rgba(229,255,120,0.75),0_0_50px_rgba(229,255,120,0.35)] active:scale-[0.98] sm:w-auto"
             >
               Approve
             </button>

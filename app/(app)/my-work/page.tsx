@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import StatusDropdown, { Status } from "./StatusDropdown";
 
@@ -16,25 +16,19 @@ type PendingReq = {
 type WorkItem = {
   id: string;
   code?: string | null;
-
   title: string | null;
   type?: string | null;
-
   department: "VIDEO" | "GRAPHIC" | "ALL";
   status: Status;
-
   created_at?: string | null;
   start_date?: string | null;
   due_date?: string | null;
-
   assignee_id?: string | null;
   created_by?: string | null;
-
   brand?: string | null;
   video_priority?: string | null;
   video_purpose?: string | null;
   graphic_job_type?: string | null;
-
   pending_request?: PendingReq | null;
 };
 
@@ -112,7 +106,6 @@ function shouldMovePreOrderToTodo(startDate?: string | null) {
   if (!startDate) return false;
   const start = new Date(startDate);
   if (Number.isNaN(start.getTime())) return false;
-
   start.setHours(0, 0, 0, 0);
   return start.getTime() <= startOfToday().getTime();
 }
@@ -226,13 +219,9 @@ function getPendingStatus(req?: PendingReq | null) {
   return req?.request_status || req?.status || null;
 }
 
-function mergePendingState(
-  sourceItems: WorkItem[],
-  store: Record<string, PendingReq>
-): WorkItem[] {
+function mergePendingState(sourceItems: WorkItem[], store: Record<string, PendingReq>): WorkItem[] {
   const merged = sourceItems.map((x) => {
-    const apiPending =
-      getPendingStatus(x.pending_request) === "PENDING" ? x.pending_request : null;
+    const apiPending = getPendingStatus(x.pending_request) === "PENDING" ? x.pending_request : null;
 
     if (apiPending) {
       setPendingForProject(x.id, apiPending);
@@ -266,7 +255,6 @@ function mergePendingState(
     const localPending = store[pid];
     if (getPendingStatus(localPending) === "PENDING") {
       const targetUiStatus = toUiStatus(localPending.to_status);
-
       if (stillExists.status === targetUiStatus) {
         removePendingForProject(pid);
       }
@@ -311,9 +299,7 @@ function MobileWorkCard({
           </div>
 
           {secondLine(w) ? (
-            <div className="mt-2 break-words text-xs leading-6 text-white/45">
-              {secondLine(w)}
-            </div>
+            <div className="mt-2 break-words text-xs leading-6 text-white/45">{secondLine(w)}</div>
           ) : null}
 
           {pending ? (
@@ -344,7 +330,7 @@ function MobileWorkCard({
         </div>
       </div>
 
-      <div className={cn("mt-4", pending ? "opacity-60 pointer-events-none" : "")}>
+      <div className={cn("mt-4", pending ? "pointer-events-none opacity-60" : "")}>
         <div className="text-[11px] font-bold tracking-widest text-white/35">จัดการ</div>
         <div className="mt-2">
           <StatusDropdown
@@ -369,20 +355,19 @@ export default function MyWorkPage() {
   const [err, setErr] = useState("");
 
   const [toast, setToast] = useState<string | null>(null);
-  function showToast(msg: string) {
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((msg: string) => {
     setToast(msg);
-    window.setTimeout(() => setToast(null), 2500);
-  }
 
-  const FILTERS = [
-    "ALL",
-    "PRE_ORDER",
-    "TODO",
-    "IN_PROGRESS",
-    "COMPLETED",
-    "BLOCKED",
-  ] as const;
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimerRef.current = null;
+    }, 2500);
+  }, []);
 
+  const FILTERS = ["ALL", "PRE_ORDER", "TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"] as const;
   const [statusFilter, setStatusFilter] = useState<(typeof FILTERS)[number]>("ALL");
 
   const [blockedModal, setBlockedModal] = useState<BlockedModalState>({
@@ -393,7 +378,7 @@ export default function MyWorkPage() {
   const [blockedNote, setBlockedNote] = useState("");
   const [blockedSubmitting, setBlockedSubmitting] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setErr("");
 
@@ -439,32 +424,23 @@ export default function MyWorkPage() {
           })) as WorkItem[];
 
           const retryStore = readPendingStore();
-          const retryMerged = mergePendingState(retryNormalized, retryStore);
-
-          setItems(retryMerged);
+          setItems(mergePendingState(retryNormalized, retryStore));
           return;
         }
       }
 
       const store = readPendingStore();
-      const merged = mergePendingState(normalized, store);
-
-      setItems(merged);
+      setItems(mergePendingState(normalized, store));
     } catch (e: any) {
       setItems([]);
       setErr(e?.message || "Load failed");
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function requestStatusChange(
-    projectId: string,
-    nextUi: Status,
-    blocked_reason?: string
-  ): Promise<boolean> {
+  async function requestStatusChange(projectId: string, nextUi: Status, blocked_reason?: string): Promise<boolean> {
     const prev = items;
-
     const target = items.find((x) => x.id === projectId);
     if (!target) return false;
 
@@ -489,34 +465,26 @@ export default function MyWorkPage() {
       created_at: new Date().toISOString(),
     };
 
-    setItems((xs) =>
-      xs.map((x) =>
-        x.id === projectId ? { ...x, pending_request: optimisticPending } : x
-      )
-    );
+    setItems((xs) => xs.map((x) => (x.id === projectId ? { ...x, pending_request: optimisticPending } : x)));
     setPendingForProject(projectId, optimisticPending);
 
     try {
-      const res = await fetch(
-        `/api/projects/${encodeURIComponent(projectId)}/request-status`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            from_status: fromDb,
-            to_status: toDb,
-            blocked_reason: nextUi === "BLOCKED" ? blocked_reason?.trim() : null,
-          }),
-        }
-      );
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/request-status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from_status: fromDb,
+          to_status: toDb,
+          blocked_reason: nextUi === "BLOCKED" ? blocked_reason?.trim() : null,
+        }),
+      });
 
       const j = await safeJson(res);
 
       if (!res.ok) {
         setItems(prev);
         removePendingForProject(projectId);
-        const msg = (j && (j.error || j.message)) || "Update failed";
-        showToast(msg);
+        showToast((j && (j.error || j.message)) || "Update failed");
         return false;
       }
 
@@ -531,11 +499,7 @@ export default function MyWorkPage() {
           created_at: reqRow.created_at ?? null,
         };
 
-        setItems((xs) =>
-          xs.map((x) =>
-            x.id === projectId ? { ...x, pending_request: saved } : x
-          )
-        );
+        setItems((xs) => xs.map((x) => (x.id === projectId ? { ...x, pending_request: saved } : x)));
         setPendingForProject(projectId, saved);
       }
 
@@ -550,21 +514,13 @@ export default function MyWorkPage() {
   }
 
   function openBlockedModal(projectId: string, projectTitle: string) {
-    setBlockedModal({
-      open: true,
-      projectId,
-      projectTitle,
-    });
+    setBlockedModal({ open: true, projectId, projectTitle });
     setBlockedNote("");
   }
 
   function closeBlockedModal(force = false) {
     if (blockedSubmitting && !force) return;
-    setBlockedModal({
-      open: false,
-      projectId: "",
-      projectTitle: "",
-    });
+    setBlockedModal({ open: false, projectId: "", projectTitle: "" });
     setBlockedNote("");
   }
 
@@ -580,18 +536,18 @@ export default function MyWorkPage() {
     try {
       setBlockedSubmitting(true);
       const ok = await requestStatusChange(blockedModal.projectId, "BLOCKED", note);
-
-      if (ok) {
-        closeBlockedModal(true);
-      }
+      if (ok) closeBlockedModal(true);
     } finally {
       setBlockedSubmitting(false);
     }
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, [load]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {
@@ -624,7 +580,7 @@ export default function MyWorkPage() {
 
         {blockedModal.open ? (
           <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-            <div className="w-full max-w-xl rounded-[28px] border border-red-500/20 bg-[#0b0b0b] p-5 md:p-6 shadow-[0_0_60px_rgba(239,68,68,0.12)]">
+            <div className="w-full max-w-xl rounded-[28px] border border-red-500/20 bg-[#0b0b0b] p-5 shadow-[0_0_60px_rgba(239,68,68,0.12)] md:p-6">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="text-sm font-extrabold tracking-[0.18em] text-red-300/80">ALERT</div>
@@ -688,7 +644,7 @@ export default function MyWorkPage() {
           </div>
 
           <button
-            onClick={load}
+            onClick={() => void load()}
             disabled={loading}
             className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50"
           >
@@ -737,27 +693,25 @@ export default function MyWorkPage() {
                 </div>
               ) : (
                 filtered.map((w) => {
-  const pending: PendingReq | null =
-    getPendingStatus(w.pending_request) === "PENDING"
-      ? (w.pending_request ?? null)
-      : null;
+                  const pending: PendingReq | null =
+                    getPendingStatus(w.pending_request) === "PENDING" ? (w.pending_request ?? null) : null;
 
-  return (
-    <MobileWorkCard
-      key={w.id}
-      w={w}
-      pending={pending}
-      onBlocked={openBlockedModal}
-      onChange={requestStatusChange}
-    />
-  );
-})
+                  return (
+                    <MobileWorkCard
+                      key={w.id}
+                      w={w}
+                      pending={pending}
+                      onBlocked={openBlockedModal}
+                      onChange={requestStatusChange}
+                    />
+                  );
+                })
               )}
             </div>
 
             <div className="mt-6 hidden overflow-visible rounded-[30px] border border-white/10 bg-white/5 lg:block">
               <div className="w-full overflow-x-auto overflow-y-visible rounded-[30px]">
-                <table className="min-w-[980px] w-full overflow-visible">
+                <table className="w-full min-w-[980px] overflow-visible">
                   <thead>
                     <tr className="text-left text-xs font-semibold tracking-widest text-white/45">
                       <th className="px-6 py-4">งาน</th>
@@ -769,86 +723,77 @@ export default function MyWorkPage() {
                   </thead>
 
                   <tbody className="divide-y divide-white/10 overflow-visible">
-                    {filtered.map((w) => {
-  const pending: PendingReq | null =
-    getPendingStatus(w.pending_request) === "PENDING"
-      ? (w.pending_request ?? null)
-      : null;
-
-  return (
-    <tr key={w.id} className="hover:bg-white/[0.03] overflow-visible">
-                          <td className="px-6 py-5">
-                            <div className="flex items-start gap-3">
-                              <span className="mt-[2px] inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
-                                {makeCode(w)}
-                              </span>
-
-                              <div className="min-w-0">
-                                <Link
-                                  href={`/projects/${w.id}`}
-                                  className="block truncate text-base font-extrabold text-white hover:underline"
-                                >
-                                  {w.title || "-"}
-                                </Link>
-
-                                {secondLine(w) ? (
-                                  <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div>
-                                ) : null}
-
-                                {pending ? (
-                                  <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-lime-400/20 bg-lime-400/10 px-4 py-1 text-xs font-extrabold text-lime-200">
-                                    <span className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_18px_rgba(163,230,53,0.9)]" />
-                                    รออนุมัติ: {uiLabelFromDb(pending.from_status)} → {uiLabelFromDb(pending.to_status)}
-                                  </div>
-                                ) : null}
-                              </div>
-                            </div>
-                          </td>
-
-                          <td className="px-6 py-5 text-center">
-                            <DeptPill dept={w.department} />
-                          </td>
-
-                          <td className="px-6 py-5 text-center">
-                            <StatusPill s={w.status} />
-                          </td>
-
-                          <td className="px-6 py-5 text-center text-sm text-white/80">
-                            {fmtDeadline(w.due_date)}
-                          </td>
-
-                          <td className="relative z-20 overflow-visible px-6 py-5 text-right">
-                            <div
-                              className={cn(
-                                "relative z-30 overflow-visible",
-                                pending ? "opacity-60 pointer-events-none" : ""
-                              )}
-                            >
-                              <div className="relative z-40 inline-block overflow-visible">
-                                <StatusDropdown
-                                  value={w.status}
-                                  onChange={(s) => {
-                                    if (s === "BLOCKED") {
-                                      openBlockedModal(w.id, w.title || "-");
-                                      return;
-                                    }
-                                    requestStatusChange(w.id, s);
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-
                     {filtered.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="px-6 py-10 text-center text-sm text-white/50">
                           ไม่พบงานในสถานะนี้
                         </td>
                       </tr>
-                    ) : null}
+                    ) : (
+                      filtered.map((w) => {
+                        const pending: PendingReq | null =
+                          getPendingStatus(w.pending_request) === "PENDING" ? (w.pending_request ?? null) : null;
+
+                        return (
+                          <tr key={w.id} className="overflow-visible hover:bg-white/[0.03]">
+                            <td className="px-6 py-5">
+                              <div className="flex items-start gap-3">
+                                <span className="mt-[2px] inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
+                                  {makeCode(w)}
+                                </span>
+
+                                <div className="min-w-0">
+                                  <Link
+                                    href={`/projects/${w.id}`}
+                                    className="block truncate text-base font-extrabold text-white hover:underline"
+                                  >
+                                    {w.title || "-"}
+                                  </Link>
+
+                                  {secondLine(w) ? (
+                                    <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div>
+                                  ) : null}
+
+                                  {pending ? (
+                                    <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-lime-400/20 bg-lime-400/10 px-4 py-1 text-xs font-extrabold text-lime-200">
+                                      <span className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_18px_rgba(163,230,53,0.9)]" />
+                                      รออนุมัติ: {uiLabelFromDb(pending.from_status)} → {uiLabelFromDb(pending.to_status)}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="px-6 py-5 text-center">
+                              <DeptPill dept={w.department} />
+                            </td>
+
+                            <td className="px-6 py-5 text-center">
+                              <StatusPill s={w.status} />
+                            </td>
+
+                            <td className="px-6 py-5 text-center text-sm text-white/80">{fmtDeadline(w.due_date)}</td>
+
+                            <td className="relative z-20 overflow-visible px-6 py-5 text-right">
+                              <div className={cn("relative z-30 overflow-visible", pending ? "pointer-events-none opacity-60" : "")}>
+                                <div className="relative z-40 inline-block overflow-visible">
+                                  <StatusDropdown
+                                    value={w.status}
+                                    onChange={(s) => {
+                                      if (s === "BLOCKED") {
+                                        openBlockedModal(w.id, w.title || "-");
+                                        return;
+                                      }
+                                      requestStatusChange(w.id, s);
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>

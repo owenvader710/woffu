@@ -525,7 +525,7 @@ export default function ProjectsPage() {
 
       {!loading && !error && (
         <>
-          <div className="mt-6 space-y-3 lg:hidden">
+          <div className="mt-6 space-y-3 xl:hidden">
             {filteredItems.length === 0 ? (
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/40">
                 ไม่มีรายการตามเงื่อนไขนี้
@@ -547,7 +547,7 @@ export default function ProjectsPage() {
             )}
           </div>
 
-          <div className="mt-6 hidden overflow-hidden rounded-2xl border border-white/10 bg-white/5 lg:block">
+          <div className="mt-6 hidden overflow-hidden rounded-2xl border border-white/10 bg-white/5 xl:block">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1080px] text-sm text-white/80">
                 <thead className="bg-white/5 text-xs text-white/50">

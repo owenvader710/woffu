@@ -686,7 +686,7 @@ export default function MyWorkPage() {
           </div>
         ) : (
           <>
-            <div className="mt-6 space-y-3 lg:hidden">
+            <div className="mt-6 space-y-3 xl:hidden">
               {filtered.length === 0 ? (
                 <div className="rounded-[24px] border border-white/10 bg-white/5 p-5 text-sm text-white/50">
                   ไม่พบงานในสถานะนี้
@@ -709,7 +709,7 @@ export default function MyWorkPage() {
               )}
             </div>
 
-            <div className="mt-6 hidden overflow-visible rounded-[30px] border border-white/10 bg-white/5 lg:block">
+            <div className="mt-6 hidden overflow-visible rounded-[30px] border border-white/10 bg-white/5 xl:block">
               <div className="w-full overflow-x-auto overflow-y-visible rounded-[30px]">
                 <table className="w-full min-w-[980px] overflow-visible">
                   <thead>

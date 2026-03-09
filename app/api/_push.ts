@@ -36,14 +36,15 @@ export async function sendPushToUser({
 
   const supabase = createSupabaseAdmin();
 
+  console.log("[PUSH] incoming userId =", userId);
+
   const { data, error } = await supabase
     .from("push_tokens")
     .select("user_id, token, platform")
     .eq("user_id", userId);
 
-  console.log("[PUSH] userId =", userId);
+  console.log("[PUSH] query error =", error);
   console.log("[PUSH] raw rows =", data);
-  console.log("[PUSH] error =", error);
 
   if (error) throw new Error(error.message);
 
@@ -52,7 +53,9 @@ export async function sendPushToUser({
   console.log("[PUSH] tokens =", tokens);
   console.log("[PUSH] token count =", tokens.length);
 
-  if (tokens.length === 0) return { ok: true, sent: 0 };
+  if (tokens.length === 0) {
+    return { ok: true, sent: 0, reason: "NO_TOKEN" };
+  }
 
   const result = await admin.messaging().sendEachForMulticast({
     tokens,
@@ -79,6 +82,7 @@ export async function sendPushToUser({
   });
 
   console.log("[PUSH] successCount =", result.successCount);
+  console.log("[PUSH] failureCount =", result.failureCount);
   console.log(
     "[PUSH] responses =",
     result.responses.map((r) => ({

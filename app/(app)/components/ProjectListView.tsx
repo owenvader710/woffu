@@ -146,6 +146,73 @@ function secondLine(p: Project) {
   return parts.length ? parts.join(" · ") : "";
 }
 
+function MobileProjectCard({
+  p,
+  assigneeName,
+  blockedReason,
+  mode,
+}: {
+  p: Project;
+  assigneeName: string;
+  blockedReason?: string;
+  mode: ProjectListMode;
+}) {
+  return (
+    <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
+              {makeCode(p)}
+            </span>
+
+            <Link
+              href={`/projects/${p.id}`}
+              className="min-w-0 break-words font-extrabold text-white underline-offset-4 hover:underline"
+            >
+              {p.title || "-"}
+            </Link>
+          </div>
+
+          {secondLine(p) ? (
+            <div className="mt-2 break-words text-xs leading-6 text-white/45">
+              {secondLine(p)}
+            </div>
+          ) : null}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Pill tone={p.type === "VIDEO" ? "blue" : "amber"}>{p.type}</Pill>
+            <Pill tone={statusTone(p.status)}>{p.status}</Pill>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+          <div className="text-[11px] text-white/40">ผู้รับผิดชอบ</div>
+          <div className="mt-1 break-words text-sm text-white/85">{assigneeName || "-"}</div>
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+          <div className="text-[11px] text-white/40">วันที่สั่ง</div>
+          <div className="mt-1 text-sm text-white/85">{formatDateTH(p.created_at)}</div>
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+          <div className="text-[11px] text-white/40">Deadline</div>
+          <div className="mt-1 break-words text-sm text-white/85">{formatDateTimeTH(p.due_date)}</div>
+        </div>
+      </div>
+
+      {mode === "BLOCKED" && blockedReason ? (
+        <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-3 text-xs leading-6 text-red-100">
+          <span className="font-extrabold">รายละเอียดปัญหา:</span> {blockedReason}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function ProjectListView({
   title,
   mode = "ACTIVE",
@@ -269,9 +336,9 @@ export default function ProjectListView({
       list = list.filter((p) => {
         const assigneeName = p.assignee_id ? memberMap.get(p.assignee_id)?.display_name ?? "" : "";
         const blockedReason = blockedReasons[p.id] ?? "";
-        const hay = `${p.title ?? ""} ${p.brand ?? ""} ${p.video_priority ?? ""} ${p.video_purpose ?? ""} ${
-          p.graphic_job_type ?? ""
-        } ${assigneeName} ${blockedReason} ${p.code ?? ""}`.toLowerCase();
+        const hay =
+          `${p.title ?? ""} ${p.brand ?? ""} ${p.video_priority ?? ""} ${p.video_purpose ?? ""} ` +
+          `${p.graphic_job_type ?? ""} ${assigneeName} ${blockedReason} ${p.code ?? ""}`.toLowerCase();
         return hay.includes(needle);
       });
     }
@@ -282,9 +349,9 @@ export default function ProjectListView({
   return (
     <div>
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
+        <div className="min-w-0">
           <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
-          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-white">{title}</h1>
+          <h1 className="mt-2 break-words text-3xl font-extrabold tracking-tight text-white">{title}</h1>
           <div className="mt-2 text-sm text-white/60">ทั้งหมด: {filteredItems.length}</div>
         </div>
 
@@ -306,7 +373,7 @@ export default function ProjectListView({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="ค้นหา: ชื่อโปรเจกต์ / รหัสงาน / ผู้รับผิดชอบ / แบรนด์ / รูปแบบงาน / รายละเอียดปัญหา"
-          className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78] md:w-[520px]"
+          className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78] xl:max-w-[520px]"
         />
       </div>
 
@@ -323,87 +390,110 @@ export default function ProjectListView({
       )}
 
       {!loading && !error && (
-        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5">
-          <table className="w-full text-sm text-white/80">
-            <thead className="bg-white/5 text-xs text-white/50">
-              <tr className="text-left">
-                <th className="p-4">โปรเจกต์</th>
-                <th className="p-4">ฝ่าย</th>
-                <th className="p-4">ผู้รับผิดชอบ</th>
-                <th className="p-4">สถานะ</th>
-                <th className="p-4">วันที่สั่ง</th>
-                <th className="p-4">Deadline</th>
-              </tr>
-            </thead>
+        <>
+          <div className="mt-6 space-y-3 lg:hidden">
+            {filteredItems.length === 0 ? (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/40">
+                ไม่มีรายการตามเงื่อนไขนี้
+              </div>
+            ) : (
+              filteredItems.map((p) => {
+                const assigneeName = p.assignee_id ? memberMap.get(p.assignee_id)?.display_name ?? "-" : "-";
+                const blockedReason = blockedReasons[p.id] ?? "";
 
-            <tbody>
-              {filteredItems.length === 0 ? (
-                <tr>
-                  <td className="p-6 text-white/40" colSpan={6}>
-                    ไม่มีรายการตามเงื่อนไขนี้
-                  </td>
-                </tr>
-              ) : (
-                filteredItems.map((p) => {
-                  const assigneeName = p.assignee_id
-                    ? memberMap.get(p.assignee_id)?.display_name ?? "-"
-                    : "-";
-                  const blockedReason = blockedReasons[p.id];
+                return (
+                  <MobileProjectCard
+                    key={p.id}
+                    p={p}
+                    assigneeName={assigneeName}
+                    blockedReason={blockedReason}
+                    mode={mode}
+                  />
+                );
+              })
+            )}
+          </div>
 
-                  return (
-                    <tr key={p.id} className="border-t border-white/10 hover:bg-white/[0.06] align-top">
-                      <td className="p-4">
-                        <div className="flex items-start gap-3">
-                          <span className="mt-[2px] inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
-                            {makeCode(p)}
-                          </span>
+          <div className="mt-6 hidden overflow-hidden rounded-2xl border border-white/10 bg-white/5 lg:block">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px] text-sm text-white/80">
+                <thead className="bg-white/5 text-xs text-white/50">
+                  <tr className="text-left">
+                    <th className="p-4">โปรเจกต์</th>
+                    <th className="p-4">ฝ่าย</th>
+                    <th className="p-4">ผู้รับผิดชอบ</th>
+                    <th className="p-4">สถานะ</th>
+                    <th className="p-4">วันที่สั่ง</th>
+                    <th className="p-4">Deadline</th>
+                  </tr>
+                </thead>
 
-                          <div className="min-w-0">
-                            <Link
-                              href={`/projects/${p.id}`}
-                              className="block text-base font-extrabold text-white hover:underline"
-                            >
-                              {p.title || "-"}
-                            </Link>
-
-                            {secondLine(p) ? (
-                              <div className="mt-1 text-xs text-white/45">
-                                {secondLine(p)}
-                              </div>
-                            ) : null}
-
-                            {mode === "BLOCKED" && blockedReason ? (
-                              <div className="mt-3 max-w-[560px] rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-6 text-red-100">
-                                <span className="font-extrabold">รายละเอียดปัญหา:</span> {blockedReason}
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
+                <tbody>
+                  {filteredItems.length === 0 ? (
+                    <tr>
+                      <td className="p-6 text-white/40" colSpan={6}>
+                        ไม่มีรายการตามเงื่อนไขนี้
                       </td>
-
-                      <td className="p-4">
-                        <Pill tone={p.type === "VIDEO" ? "blue" : "amber"}>{p.type}</Pill>
-                      </td>
-
-                      <td className="p-4">
-                        <span className="text-white/80">{assigneeName || "-"}</span>
-                      </td>
-
-                      <td className="p-4">
-                        <Pill tone={statusTone(p.status) as any}>
-                          {p.status === "COMPLETED" ? "COMPLETED" : p.status}
-                        </Pill>
-                      </td>
-
-                      <td className="p-4 text-white/60">{formatDateTH(p.created_at)}</td>
-                      <td className="p-4 text-white/60">{formatDateTimeTH(p.due_date)}</td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                  ) : (
+                    filteredItems.map((p) => {
+                      const assigneeName = p.assignee_id
+                        ? memberMap.get(p.assignee_id)?.display_name ?? "-"
+                        : "-";
+                      const blockedReason = blockedReasons[p.id];
+
+                      return (
+                        <tr key={p.id} className="border-t border-white/10 align-top hover:bg-white/[0.06]">
+                          <td className="p-4">
+                            <div className="flex items-start gap-3">
+                              <span className="mt-[2px] inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">
+                                {makeCode(p)}
+                              </span>
+
+                              <div className="min-w-0">
+                                <Link
+                                  href={`/projects/${p.id}`}
+                                  className="block text-base font-extrabold text-white hover:underline"
+                                >
+                                  {p.title || "-"}
+                                </Link>
+
+                                {secondLine(p) ? (
+                                  <div className="mt-1 text-xs text-white/45">{secondLine(p)}</div>
+                                ) : null}
+
+                                {mode === "BLOCKED" && blockedReason ? (
+                                  <div className="mt-3 max-w-[560px] rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-6 text-red-100">
+                                    <span className="font-extrabold">รายละเอียดปัญหา:</span> {blockedReason}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="p-4">
+                            <Pill tone={p.type === "VIDEO" ? "blue" : "amber"}>{p.type}</Pill>
+                          </td>
+
+                          <td className="p-4">
+                            <span className="text-white/80">{assigneeName || "-"}</span>
+                          </td>
+
+                          <td className="p-4">
+                            <Pill tone={statusTone(p.status)}>{p.status}</Pill>
+                          </td>
+
+                          <td className="p-4 text-white/60">{formatDateTH(p.created_at)}</td>
+                          <td className="p-4 text-white/60">{formatDateTimeTH(p.due_date)}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

@@ -114,7 +114,7 @@ function ApprovalCard({
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex max-w-full rounded-full border border-white/10 bg-black/40 px-2.5 py-1 text-[11px] font-extrabold tracking-wide text-white/90">
+            <span className="inline-flex max-w-full rounded-full border border-white/10 bg-black/40 px-2.5 py-1 text-[10px] md:text-[11px] font-extrabold tracking-wide text-white/90">
               <span className="truncate">
                 {item.project?.code || item.project_id.slice(0, 6).toUpperCase()}
               </span>
@@ -122,7 +122,7 @@ function ApprovalCard({
 
             <span
               className={cn(
-                "inline-flex max-w-full rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide",
+                "inline-flex max-w-full rounded-full border px-2.5 py-1 text-[10px] md:text-[11px] font-bold tracking-wide",
                 departmentPillClass(item.project?.department)
               )}
             >
@@ -131,7 +131,7 @@ function ApprovalCard({
 
             <span
               className={cn(
-                "inline-flex max-w-full rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide",
+                "inline-flex max-w-full rounded-full border px-2.5 py-1 text-[10px] md:text-[11px] font-bold tracking-wide",
                 badgeClass(item.request_status)
               )}
             >
@@ -288,7 +288,7 @@ export default function ApprovalsPage() {
         </div>
 
         <div className="mt-6 rounded-[28px] border border-white/10 bg-white/[0.03] p-3 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 md:gap-2.5">
             {filterOptions.map((option) => {
               const active = filter === option;
 
@@ -297,7 +297,7 @@ export default function ApprovalsPage() {
                   key={option}
                   onClick={() => setFilter(option)}
                   className={cn(
-                    "rounded-full border px-4 py-2.5 text-sm font-extrabold tracking-wide transition duration-200",
+                    "rounded-full border px-3 py-2 text-xs font-extrabold tracking-wide transition duration-200 md:px-4 md:py-2.5 md:text-sm",
                     active
                       ? "border-white/10 bg-white text-black shadow-[0_0_24px_rgba(255,255,255,0.14)]"
                       : "border-white/10 bg-transparent text-white/80 hover:border-white/20 hover:bg-white/5 hover:text-white"

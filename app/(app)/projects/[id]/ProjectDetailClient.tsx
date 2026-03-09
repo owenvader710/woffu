@@ -15,7 +15,7 @@ type ProfileMini = {
 
 type MeProfile = {
   id: string;
-  role: "LEADER" | "MEMBER";
+  role: "LEADER" | "MEMBER" | "ADMIN";
   is_active: boolean;
   display_name?: string | null;
 };
@@ -232,7 +232,10 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
   const [msg, setMsg] = useState("");
   const [deleting, setDeleting] = useState(false);
 
-  const isLeader = useMemo(() => me?.role === "LEADER" && me?.is_active === true, [me]);
+  const isLeader = useMemo(
+  () => (me?.role === "LEADER" || me?.role === "ADMIN") && me?.is_active === true,
+  [me]
+);
 
   const peopleMap = useMemo(() => {
     const m = new Map<string, Member>();

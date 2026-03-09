@@ -39,6 +39,16 @@ type ProjectLog = {
   created_at?: string | null;
 };
 
+type StatusRequest = {
+  id: string;
+  project_id: string;
+  from_status: string;
+  to_status: string;
+  request_status: "PENDING" | "APPROVED" | "REJECTED";
+  created_at: string;
+  approved_at?: string | null;
+};
+
 async function safeJson(res: Response) {
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -150,13 +160,21 @@ function MobileProjectCard({
   p,
   assigneeName,
   blockedReason,
+  completedApprovedAt,
   mode,
 }: {
   p: Project;
   assigneeName: string;
   blockedReason?: string;
+  completedApprovedAt?: string;
   mode: ProjectListMode;
 }) {
+  const middleLabel = mode === "COMPLETED" ? "Deadline" : "วันที่สั่ง";
+  const middleValue = mode === "COMPLETED" ? formatDateTimeTH(p.due_date) : formatDateTH(p.created_at);
+
+  const lastLabel = mode === "COMPLETED" ? "วันที่เสร็จ" : "Deadline";
+  const lastValue = mode === "COMPLETED" ? formatDateTimeTH(completedApprovedAt) : formatDateTimeTH(p.due_date);
+
   return (
     <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
       <div className="flex items-start justify-between gap-3">
@@ -187,20 +205,20 @@ function MobileProjectCard({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-          <div className="text-[11px] text-white/40">ผู้รับผิดชอบ</div>
-          <div className="mt-1 break-words text-sm text-white/85">{assigneeName || "-"}</div>
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="rounded-xl border border-white/10 bg-black/20 p-2.5">
+          <div className="text-[10px] text-white/40">ผู้รับผิดชอบ</div>
+          <div className="mt-1 truncate text-xs text-white/85 md:text-sm">{assigneeName || "-"}</div>
         </div>
 
-        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-          <div className="text-[11px] text-white/40">วันที่สั่ง</div>
-          <div className="mt-1 text-sm text-white/85">{formatDateTH(p.created_at)}</div>
+        <div className="rounded-xl border border-white/10 bg-black/20 p-2.5">
+          <div className="text-[10px] text-white/40">{middleLabel}</div>
+          <div className="mt-1 break-words text-xs text-white/85 md:text-sm">{middleValue}</div>
         </div>
 
-        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-          <div className="text-[11px] text-white/40">Deadline</div>
-          <div className="mt-1 break-words text-sm text-white/85">{formatDateTimeTH(p.due_date)}</div>
+        <div className="rounded-xl border border-white/10 bg-black/20 p-2.5">
+          <div className="text-[10px] text-white/40">{lastLabel}</div>
+          <div className="mt-1 break-words text-xs text-white/85 md:text-sm">{lastValue}</div>
         </div>
       </div>
 
@@ -223,6 +241,7 @@ export default function ProjectListView({
   const [items, setItems] = useState<Project[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [blockedReasons, setBlockedReasons] = useState<Record<string, string>>({});
+  const [completedDates, setCompletedDates] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
@@ -324,6 +343,52 @@ export default function ProjectListView({
     };
   }, [items, mode]);
 
+  useEffect(() => {
+    if (mode !== "COMPLETED") return;
+
+    const completedItems = items.filter((p) => p.status === "COMPLETED");
+    if (completedItems.length === 0) {
+      setCompletedDates({});
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const entries = await Promise.all(
+        completedItems.map(async (p) => {
+          try {
+            const res = await fetch(`/api/projects/${encodeURIComponent(p.id)}/status-requests`, {
+              cache: "no-store",
+            });
+            const json = await safeJson(res);
+            const rows = Array.isArray(json?.data) ? (json.data as StatusRequest[]) : [];
+
+            const completedApproved = rows.find(
+              (r) => r.to_status === "COMPLETED" && r.request_status === "APPROVED"
+            );
+
+            return [p.id, completedApproved?.approved_at || ""] as const;
+          } catch {
+            return [p.id, ""] as const;
+          }
+        })
+      );
+
+      if (cancelled) return;
+
+      const next: Record<string, string> = {};
+      for (const [id, approvedAt] of entries) {
+        if (approvedAt) next[id] = approvedAt;
+      }
+      setCompletedDates(next);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items, mode]);
+
   const filteredItems = useMemo(() => {
     let list = items;
 
@@ -336,15 +401,16 @@ export default function ProjectListView({
       list = list.filter((p) => {
         const assigneeName = p.assignee_id ? memberMap.get(p.assignee_id)?.display_name ?? "" : "";
         const blockedReason = blockedReasons[p.id] ?? "";
+        const completedAt = completedDates[p.id] ?? "";
         const hay =
           `${p.title ?? ""} ${p.brand ?? ""} ${p.video_priority ?? ""} ${p.video_purpose ?? ""} ` +
-          `${p.graphic_job_type ?? ""} ${assigneeName} ${blockedReason} ${p.code ?? ""}`.toLowerCase();
+          `${p.graphic_job_type ?? ""} ${assigneeName} ${blockedReason} ${completedAt} ${p.code ?? ""}`.toLowerCase();
         return hay.includes(needle);
       });
     }
 
     return list;
-  }, [items, q, memberMap, mode, blockedReasons]);
+  }, [items, q, memberMap, mode, blockedReasons, completedDates]);
 
   return (
     <div>
@@ -400,6 +466,7 @@ export default function ProjectListView({
               filteredItems.map((p) => {
                 const assigneeName = p.assignee_id ? memberMap.get(p.assignee_id)?.display_name ?? "-" : "-";
                 const blockedReason = blockedReasons[p.id] ?? "";
+                const completedApprovedAt = completedDates[p.id] ?? "";
 
                 return (
                   <MobileProjectCard
@@ -407,6 +474,7 @@ export default function ProjectListView({
                     p={p}
                     assigneeName={assigneeName}
                     blockedReason={blockedReason}
+                    completedApprovedAt={completedApprovedAt}
                     mode={mode}
                   />
                 );
@@ -423,8 +491,8 @@ export default function ProjectListView({
                     <th className="p-4">ฝ่าย</th>
                     <th className="p-4">ผู้รับผิดชอบ</th>
                     <th className="p-4">สถานะ</th>
-                    <th className="p-4">วันที่สั่ง</th>
-                    <th className="p-4">Deadline</th>
+                    <th className="p-4">{mode === "COMPLETED" ? "Deadline" : "วันที่สั่ง"}</th>
+                    <th className="p-4">{mode === "COMPLETED" ? "วันที่เสร็จ" : "Deadline"}</th>
                   </tr>
                 </thead>
 
@@ -441,6 +509,7 @@ export default function ProjectListView({
                         ? memberMap.get(p.assignee_id)?.display_name ?? "-"
                         : "-";
                       const blockedReason = blockedReasons[p.id];
+                      const completedApprovedAt = completedDates[p.id] ?? "";
 
                       return (
                         <tr key={p.id} className="border-t border-white/10 align-top hover:bg-white/[0.06]">
@@ -483,8 +552,14 @@ export default function ProjectListView({
                             <Pill tone={statusTone(p.status)}>{p.status}</Pill>
                           </td>
 
-                          <td className="p-4 text-white/60">{formatDateTH(p.created_at)}</td>
-                          <td className="p-4 text-white/60">{formatDateTimeTH(p.due_date)}</td>
+                          <td className="p-4 text-white/60">
+                            {mode === "COMPLETED" ? formatDateTimeTH(p.due_date) : formatDateTH(p.created_at)}
+                          </td>
+                          <td className="p-4 text-white/60">
+                            {mode === "COMPLETED"
+                              ? formatDateTimeTH(completedApprovedAt)
+                              : formatDateTimeTH(p.due_date)}
+                          </td>
                         </tr>
                       );
                     })

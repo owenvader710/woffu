@@ -7,6 +7,23 @@ function badId(id: string) {
   return !id || id.length < 10;
 }
 
+function statusLabel(status: string) {
+  switch (status) {
+    case "PRE_ORDER":
+      return "งานล่วงหน้า";
+    case "TODO":
+      return "รอเริ่ม";
+    case "IN_PROGRESS":
+      return "กำลังทำ";
+    case "COMPLETED":
+      return "เสร็จแล้ว";
+    case "BLOCKED":
+      return "ติดปัญหา";
+    default:
+      return status;
+  }
+}
+
 export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
@@ -83,29 +100,35 @@ export async function POST(
     return NextResponse.json({ error: updProjErr.message }, { status: 500 });
   }
 
+  const { data: projectRow } = await admin
+    .from("projects")
+    .select("id, title")
+    .eq("id", reqRow.project_id)
+    .maybeSingle();
+
+  const projectTitle = projectRow?.title || "งานของคุณ";
+  const statusText = `${statusLabel(reqRow.from_status)} → ${statusLabel(reqRow.to_status)}`;
+  const pushMessage = `${projectTitle} • ${statusText}`;
+
   try {
     await admin.from("notifications").insert({
       user_id: reqRow.requested_by,
       type: "JOB_STATUS_CHANGED",
       title: "สถานะงานของคุณถูกอนุมัติแล้ว",
-      message: `${reqRow.from_status} → ${reqRow.to_status}`,
-      link: "/my-work",
+      message: pushMessage,
+      link: `/projects/${reqRow.project_id}`,
       is_read: false,
     });
-  } catch {
-    // ignore notification error
-  }
+  } catch {}
 
   try {
     await sendPushToUser({
       userId: reqRow.requested_by,
       title: "สถานะงานของคุณถูกอนุมัติแล้ว",
-      message: `${reqRow.from_status} → ${reqRow.to_status}`,
-      url: "/my-work",
+      message: pushMessage,
+      url: `/projects/${reqRow.project_id}`,
     });
-  } catch {
-    // ignore push error
-  }
+  } catch {}
 
   return NextResponse.json({ ok: true });
 }

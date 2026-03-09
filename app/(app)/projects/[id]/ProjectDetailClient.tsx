@@ -73,33 +73,6 @@ type Project = {
   creator?: ProfileMini | null;
 };
 
-type StatusRequest = {
-  id: string;
-  project_id: string;
-  from_status: string;
-  to_status: string;
-  request_status: "PENDING" | "APPROVED" | "REJECTED";
-  created_at: string;
-  requested_by: string;
-  approved_by: string | null;
-  approved_at: string | null;
-
-  requester?: ProfileMini | null;
-  approver?: ProfileMini | null;
-};
-
-type ProjectLog = {
-  id: string;
-  project_id: string;
-  actor_id: string | null;
-  action: string;
-  message: string | null;
-  meta: any | null;
-  created_at: string;
-
-  actor?: ProfileMini | null;
-};
-
 type Member = {
   id: string;
   display_name: string | null;
@@ -113,7 +86,11 @@ type Member = {
 function formatDateTH(iso?: string | null) {
   if (!iso) return "-";
   const d = new Date(iso);
-  return d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
+  return d.toLocaleDateString("th-TH", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
 }
 
 function formatDateTimeTH(iso?: string | null) {
@@ -167,34 +144,28 @@ function Pill({
   tone = "neutral",
 }: {
   children: React.ReactNode;
-  tone?: "neutral" | "green" | "amber" | "red" | "blue" | "lime" | "violet";
+  tone?: "neutral" | "green" | "amber" | "red" | "blue" | "violet";
 }) {
   const cls =
     tone === "green"
       ? "border-green-500/30 bg-green-500/10 text-green-200"
       : tone === "amber"
-        ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
-        : tone === "red"
-          ? "border-red-500/30 bg-red-500/10 text-red-200"
-          : tone === "blue"
-            ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
-            : tone === "lime"
-              ? "border-[#e5ff78]/30 bg-[#e5ff78]/10 text-[#e5ff78]"
-              : tone === "violet"
-                ? "border-violet-500/30 bg-violet-500/10 text-violet-200"
-                : "border-white/10 bg-white/5 text-white/70";
+      ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+      : tone === "red"
+      ? "border-red-500/30 bg-red-500/10 text-red-200"
+      : tone === "blue"
+      ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
+      : tone === "violet"
+      ? "border-violet-500/30 bg-violet-500/10 text-violet-200"
+      : "border-white/10 bg-white/5 text-white/70";
 
   return (
-    <span className={`inline-flex max-w-full items-center rounded-full border px-2 py-1 text-xs ${cls}`}>
+    <span
+      className={`inline-flex max-w-full items-center rounded-full border px-2 py-1 text-[11px] md:text-xs ${cls}`}
+    >
       <span className="truncate">{children}</span>
     </span>
   );
-}
-
-function badgeClass(status: StatusRequest["request_status"]) {
-  if (status === "APPROVED") return "border-green-500/30 bg-green-500/10 text-green-200";
-  if (status === "REJECTED") return "border-red-500/30 bg-red-500/10 text-red-200";
-  return "border-amber-500/30 bg-amber-500/10 text-amber-200";
 }
 
 function priorityLabel(p?: Project["video_priority"] | null) {
@@ -221,9 +192,29 @@ function getProjectCode(p: Project | null) {
 function CodeBadge({ code }: { code?: string | null }) {
   if (!code) return null;
   return (
-    <span className="inline-flex max-w-full items-center rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs font-semibold text-white/80">
+    <span className="inline-flex max-w-full items-center rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-[11px] font-semibold text-white/80 md:text-xs">
       <span className="truncate">{code}</span>
     </span>
+  );
+}
+
+function InfoMiniCard({
+  mobileLabel,
+  desktopLabel,
+  value,
+}: {
+  mobileLabel: string;
+  desktopLabel: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-black/20 p-2.5 md:rounded-xl md:p-3">
+      <div className="text-[10px] text-white/40 md:text-xs">
+        <span className="md:hidden">{mobileLabel}</span>
+        <span className="hidden md:inline">{desktopLabel}</span>
+      </div>
+      <div className="mt-1 break-words text-xs text-white/85 md:text-sm">{value}</div>
+    </div>
   );
 }
 
@@ -234,19 +225,11 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
   const [editOpen, setEditOpen] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [people, setPeople] = useState<Member[]>([]);
-
   const [project, setProject] = useState<Project | null>(null);
-  const [requests, setRequests] = useState<StatusRequest[]>([]);
-  const [logs, setLogs] = useState<ProjectLog[]>([]);
-  const [showAllLogs, setShowAllLogs] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
-
-  const [showAllHistory, setShowAllHistory] = useState(false);
-  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
-
   const [deleting, setDeleting] = useState(false);
 
   const isLeader = useMemo(() => me?.role === "LEADER" && me?.is_active === true, [me]);
@@ -256,26 +239,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
     for (const it of people) m.set(it.id, it);
     return m;
   }, [people]);
-
-  const sortedRequests = useMemo(() => {
-    return [...requests].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [requests]);
-
-  const visibleRequests = useMemo(() => {
-    if (showAllHistory) return sortedRequests;
-    return sortedRequests.slice(0, 1);
-  }, [showAllHistory, sortedRequests]);
-
-  const pending = useMemo(() => sortedRequests.find((x) => x.request_status === "PENDING") ?? null, [sortedRequests]);
-
-  const sortedLogs = useMemo(() => {
-    return [...logs].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [logs]);
-
-  const visibleLogs = useMemo(() => {
-    if (showAllLogs) return sortedLogs;
-    return sortedLogs.slice(0, 5);
-  }, [showAllLogs, sortedLogs]);
 
   async function loadMembersIfLeader(nextIsLeader: boolean) {
     if (!nextIsLeader) return;
@@ -324,22 +287,12 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
       if (!r1.ok) {
         setProject(null);
-        setRequests([]);
-        setLogs([]);
         setErr((j1 && (j1.error || j1.message)) || `Load project failed (${r1.status})`);
         return;
       }
 
       const p: Project | null = j1?.data ?? null;
       setProject(p);
-
-      const r2 = await fetch(`/api/projects/${projectId}/status-requests`, { cache: "no-store" });
-      const j2 = await safeJson(r2);
-      setRequests(r2.ok && Array.isArray(j2?.data) ? j2.data : []);
-
-      const r3 = await fetch(`/api/projects/${projectId}/logs`, { cache: "no-store" });
-      const j3 = await safeJson(r3);
-      setLogs(r3.ok && Array.isArray(j3?.data) ? j3.data : []);
     } catch (e: any) {
       setErr(e?.message || "Load failed");
     } finally {
@@ -349,7 +302,6 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
   useEffect(() => {
     loadAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   async function deleteProject() {
@@ -428,7 +380,9 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
   if (loading) {
     return (
       <div className="mx-auto w-full max-w-[1600px] px-4 py-6 md:px-6 md:py-8 lg:px-10 lg:py-10">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">กำลังโหลด...</div>
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">
+          กำลังโหลด...
+        </div>
       </div>
     );
   }
@@ -500,240 +454,114 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
       </div>
 
       <Card>
-        <div className="flex min-w-0 flex-col gap-6">
-          <div className="min-w-0">
-            <div className="text-xs font-semibold tracking-widest text-white/50">PROJECT DETAIL</div>
-
-            <div className="mt-2 flex min-w-0 flex-wrap items-start gap-3">
-              <div className="shrink-0">
-                <CodeBadge code={code} />
-              </div>
-              <h1 className="min-w-0 flex-1 break-words text-2xl font-extrabold tracking-tight text-white md:text-3xl">
-                {project.title}
-              </h1>
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Pill tone={project.type === "VIDEO" ? "blue" : "amber"}>{project.type}</Pill>
-              {project.brand ? <Pill tone="neutral">{project.brand}</Pill> : <Pill tone="neutral">-</Pill>}
-              {project.product_group ? <Pill tone="violet">{`กลุ่ม ${project.product_group}`}</Pill> : null}
-              <Pill tone={pillToneStatus(project.status)}>{project.status}</Pill>
-              {pending ? <Pill tone="lime">มีคำขอรออนุมัติ</Pill> : null}
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-white/70 md:grid-cols-3">
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <div className="text-xs text-white/40">Created</div>
-                <div className="mt-1 break-words text-white/85">{formatDateTimeTH(project.created_at)}</div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <div className="text-xs text-white/40">Start</div>
-                <div className="mt-1 break-words text-white/85">{formatDateTH(project.start_date)}</div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <div className="text-xs text-white/40">Deadline</div>
-                <div className="mt-1 break-words text-white/85">{formatDateTimeTH(project.due_date)}</div>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-white/70 md:grid-cols-3">
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <div className="text-xs text-white/40">ผู้รับผิดชอบ</div>
-                <div className="mt-1 break-words text-white/85">{assigneeName}</div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <div className="text-xs text-white/40">ผู้สร้างงาน</div>
-                <div className="mt-1 break-words text-white/85">{creatorName}</div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <div className="text-xs text-white/40">กลุ่มสินค้า</div>
-                <div className="mt-1 break-words text-white/85">{project.product_group || "-"}</div>
-              </div>
-            </div>
-
-            <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4 md:p-5">
-              <div className="text-sm font-semibold text-white">รายละเอียดงาน</div>
-
-              {isVideo && (
-                <div className="mt-3 grid gap-2 text-sm text-white/75">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-white/45">ความสำคัญ</span>
-                    <Pill tone="neutral">{priorityLabel(project.video_priority)}</Pill>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-white/45">รูปแบบงาน</span>
-                    <Pill tone="neutral">{project.video_purpose || "-"}</Pill>
-                  </div>
-                </div>
-              )}
-
-              {isGraphic && (
-                <div className="mt-3 grid gap-2 text-sm text-white/75">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-white/45">ประเภทงาน</span>
-                    <Pill tone="neutral">{project.graphic_job_type || "-"}</Pill>
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-4">
-                <div className="text-xs text-white/45">คำอธิบาย</div>
-                <div className="mt-2 whitespace-pre-wrap break-words rounded-xl border border-white/10 bg-black/30 p-4 text-sm text-white/85">
-                  {parsedDescription.cleanDescription?.trim() ? parsedDescription.cleanDescription : "-"}
-                </div>
-              </div>
-
-              {parsedDescription.attachmentUrl ? (
-                <div className="mt-4">
-                  <div className="text-xs text-white/45">ไฟล์แนบ</div>
-                  <a
-                    href={parsedDescription.attachmentUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-2 inline-flex max-w-full items-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80 hover:bg-white/10"
-                  >
-                    <span className="truncate">
-                      เปิดไฟล์แนบ{parsedDescription.attachmentName ? `: ${parsedDescription.attachmentName}` : ""}
-                    </span>
-                  </a>
-                </div>
-              ) : null}
-            </div>
-
-            {msg && (
-              <div className="mt-4 rounded-2xl border border-green-500/30 bg-green-500/10 p-4 text-sm text-green-200">
-                {msg}
-              </div>
-            )}
-            {err && (
-              <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
-                {err}
-              </div>
-            )}
-
-            {pending && (
-              <div className="mt-4 rounded-2xl border border-[#e5ff78]/25 bg-[#e5ff78]/10 p-4 text-sm text-[#e5ff78]">
-                <div className="break-words">
-                  มีคำขอรออนุมัติ: <b className="text-white">{pending.from_status}</b> →{" "}
-                  <b className="text-white">{pending.to_status}</b> · โดย{" "}
-                  <b className="text-white">{pending.requester?.display_name || "-"}</b> ·{" "}
-                  <span className="text-white/70">{formatDateTimeTH(pending.created_at)}</span>
-                </div>
-                <div className="mt-1 text-xs text-white/60">
-                  (หัวหน้าไปที่{" "}
-                  <Link className="underline underline-offset-4" href="/approvals">
-                    Approvals
-                  </Link>
-                  )
-                </div>
-              </div>
-            )}
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold tracking-widest text-white/50 md:text-xs">
+            PROJECT DETAIL
           </div>
+
+          <div className="mt-2 flex min-w-0 flex-wrap items-start gap-3">
+            <div className="shrink-0">
+              <CodeBadge code={code} />
+            </div>
+
+            <h1 className="min-w-0 flex-1 break-words text-xl font-extrabold tracking-tight text-white md:text-3xl">
+              {project.title}
+            </h1>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Pill tone={project.type === "VIDEO" ? "blue" : "amber"}>{project.type}</Pill>
+            {project.brand ? <Pill tone="neutral">{project.brand}</Pill> : <Pill tone="neutral">-</Pill>}
+            {project.product_group ? <Pill tone="violet">{`กลุ่ม ${project.product_group}`}</Pill> : null}
+            <Pill tone={pillToneStatus(project.status)}>{project.status}</Pill>
+          </div>
+
+          <div className="mt-4 grid grid-cols-3 gap-2 text-white/70 md:gap-3">
+            <InfoMiniCard
+              mobileLabel="Created"
+              desktopLabel="Created"
+              value={formatDateTimeTH(project.created_at)}
+            />
+            <InfoMiniCard
+              mobileLabel="Start"
+              desktopLabel="Start"
+              value={formatDateTH(project.start_date)}
+            />
+            <InfoMiniCard
+              mobileLabel="Due"
+              desktopLabel="Deadline"
+              value={formatDateTimeTH(project.due_date)}
+            />
+          </div>
+
+          <div className="mt-3 grid grid-cols-3 gap-2 text-white/70 md:mt-4 md:gap-3">
+            <InfoMiniCard mobileLabel="Owner" desktopLabel="ผู้รับผิดชอบ" value={assigneeName} />
+            <InfoMiniCard mobileLabel="Creator" desktopLabel="ผู้สร้างงาน" value={creatorName} />
+            <InfoMiniCard mobileLabel="Group" desktopLabel="กลุ่มสินค้า" value={project.product_group || "-"} />
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4 md:mt-6 md:p-5">
+            <div className="text-sm font-semibold text-white">รายละเอียดงาน</div>
+
+            {isVideo && (
+              <div className="mt-3 grid gap-2 text-sm text-white/75">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-white/45">ความสำคัญ</span>
+                  <Pill tone="neutral">{priorityLabel(project.video_priority)}</Pill>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-white/45">รูปแบบงาน</span>
+                  <Pill tone="neutral">{project.video_purpose || "-"}</Pill>
+                </div>
+              </div>
+            )}
+
+            {isGraphic && (
+              <div className="mt-3 grid gap-2 text-sm text-white/75">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-white/45">ประเภทงาน</span>
+                  <Pill tone="neutral">{project.graphic_job_type || "-"}</Pill>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4">
+              <div className="text-xs text-white/45">คำอธิบาย</div>
+              <div className="mt-2 whitespace-pre-wrap break-words rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white/85 md:p-4">
+                {parsedDescription.cleanDescription?.trim() ? parsedDescription.cleanDescription : "-"}
+              </div>
+            </div>
+
+            {parsedDescription.attachmentUrl ? (
+              <div className="mt-4">
+                <div className="text-xs text-white/45">ไฟล์แนบ</div>
+                <a
+                  href={parsedDescription.attachmentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-flex max-w-full items-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80 hover:bg-white/10"
+                >
+                  <span className="truncate">
+                    เปิดไฟล์แนบ{parsedDescription.attachmentName ? `: ${parsedDescription.attachmentName}` : ""}
+                  </span>
+                </a>
+              </div>
+            ) : null}
+          </div>
+
+          {msg && (
+            <div className="mt-4 rounded-2xl border border-green-500/30 bg-green-500/10 p-4 text-sm text-green-200">
+              {msg}
+            </div>
+          )}
+
+          {err && (
+            <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+              {err}
+            </div>
+          )}
         </div>
       </Card>
-
-      <div className="mt-6">
-        <Card>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-white">ประวัติคำขอเปลี่ยนสถานะ</div>
-              <div className="text-xs text-white/50">ทั้งหมด: {requests.length}</div>
-            </div>
-
-            {requests.length > 1 && (
-              <GhostBtn onClick={() => setShowAllHistory((v) => !v)}>
-                {showAllHistory ? "ยุบประวัติ" : `ดูทั้งหมด (${requests.length})`}
-              </GhostBtn>
-            )}
-          </div>
-
-          {sortedRequests.length === 0 ? (
-            <div className="mt-4 text-sm text-white/50">ยังไม่มีประวัติคำขอ</div>
-          ) : (
-            <div className="mt-4 space-y-2">
-              {visibleRequests.map((r) => {
-                const open = !!expandedIds[r.id];
-                return (
-                  <div key={r.id} className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="break-words font-semibold text-white">
-                          {r.from_status} → {r.to_status}
-                        </div>
-                        <span className={`rounded-full border px-2 py-1 text-xs ${badgeClass(r.request_status)}`}>
-                          {r.request_status}
-                        </span>
-                      </div>
-                      <div className="text-xs text-white/45">{formatDateTimeTH(r.created_at)}</div>
-                    </div>
-
-                    <div className="mt-1 break-words text-xs text-white/55">
-                      โดย: {r.requester?.display_name || "-"}
-                      {r.request_status !== "PENDING" && (
-                        <>
-                          {" "}
-                          · อนุมัติโดย: {r.approver?.display_name || "-"} · {formatDateTimeTH(r.approved_at)}
-                        </>
-                      )}
-                    </div>
-
-                    {showAllHistory && (
-                      <button
-                        className="mt-2 text-left text-xs text-white/50 underline underline-offset-2 hover:text-white"
-                        onClick={() => setExpandedIds((prev) => ({ ...prev, [r.id]: !prev[r.id] }))}
-                      >
-                        {open ? "ซ่อนรายละเอียด" : "ดูรายละเอียด"}
-                      </button>
-                    )}
-
-                    {showAllHistory && open && (
-                      <div className="mt-2 break-all text-[11px] text-white/35">
-                        request id: {r.id} · project id: {r.project_id}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </Card>
-      </div>
-
-      <div className="mt-6">
-        <Card>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-white">Activity Log</div>
-              <div className="text-xs text-white/50">ทั้งหมด: {logs.length}</div>
-            </div>
-
-            {logs.length > 5 && (
-              <GhostBtn onClick={() => setShowAllLogs((v) => !v)}>
-                {showAllLogs ? "ยุบ log" : `ดูทั้งหมด (${logs.length})`}
-              </GhostBtn>
-            )}
-          </div>
-
-          {visibleLogs.length === 0 ? (
-            <div className="mt-4 text-sm text-white/50">ยังไม่มี log</div>
-          ) : (
-            <div className="mt-4 space-y-2">
-              {visibleLogs.map((l) => (
-                <div key={l.id} className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                    <div className="break-words font-semibold text-white">{l.action}</div>
-                    <div className="text-xs text-white/45">{formatDateTimeTH(l.created_at)}</div>
-                  </div>
-                  <div className="mt-1 break-words text-xs text-white/55">
-                    โดย: <span className="font-medium text-white/80">{l.actor?.display_name || l.actor_id || "-"}</span>
-                  </div>
-                  {l.message && <div className="mt-2 break-words text-sm text-white/85">{l.message}</div>}
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
 
       {isLeader && (
         <EditProjectModal

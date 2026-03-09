@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import dynamic from "next/dynamic";
 
@@ -170,7 +170,7 @@ function EditMyProfileModal({
         birth_date: birthDate ? birthDate : null,
       };
 
-      const res = await fetch(`/api/members/${encodeURIComponent(me!.id)}`, {
+      const res = await fetch(`/api/members/${encodeURIComponent(me?.id ?? "")}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -293,48 +293,46 @@ export default function MembersPage() {
 
   const [savingAvatar, setSavingAvatar] = useState(false);
 
-  async function loadMe() {
-    try {
-      const r = await fetch("/api/me-profile", { cache: "no-store" });
-      const j = await safeJson(r);
-      const m = (j?.data ?? j) as MeProfile | null;
-      setMe(r.ok && m?.id ? m : null);
-    } catch {
-      setMe(null);
-    }
-  }
+  const loadMe = useCallback(async () => {
+    const r = await fetch("/api/me-profile", { cache: "no-store" });
+    const j = await safeJson(r);
+    const m = (j?.data ?? j) as MeProfile | null;
+    return r.ok && m?.id ? m : null;
+  }, []);
 
-  async function loadMembers() {
+  const loadMembers = useCallback(async () => {
+    const r = await fetch("/api/members", { cache: "no-store" });
+    const j = await safeJson(r);
+
+    if (!r.ok) {
+      throw new Error((j && (j.error || j.message)) || `Load members failed (${r.status})`);
+    }
+
+    const arr = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
+    return (arr as Member[]).map((m) => ({
+      ...m,
+      display_name: m.display_name ?? null,
+      email: m.email ?? null,
+      phone: m.phone ?? null,
+      avatar_url: m.avatar_url ?? null,
+      birth_date: (m as any).birth_date ?? null,
+    }));
+  }, []);
+
+  const refreshAll = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const r = await fetch("/api/members", { cache: "no-store" });
-      const j = await safeJson(r);
-
-      if (!r.ok) {
-        setItems([]);
-        setError((j && (j.error || j.message)) || `Load members failed (${r.status})`);
-        return;
-      }
-
-      const arr = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
-      const normalized = (arr as Member[]).map((m) => ({
-        ...m,
-        display_name: m.display_name ?? null,
-        email: m.email ?? null,
-        phone: m.phone ?? null,
-        avatar_url: m.avatar_url ?? null,
-        birth_date: (m as any).birth_date ?? null,
-      }));
-
-      setItems(normalized);
+      const [meData, membersData] = await Promise.all([loadMe(), loadMembers()]);
+      setMe(meData);
+      setItems(membersData);
     } catch (e: any) {
       setItems([]);
       setError(e?.message || "Load members failed");
     } finally {
       setLoading(false);
     }
-  }
+  }, [loadMe, loadMembers]);
 
   async function applyCroppedAvatar(blob: Blob) {
     setError("");
@@ -387,12 +385,8 @@ export default function MembersPage() {
   }
 
   useEffect(() => {
-    (async () => {
-      await loadMe();
-      await loadMembers();
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void refreshAll();
+  }, [refreshAll]);
 
   const filtered = useMemo(() => {
     return items
@@ -498,48 +492,43 @@ export default function MembersPage() {
 
               <div className="mt-2 md:mt-4">
                 <Avatar
-  url={me?.avatar_url ?? null}
-  name={me?.display_name ?? me?.email ?? null}
-  size={210}
-/>
+                  url={me?.avatar_url ?? null}
+                  name={me?.display_name ?? me?.email ?? null}
+                  size={210}
+                />
               </div>
 
               <div className="mt-3 flex w-full max-w-[260px] gap-2">
-  <label
-    className={cn(
-      "flex flex-1 cursor-pointer items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white/85 hover:bg-white/10",
-      savingAvatar ? "pointer-events-none opacity-60" : ""
-    )}
-    title={savingAvatar ? "กำลังอัปโหลด..." : "อัปโหลดรูปโปรไฟล์"}
-  >
-    <span className="truncate">
-      {savingAvatar ? "กำลังอัปโหลด..." : "อัปโหลดรูป"}
-    </span>
-    <input
-      type="file"
-      accept="image/*"
-      className="hidden"
-      onChange={(e) => {
-        const f = e.target.files?.[0] ?? null;
-        if (!f) return;
-        setCropFile(f);
-        setCropOpen(true);
-        e.currentTarget.value = "";
-      }}
-    />
-  </label>
+                <label
+                  className={cn(
+                    "flex flex-1 cursor-pointer items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white/85 hover:bg-white/10",
+                    savingAvatar ? "pointer-events-none opacity-60" : ""
+                  )}
+                  title={savingAvatar ? "กำลังอัปโหลด..." : "อัปโหลดรูปโปรไฟล์"}
+                >
+                  <span className="truncate">{savingAvatar ? "กำลังอัปโหลด..." : "อัปโหลดรูป"}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      if (!f) return;
+                      setCropFile(f);
+                      setCropOpen(true);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                </label>
 
-  <button
-    onClick={() => {
-      loadMe();
-      loadMembers();
-    }}
-    disabled={loading}
-    className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50"
-  >
-    รีเฟรช
-  </button>
-</div>
+                <button
+                  onClick={() => void refreshAll()}
+                  disabled={loading}
+                  className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50"
+                >
+                  รีเฟรช
+                </button>
+              </div>
             </div>
 
             <div className="min-w-0">
@@ -603,8 +592,7 @@ export default function MembersPage() {
             setCropOpen(false);
             setCropFile(null);
             await applyCroppedAvatar(blob);
-            await loadMe();
-            await loadMembers();
+            await refreshAll();
           }}
         />
 
@@ -613,8 +601,7 @@ export default function MembersPage() {
           onClose={() => setMyEditOpen(false)}
           me={me}
           onSaved={async () => {
-            await loadMe();
-            await loadMembers();
+            await refreshAll();
           }}
         />
 
@@ -626,7 +613,7 @@ export default function MembersPage() {
             onSaved={async () => {
               setEditOpen(false);
               setEditing(null);
-              await loadMembers();
+              await refreshAll();
             }}
           />
         ) : null}

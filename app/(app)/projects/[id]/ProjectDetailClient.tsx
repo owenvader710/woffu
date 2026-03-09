@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -154,14 +154,14 @@ function Pill({
     tone === "green"
       ? "border-green-500/30 bg-green-500/10 text-green-200"
       : tone === "amber"
-      ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
-      : tone === "red"
-      ? "border-red-500/30 bg-red-500/10 text-red-200"
-      : tone === "blue"
-      ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
-      : tone === "violet"
-      ? "border-violet-500/30 bg-violet-500/10 text-violet-200"
-      : "border-white/10 bg-white/5 text-white/70";
+        ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+        : tone === "red"
+          ? "border-red-500/30 bg-red-500/10 text-red-200"
+          : tone === "blue"
+            ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
+            : tone === "violet"
+              ? "border-violet-500/30 bg-violet-500/10 text-violet-200"
+              : "border-white/10 bg-white/5 text-white/70";
 
   return (
     <span
@@ -237,9 +237,9 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
   const [deleting, setDeleting] = useState(false);
 
   const isLeader = useMemo(
-  () => (me?.role === "LEADER" || me?.role === "ADMIN") && me?.is_active === true,
-  [me]
-);
+    () => (me?.role === "LEADER" || me?.role === "ADMIN") && me?.is_active === true,
+    [me]
+  );
 
   const peopleMap = useMemo(() => {
     const m = new Map<string, Member>();
@@ -247,30 +247,42 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
     return m;
   }, [people]);
 
-  async function loadMembersIfLeader(nextIsLeader: boolean) {
-    if (!nextIsLeader) return;
-    try {
-      const r = await fetch("/api/members", { cache: "no-store" });
-      const j = await safeJson(r);
-      if (!r.ok) return;
-      const data = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
-      setMembers(data.filter((m: Member) => m.is_active !== false));
-    } catch {}
-  }
+  const loadPeople = useCallback(async () => {
+    const r = await fetch("/api/members", { cache: "no-store" });
+    const j = await safeJson(r);
+    if (!r.ok) return [] as Member[];
+    const data = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
+    return data.filter((m: Member) => m.is_active !== false) as Member[];
+  }, []);
 
-  async function loadPeople() {
-    try {
-      const r = await fetch("/api/members", { cache: "no-store" });
-      const j = await safeJson(r);
-      if (!r.ok) return setPeople([]);
-      const data = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
-      setPeople(data.filter((m: Member) => m.is_active !== false));
-    } catch {
-      setPeople([]);
+  const loadMe = useCallback(async () => {
+    const rMe = await fetch("/api/me-profile", { cache: "no-store" });
+    const jMe = await safeJson(rMe);
+    const m = (jMe?.data ?? jMe) as MeProfile | null;
+    return rMe.ok && m?.id ? m : null;
+  }, []);
+
+  const loadProject = useCallback(async () => {
+    const r1 = await fetch(`/api/projects/${projectId}`, { cache: "no-store" });
+    const j1 = await safeJson(r1);
+
+    if (!r1.ok) {
+      throw new Error((j1 && (j1.error || j1.message)) || `Load project failed (${r1.status})`);
     }
-  }
 
-  async function loadAll() {
+    return (j1?.data ?? null) as Project | null;
+  }, [projectId]);
+
+  const loadLeaderMembers = useCallback(async (nextIsLeader: boolean) => {
+    if (!nextIsLeader) return [] as Member[];
+    const r = await fetch("/api/members", { cache: "no-store" });
+    const j = await safeJson(r);
+    if (!r.ok) return [] as Member[];
+    const data = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
+    return data.filter((m: Member) => m.is_active !== false) as Member[];
+  }, []);
+
+  const loadAll = useCallback(async () => {
     if (!projectId) return;
 
     setLoading(true);
@@ -278,38 +290,25 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
     setMsg("");
 
     try {
-      await loadPeople();
+      const [peopleData, meData, projectData] = await Promise.all([loadPeople(), loadMe(), loadProject()]);
+      setPeople(peopleData);
+      setMe(meData);
+      setProject(projectData);
 
-      const rMe = await fetch("/api/me-profile", { cache: "no-store" });
-      const jMe = await safeJson(rMe);
-      const m = (jMe?.data ?? jMe) as MeProfile | null;
-      const meObj = rMe.ok && m?.id ? m : null;
-      setMe(meObj);
-
-      const leaderNow = meObj?.role === "LEADER" && meObj?.is_active === true;
-      await loadMembersIfLeader(leaderNow);
-
-      const r1 = await fetch(`/api/projects/${projectId}`, { cache: "no-store" });
-      const j1 = await safeJson(r1);
-
-      if (!r1.ok) {
-        setProject(null);
-        setErr((j1 && (j1.error || j1.message)) || `Load project failed (${r1.status})`);
-        return;
-      }
-
-      const p: Project | null = j1?.data ?? null;
-      setProject(p);
+      const leaderNow = (meData?.role === "LEADER" || meData?.role === "ADMIN") && meData?.is_active === true;
+      const memberData = await loadLeaderMembers(leaderNow);
+      setMembers(memberData);
     } catch (e: any) {
+      setProject(null);
       setErr(e?.message || "Load failed");
     } finally {
       setLoading(false);
     }
-  }
+  }, [loadLeaderMembers, loadMe, loadPeople, loadProject, projectId]);
 
   useEffect(() => {
-    loadAll();
-  }, [projectId]);
+    void loadAll();
+  }, [loadAll]);
 
   async function deleteProject() {
     setErr("");
@@ -454,7 +453,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
               </GhostBtn>
             </>
           )}
-          <GhostBtn onClick={loadAll} disabled={deleting}>
+          <GhostBtn onClick={() => void loadAll()} disabled={deleting}>
             รีเฟรช
           </GhostBtn>
         </div>
@@ -462,9 +461,7 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
 
       <Card>
         <div className="min-w-0">
-          <div className="text-[11px] font-semibold tracking-widest text-white/50 md:text-xs">
-            PROJECT DETAIL
-          </div>
+          <div className="text-[11px] font-semibold tracking-widest text-white/50 md:text-xs">PROJECT DETAIL</div>
 
           <div className="mt-2 flex min-w-0 flex-wrap items-start gap-3">
             <div className="shrink-0">
@@ -484,21 +481,9 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
           </div>
 
           <div className="mt-4 grid grid-cols-3 gap-2 text-white/70 md:gap-3">
-            <InfoMiniCard
-              mobileLabel="Created"
-              desktopLabel="Created"
-              value={formatDateTimeTH(project.created_at)}
-            />
-            <InfoMiniCard
-              mobileLabel="Start"
-              desktopLabel="Start"
-              value={formatDateTH(project.start_date)}
-            />
-            <InfoMiniCard
-              mobileLabel="Due"
-              desktopLabel="Deadline"
-              value={formatDateTimeTH(project.due_date)}
-            />
+            <InfoMiniCard mobileLabel="Created" desktopLabel="Created" value={formatDateTimeTH(project.created_at)} />
+            <InfoMiniCard mobileLabel="Start" desktopLabel="Start" value={formatDateTH(project.start_date)} />
+            <InfoMiniCard mobileLabel="Due" desktopLabel="Deadline" value={formatDateTimeTH(project.due_date)} />
           </div>
 
           <div className="mt-3 grid grid-cols-3 gap-2 text-white/70 md:mt-4 md:gap-3">

@@ -1,7 +1,6 @@
-// app/(app)/projects/page.tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 
@@ -204,7 +203,7 @@ function MobileProjectCard({
           </div>
 
           {secondLine(p) ? (
-            <div className="mt-2 break-words text-xs leading-6 text-white/45 line-clamp-2">{secondLine(p)}</div>
+            <div className="mt-2 line-clamp-2 break-words text-xs leading-6 text-white/45">{secondLine(p)}</div>
           ) : null}
 
           <div className="mt-3 flex flex-wrap gap-2">
@@ -247,7 +246,7 @@ function MobileProjectCard({
           <div className="mt-1 break-words text-sm text-white/85">{formatDateTH(p.start_date)}</div>
         </div>
 
-        <div className="rounded-xl border border-white/10 bg-black/20 p-3 ">
+        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
           <div className="text-[11px] text-white/40">Deadline</div>
           <div className="mt-1 break-words text-sm text-white/85">{formatDateTimeTH(p.due_date)}</div>
         </div>
@@ -277,66 +276,57 @@ export default function ProjectsPage() {
     return m;
   }, [members]);
 
-  async function loadMe() {
-    try {
-      const r = await fetch("/api/me-profile", { cache: "no-store" });
-      const j = await safeJson(r);
-      const me = j?.data ?? j;
-      setIsLeader(me?.role === "LEADER" && me?.is_active === true);
-    } catch {
-      setIsLeader(false);
-    }
-  }
+  const loadMe = useCallback(async () => {
+    const r = await fetch("/api/me-profile", { cache: "no-store" });
+    const j = await safeJson(r);
+    const me = j?.data ?? j;
+    return me?.role === "LEADER" && me?.is_active === true;
+  }, []);
 
-  async function loadProjects() {
+  const loadProjects = useCallback(async () => {
+    const res = await fetch("/api/projects", { cache: "no-store" });
+    const json = await safeJson(res);
+
+    if (!res.ok) {
+      throw new Error((json && (json.error || json.message)) || `Load projects failed (${res.status})`);
+    }
+
+    const raw = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+    return raw
+      .map((p: any) => ({
+        ...p,
+        id: p?.id ?? p?.project_id ?? p?.projectId ?? p?.uuid ?? null,
+      }))
+      .filter((p: any) => !!p.id) as Project[];
+  }, []);
+
+  const loadMembers = useCallback(async () => {
+    const res = await fetch("/api/members", { cache: "no-store" });
+    const json = await safeJson(res);
+    if (!res.ok) return [] as Member[];
+    const data = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+    return data.filter((m: Member) => m.is_active !== false) as Member[];
+  }, []);
+
+  const refreshAll = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/projects", { cache: "no-store" });
-      const json = await safeJson(res);
-
-      if (!res.ok) {
-        setItems([]);
-        setError((json && (json.error || json.message)) || `Load projects failed (${res.status})`);
-        return;
-      }
-
-      const raw = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-
-      const normalized = raw
-        .map((p: any) => ({
-          ...p,
-          id: p?.id ?? p?.project_id ?? p?.projectId ?? p?.uuid ?? null,
-        }))
-        .filter((p: any) => !!p.id);
-
-      setItems(normalized);
+      const [leader, projects, memberList] = await Promise.all([loadMe(), loadProjects(), loadMembers()]);
+      setIsLeader(leader);
+      setItems(projects);
+      setMembers(memberList);
     } catch (e: any) {
       setItems([]);
       setError(e?.message || "Load projects failed");
     } finally {
       setLoading(false);
     }
-  }
-
-  async function loadMembers() {
-    try {
-      const res = await fetch("/api/members", { cache: "no-store" });
-      const json = await safeJson(res);
-      if (!res.ok) return setMembers([]);
-      const data = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-      setMembers(data.filter((m: Member) => m.is_active !== false));
-    } catch {
-      setMembers([]);
-    }
-  }
+  }, [loadMe, loadMembers, loadProjects]);
 
   useEffect(() => {
-    (async () => {
-      await loadMe();
-      await Promise.all([loadProjects(), loadMembers()]);
-    })();
-  }, []);
+    void refreshAll();
+  }, [refreshAll]);
 
   const baseList = useMemo(() => {
     let list = items;
@@ -397,7 +387,6 @@ export default function ProjectsPage() {
       if (!res.ok) {
         setItems(prev);
         alert((json && (json.error || json.message)) || `Delete failed (${res.status})`);
-        return;
       }
     } catch (e: any) {
       setItems(prev);
@@ -456,11 +445,7 @@ export default function ProjectsPage() {
 
         <div className="flex flex-col gap-2 sm:flex-row">
           <button
-            onClick={() => {
-              loadMe();
-              loadProjects();
-              loadMembers();
-            }}
+            onClick={() => void refreshAll()}
             className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
           >
             รีเฟรช
@@ -491,8 +476,7 @@ export default function ProjectsPage() {
                     : "border-white/10 bg-transparent text-white/70 hover:bg-white/10 hover:text-white"
                 }`}
               >
-                {s === "ALL" ? "ทั้งหมด" : s}{" "}
-                <span className={active ? "opacity-80" : "text-white/40"}>({counts[s] ?? 0})</span>
+                {s === "ALL" ? "ทั้งหมด" : s} <span className={active ? "opacity-80" : "text-white/40"}>({counts[s] ?? 0})</span>
               </button>
             );
           })}
@@ -607,7 +591,7 @@ export default function ProjectsPage() {
                                 </Link>
 
                                 {secondLine(p) ? (
-                                  <div className="mt-1 break-words text-xs leading-5 text-white/45 line-clamp-2">
+                                  <div className="mt-1 line-clamp-2 break-words text-xs leading-5 text-white/45">
                                     {secondLine(p)}
                                   </div>
                                 ) : null}
@@ -667,9 +651,7 @@ export default function ProjectsPage() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={async () => {
-          await loadProjects();
-          await loadMembers();
-          await loadMe();
+          await refreshAll();
         }}
         members={members}
       />
@@ -683,7 +665,7 @@ export default function ProjectsPage() {
           onSaved={async () => {
             setEditOpen(false);
             setEditingProject(null);
-            await loadProjects();
+            await refreshAll();
           }}
         />
       )}

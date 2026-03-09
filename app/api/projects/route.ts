@@ -13,6 +13,7 @@ const SELECT_FIELDS = [
   "created_at",
   "start_date",
   "due_date",
+  "product_group",
   "brand",
   "video_priority",
   "video_purpose",
@@ -32,6 +33,7 @@ type ProjectRow = {
   created_at?: string | null;
   start_date?: string | null;
   due_date?: string | null;
+  product_group?: string | null;
   brand?: string | null;
   video_priority?: string | null;
   video_purpose?: string | null;

@@ -9,7 +9,7 @@ import EditProjectModal from "./EditProjectModal";
 type Project = {
   id: string;
   title: string;
-
+  product_group?: string | null;
   code?: string | null;
   project_code?: string | null;
   projectCode?: string | null;
@@ -229,18 +229,18 @@ function MobileProjectCard({
         ) : null}
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+      <div className="mt-4 grid grid-cols-3 gap-2 text-xs sm:grid-cols-3">
+        <div className="rounded-lg border border-white/10 bg-black/20 p-2">
           <div className="text-[11px] text-white/40">ผู้รับผิดชอบ</div>
           <div className="mt-1 break-words text-sm text-white/85">{assigneeName || "-"}</div>
         </div>
 
-        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+        <div className="rounded-lg border border-white/10 bg-black/20 p-2">
           <div className="text-[11px] text-white/40">วันที่เริ่มงาน</div>
           <div className="mt-1 break-words text-sm text-white/85">{formatDateTH(p.start_date)}</div>
         </div>
 
-        <div className="rounded-xl border border-white/10 bg-black/20 p-3 sm:col-span-2">
+        <div className="rounded-xl border border-white/10 bg-black/20 p-3 ">
           <div className="text-[11px] text-white/40">Deadline</div>
           <div className="mt-1 break-words text-sm text-white/85">{formatDateTimeTH(p.due_date)}</div>
         </div>

@@ -8,7 +8,8 @@ type PendingReq = {
   id: string;
   from_status: string;
   to_status: string;
-  status: "PENDING" | "APPROVED" | "REJECTED";
+  status?: "PENDING" | "APPROVED" | "REJECTED";
+  request_status?: "PENDING" | "APPROVED" | "REJECTED";
   created_at?: string | null;
 };
 
@@ -221,22 +222,27 @@ function uiLabelFromDb(db: string) {
   return db;
 }
 
+function getPendingStatus(req?: PendingReq | null) {
+  return req?.request_status || req?.status || null;
+}
+
 function mergePendingState(
   sourceItems: WorkItem[],
   store: Record<string, PendingReq>
 ): WorkItem[] {
   const merged = sourceItems.map((x) => {
-    const apiPending = x.pending_request?.status === "PENDING" ? x.pending_request : null;
+    const apiPending =
+      getPendingStatus(x.pending_request) === "PENDING" ? x.pending_request : null;
 
     if (apiPending) {
       setPendingForProject(x.id, apiPending);
-      return x;
+      return { ...x, pending_request: apiPending };
     }
 
     const localPending = store[x.id];
 
-    if (localPending?.status === "PENDING") {
-      const targetUiStatus = toUiStatus(localPending.to_status);
+    if (getPendingStatus(localPending) === "PENDING") {
+      const targetUiStatus = toUiStatus(localPending!.to_status);
 
       if (x.status === targetUiStatus) {
         removePendingForProject(x.id);
@@ -258,7 +264,7 @@ function mergePendingState(
     }
 
     const localPending = store[pid];
-    if (localPending?.status === "PENDING") {
+    if (getPendingStatus(localPending) === "PENDING") {
       const targetUiStatus = toUiStatus(localPending.to_status);
 
       if (stillExists.status === targetUiStatus) {
@@ -462,7 +468,7 @@ export default function MyWorkPage() {
     const target = items.find((x) => x.id === projectId);
     if (!target) return false;
 
-    if (target.pending_request?.status === "PENDING") {
+    if (getPendingStatus(target.pending_request) === "PENDING") {
       showToast("มีคำขอรออนุมัติอยู่แล้ว");
       return false;
     }
@@ -479,7 +485,7 @@ export default function MyWorkPage() {
       id: "temp",
       from_status: fromDb,
       to_status: toDb,
-      status: "PENDING",
+      request_status: "PENDING",
       created_at: new Date().toISOString(),
     };
 
@@ -520,6 +526,7 @@ export default function MyWorkPage() {
           id: reqRow.id,
           from_status: reqRow.from_status,
           to_status: reqRow.to_status,
+          request_status: reqRow.request_status || reqRow.status,
           status: reqRow.status,
           created_at: reqRow.created_at ?? null,
         };
@@ -723,7 +730,6 @@ export default function MyWorkPage() {
           </div>
         ) : (
           <>
-            {/* Mobile / Tablet cards */}
             <div className="mt-6 space-y-3 lg:hidden">
               {filtered.length === 0 ? (
                 <div className="rounded-[24px] border border-white/10 bg-white/5 p-5 text-sm text-white/50">
@@ -731,7 +737,8 @@ export default function MyWorkPage() {
                 </div>
               ) : (
                 filtered.map((w) => {
-                  const pending = w.pending_request?.status === "PENDING" ? w.pending_request : null;
+                  const pending = getPendingStatus(w.pending_request) === "PENDING" ? w.pending_request : null;
+
                   return (
                     <MobileWorkCard
                       key={w.id}
@@ -745,7 +752,6 @@ export default function MyWorkPage() {
               )}
             </div>
 
-            {/* Desktop table */}
             <div className="mt-6 hidden overflow-visible rounded-[30px] border border-white/10 bg-white/5 lg:block">
               <div className="w-full overflow-x-auto overflow-y-visible rounded-[30px]">
                 <table className="min-w-[980px] w-full overflow-visible">
@@ -761,7 +767,7 @@ export default function MyWorkPage() {
 
                   <tbody className="divide-y divide-white/10 overflow-visible">
                     {filtered.map((w) => {
-                      const pending = w.pending_request?.status === "PENDING" ? w.pending_request : null;
+                      const pending = getPendingStatus(w.pending_request) === "PENDING" ? w.pending_request : null;
 
                       return (
                         <tr key={w.id} className="hover:bg-white/[0.03] overflow-visible">

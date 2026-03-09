@@ -7,12 +7,17 @@ import { supabaseBrowser } from "@/utils/supabase/client";
 
 type NavItem = { label: string; href: string };
 
+type SidebarProps = {
+  mobile?: boolean;
+  onNavigate?: () => void;
+};
+
 async function safeJson(res: Response) {
   const t = await res.text();
   return t ? JSON.parse(t) : null;
 }
 
-export default function Sidebar() {
+export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -57,8 +62,12 @@ export default function Sidebar() {
   const isActive = useCallback((href: string) => pathname === href, [pathname]);
 
   const handleNavClick = useCallback(() => {
+    if (mobile) {
+      onNavigate?.();
+      return;
+    }
     setOpenProjects(false);
-  }, []);
+  }, [mobile, onNavigate]);
 
   async function logout() {
     try {
@@ -87,7 +96,11 @@ export default function Sidebar() {
       <div className="mb-6 h-px w-full bg-white/10" />
 
       <nav className="flex flex-1 flex-col gap-2 overflow-y-auto pr-1">
-        <Link className={`${baseBtn} ${isActive("/dashboard") ? activeBtn : idleBtn}`} href="/dashboard" onClick={handleNavClick}>
+        <Link
+          className={`${baseBtn} ${isActive("/dashboard") ? activeBtn : idleBtn}`}
+          href="/dashboard"
+          onClick={handleNavClick}
+        >
           DASHBOARD
         </Link>
 
@@ -97,8 +110,12 @@ export default function Sidebar() {
           className={`${baseBtn} ${shouldOpenProjects ? activeBtn : idleBtn} text-left`}
         >
           PROJECT
-          <span className="ml-auto text-xs opacity-70 transition-transform duration-200">
-            {openProjects ? "▾" : "▸"}
+          <span
+            className={`ml-auto text-xs opacity-70 transition-transform duration-200 ${
+              openProjects ? "rotate-90" : "rotate-0"
+            }`}
+          >
+            ▸
           </span>
         </button>
 
@@ -123,16 +140,28 @@ export default function Sidebar() {
           </div>
         </div>
 
-        <Link className={`${baseBtn} ${isActive("/my-work") ? activeBtn : idleBtn}`} href="/my-work" onClick={handleNavClick}>
+        <Link
+          className={`${baseBtn} ${isActive("/my-work") ? activeBtn : idleBtn}`}
+          href="/my-work"
+          onClick={handleNavClick}
+        >
           MY WORK
         </Link>
 
-        <Link className={`${baseBtn} ${isActive("/members") ? activeBtn : idleBtn}`} href="/members" onClick={handleNavClick}>
+        <Link
+          className={`${baseBtn} ${isActive("/members") ? activeBtn : idleBtn}`}
+          href="/members"
+          onClick={handleNavClick}
+        >
           MEMBERS
         </Link>
 
         {isLeader && (
-          <Link className={`${baseBtn} ${isActive("/approvals") ? activeBtn : idleBtn}`} href="/approvals" onClick={handleNavClick}>
+          <Link
+            className={`${baseBtn} ${isActive("/approvals") ? activeBtn : idleBtn}`}
+            href="/approvals"
+            onClick={handleNavClick}
+          >
             APPROVALS
           </Link>
         )}

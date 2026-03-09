@@ -8,10 +8,6 @@ function getFirebaseAdmin() {
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
-  console.log("[FCM] FIREBASE_PROJECT_ID =", projectId);
-  console.log("[FCM] FIREBASE_CLIENT_EMAIL =", clientEmail);
-  console.log("[FCM] FIREBASE_PRIVATE_KEY exists =", !!privateKey);
-
   if (!projectId || !clientEmail || !privateKey) {
     throw new Error("Missing Firebase Admin env");
   }
@@ -42,22 +38,21 @@ export async function sendPushToUser({
 
   const { data, error } = await supabase
     .from("push_tokens")
-    .select("token")
+    .select("user_id, token, platform")
     .eq("user_id", userId);
 
-  if (error) {
-    console.error("[FCM] push_tokens query error:", error);
-    throw new Error(error.message);
-  }
+  console.log("[PUSH] userId =", userId);
+  console.log("[PUSH] raw rows =", data);
+  console.log("[PUSH] error =", error);
+
+  if (error) throw new Error(error.message);
 
   const tokens = (data ?? []).map((x: any) => x.token).filter(Boolean);
 
-  console.log("[FCM] userId =", userId);
-  console.log("[FCM] tokens found =", tokens.length);
+  console.log("[PUSH] tokens =", tokens);
+  console.log("[PUSH] token count =", tokens.length);
 
-  if (tokens.length === 0) {
-    return { ok: true, sent: 0 };
-  }
+  if (tokens.length === 0) return { ok: true, sent: 0 };
 
   const result = await admin.messaging().sendEachForMulticast({
     tokens,
@@ -83,14 +78,12 @@ export async function sendPushToUser({
     },
   });
 
-  console.log("[FCM] successCount =", result.successCount);
-  console.log("[FCM] failureCount =", result.failureCount);
+  console.log("[PUSH] successCount =", result.successCount);
   console.log(
-    "[FCM] responses =",
+    "[PUSH] responses =",
     result.responses.map((r) => ({
       success: r.success,
-      error: r.error ? String(r.error.message || r.error) : null,
-      code: (r.error as any)?.code || null,
+      error: (r.error as any)?.code || (r.error as any)?.message || null,
     }))
   );
 
@@ -109,7 +102,6 @@ export async function sendPushToUser({
 
   if (invalidTokens.length > 0) {
     await supabase.from("push_tokens").delete().in("token", invalidTokens);
-    console.log("[FCM] removed invalid tokens =", invalidTokens.length);
   }
 
   return { ok: true, sent: result.successCount };

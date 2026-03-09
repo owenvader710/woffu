@@ -737,18 +737,21 @@ export default function MyWorkPage() {
                 </div>
               ) : (
                 filtered.map((w) => {
-                  const pending = getPendingStatus(w.pending_request) === "PENDING" ? w.pending_request : null;
+  const pending: PendingReq | null =
+    getPendingStatus(w.pending_request) === "PENDING"
+      ? (w.pending_request ?? null)
+      : null;
 
-                  return (
-                    <MobileWorkCard
-                      key={w.id}
-                      w={w}
-                      pending={pending}
-                      onBlocked={openBlockedModal}
-                      onChange={requestStatusChange}
-                    />
-                  );
-                })
+  return (
+    <MobileWorkCard
+      key={w.id}
+      w={w}
+      pending={pending}
+      onBlocked={openBlockedModal}
+      onChange={requestStatusChange}
+    />
+  );
+})
               )}
             </div>
 
@@ -767,10 +770,13 @@ export default function MyWorkPage() {
 
                   <tbody className="divide-y divide-white/10 overflow-visible">
                     {filtered.map((w) => {
-                      const pending = getPendingStatus(w.pending_request) === "PENDING" ? w.pending_request : null;
+  const pending: PendingReq | null =
+    getPendingStatus(w.pending_request) === "PENDING"
+      ? (w.pending_request ?? null)
+      : null;
 
-                      return (
-                        <tr key={w.id} className="hover:bg-white/[0.03] overflow-visible">
+  return (
+    <tr key={w.id} className="hover:bg-white/[0.03] overflow-visible">
                           <td className="px-6 py-5">
                             <div className="flex items-start gap-3">
                               <span className="mt-[2px] inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-extrabold text-white/85">

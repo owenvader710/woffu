@@ -3,7 +3,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import EditProjectModal from "../EditProjectModal";
+import dynamic from "next/dynamic";
+
+const EditProjectModal = dynamic(() => import("../EditProjectModal"), {
+  loading: () => null,
+});
 
 type ProfileMini = {
   id: string;

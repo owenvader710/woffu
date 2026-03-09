@@ -2,8 +2,15 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
-import AvatarCropModal from "./AvatarCropModal";
-import EditMemberModal from "./EditMemberModal";
+import dynamic from "next/dynamic";
+
+const AvatarCropModal = dynamic(() => import("./AvatarCropModal"), {
+  loading: () => null,
+});
+
+const EditMemberModal = dynamic(() => import("./EditMemberModal"), {
+  loading: () => null,
+});
 
 type Dept = "VIDEO" | "GRAPHIC" | "ALL";
 type Role = "LEADER" | "MEMBER";

@@ -3,8 +3,15 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import CreateProjectModal from "./CreateProjectModal";
-import EditProjectModal from "./EditProjectModal";
+import dynamic from "next/dynamic";
+
+const CreateProjectModal = dynamic(() => import("./CreateProjectModal"), {
+  loading: () => null,
+});
+
+const EditProjectModal = dynamic(() => import("./EditProjectModal"), {
+  loading: () => null,
+});
 
 type Project = {
   id: string;

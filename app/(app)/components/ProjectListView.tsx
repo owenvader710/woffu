@@ -19,6 +19,7 @@ type Project = {
   video_purpose?: string | null;
   graphic_job_type?: string | null;
   blocked_reason?: string | null;
+  completed_at?: string | null;
 };
 
 type Member = {
@@ -27,27 +28,6 @@ type Member = {
   department: "VIDEO" | "GRAPHIC" | "ALL";
   role: "LEADER" | "MEMBER";
   is_active: boolean;
-};
-
-type ProjectLog = {
-  id: string;
-  project_id: string;
-  action?: string | null;
-  message?: string | null;
-  meta?: any | null;
-  detail?: any | null;
-  created_at?: string | null;
-};
-
-type StatusRequest = {
-  id: string;
-  project_id: string;
-  from_status: string;
-  to_status: string;
-  request_status?: "PENDING" | "APPROVED" | "REJECTED";
-  status?: "PENDING" | "APPROVED" | "REJECTED";
-  created_at: string;
-  approved_at?: string | null;
 };
 
 async function safeJson(res: Response) {
@@ -115,28 +95,6 @@ function Pill({
 
 export type ProjectListMode = "ACTIVE" | "COMPLETED" | "BLOCKED";
 
-function extractBlockedReason(logs: ProjectLog[]): string | null {
-  for (const log of logs) {
-    const metaReason =
-      typeof log?.meta?.blocked_reason === "string" ? log.meta.blocked_reason.trim() : "";
-    if (metaReason) return metaReason;
-
-    const detailReason =
-      typeof log?.detail?.blocked_reason === "string" ? log.detail.blocked_reason.trim() : "";
-    if (detailReason) return detailReason;
-
-    const msg = typeof log?.message === "string" ? log.message : "";
-    const marker = "blocked_reason:";
-    const idx = msg.toLowerCase().indexOf(marker);
-    if (idx >= 0) {
-      const text = msg.slice(idx + marker.length).trim();
-      if (text) return text;
-    }
-  }
-
-  return null;
-}
-
 function makeCode(p: Project) {
   const real = (p.code ?? "").toString().trim();
   if (real) return real;
@@ -160,21 +118,19 @@ function secondLine(p: Project) {
 function MobileProjectCard({
   p,
   assigneeName,
-  blockedReason,
-  completedApprovedAt,
   mode,
 }: {
   p: Project;
   assigneeName: string;
-  blockedReason?: string;
-  completedApprovedAt?: string;
   mode: ProjectListMode;
 }) {
   const middleLabel = mode === "COMPLETED" ? "Deadline" : "วันที่สั่ง";
-  const middleValue = mode === "COMPLETED" ? formatDateTimeTH(p.due_date) : formatDateTH(p.created_at);
+  const middleValue =
+    mode === "COMPLETED" ? formatDateTimeTH(p.due_date) : formatDateTH(p.created_at);
 
   const lastLabel = mode === "COMPLETED" ? "วันที่เสร็จ" : "Deadline";
-  const lastValue = mode === "COMPLETED" ? formatDateTimeTH(completedApprovedAt) : formatDateTimeTH(p.due_date);
+  const lastValue =
+    mode === "COMPLETED" ? formatDateTimeTH(p.completed_at) : formatDateTimeTH(p.due_date);
 
   return (
     <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
@@ -223,9 +179,9 @@ function MobileProjectCard({
         </div>
       </div>
 
-      {mode === "BLOCKED" && blockedReason ? (
+      {mode === "BLOCKED" && p.blocked_reason ? (
         <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-3 text-xs leading-6 text-red-100">
-          <span className="font-extrabold">รายละเอียดปัญหา:</span> {blockedReason}
+          <span className="font-extrabold">รายละเอียดปัญหา:</span> {p.blocked_reason}
         </div>
       ) : null}
     </div>
@@ -241,8 +197,6 @@ export default function ProjectListView({
 }) {
   const [items, setItems] = useState<Project[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
-  const [blockedReasons, setBlockedReasons] = useState<Record<string, string>>({});
-  const [completedDates, setCompletedDates] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
@@ -271,6 +225,8 @@ export default function ProjectListView({
         .map((p: any) => ({
           ...p,
           id: p?.id ?? p?.project_id ?? p?.projectId ?? p?.uuid ?? null,
+          blocked_reason: p?.blocked_reason ?? null,
+          completed_at: p?.completed_at ?? null,
         }))
         .filter((p: any) => !!p.id);
 
@@ -302,99 +258,6 @@ export default function ProjectListView({
     void Promise.all([loadProjects(), loadMembers()]);
   }, []);
 
-  useEffect(() => {
-    if (mode !== "BLOCKED") return;
-
-    const blockedItems = items.filter((p) => p.status === "BLOCKED");
-    if (blockedItems.length === 0) {
-      setBlockedReasons({});
-      return;
-    }
-
-    let cancelled = false;
-
-    void (async () => {
-      const entries = await Promise.all(
-        blockedItems.map(async (p) => {
-          try {
-            const res = await fetch(`/api/projects/${encodeURIComponent(p.id)}/logs`, {
-              cache: "no-store",
-            });
-            const json = await safeJson(res);
-            const logs = Array.isArray(json?.data) ? (json.data as ProjectLog[]) : [];
-            const reason = extractBlockedReason(logs);
-            return [p.id, reason || ""] as const;
-          } catch {
-            return [p.id, ""] as const;
-          }
-        })
-      );
-
-      if (cancelled) return;
-
-      const next: Record<string, string> = {};
-      for (const [id, reason] of entries) {
-        if (reason) next[id] = reason;
-      }
-      setBlockedReasons(next);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [items, mode]);
-
-  useEffect(() => {
-    if (mode !== "COMPLETED") return;
-
-    const completedItems = items.filter((p) => p.status === "COMPLETED");
-    if (completedItems.length === 0) {
-      setCompletedDates({});
-      return;
-    }
-
-    let cancelled = false;
-
-    void (async () => {
-      const entries = await Promise.all(
-        completedItems.map(async (p) => {
-          try {
-            const res = await fetch(`/api/projects/${encodeURIComponent(p.id)}/status-requests`, {
-              cache: "no-store",
-            });
-            const json = await safeJson(res);
-            const rows = Array.isArray(json?.data) ? (json.data as StatusRequest[]) : [];
-
-            const completedApproved = [...rows]
-              .filter((r) => r.to_status === "COMPLETED")
-              .filter((r) => r.request_status === "APPROVED" || r.status === "APPROVED")
-              .sort(
-                (a, b) =>
-                  new Date(b.approved_at || b.created_at || 0).getTime() -
-                  new Date(a.approved_at || a.created_at || 0).getTime()
-              )[0];
-
-            return [p.id, completedApproved?.approved_at || completedApproved?.created_at || ""] as const;
-          } catch {
-            return [p.id, ""] as const;
-          }
-        })
-      );
-
-      if (cancelled) return;
-
-      const next: Record<string, string> = {};
-      for (const [id, approvedAt] of entries) {
-        if (approvedAt) next[id] = approvedAt;
-      }
-      setCompletedDates(next);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [items, mode]);
-
   const filteredItems = useMemo(() => {
     let list = items;
 
@@ -406,8 +269,8 @@ export default function ProjectListView({
       const needle = q.trim().toLowerCase();
       list = list.filter((p) => {
         const assigneeName = p.assignee_id ? memberMap.get(p.assignee_id)?.display_name ?? "" : "";
-        const blockedReason = blockedReasons[p.id] ?? "";
-        const completedAt = completedDates[p.id] ?? "";
+        const blockedReason = p.blocked_reason ?? "";
+        const completedAt = p.completed_at ?? "";
         const hay =
           `${p.title ?? ""} ${p.brand ?? ""} ${p.video_priority ?? ""} ${p.video_purpose ?? ""} ` +
           `${p.graphic_job_type ?? ""} ${assigneeName} ${blockedReason} ${completedAt} ${p.code ?? ""}`.toLowerCase();
@@ -416,7 +279,7 @@ export default function ProjectListView({
     }
 
     return list;
-  }, [items, q, memberMap, mode, blockedReasons, completedDates]);
+  }, [items, q, memberMap, mode]);
 
   return (
     <div>
@@ -471,16 +334,12 @@ export default function ProjectListView({
             ) : (
               filteredItems.map((p) => {
                 const assigneeName = p.assignee_id ? memberMap.get(p.assignee_id)?.display_name ?? "-" : "-";
-                const blockedReason = blockedReasons[p.id] ?? "";
-                const completedApprovedAt = completedDates[p.id] ?? "";
 
                 return (
                   <MobileProjectCard
                     key={p.id}
                     p={p}
                     assigneeName={assigneeName}
-                    blockedReason={blockedReason}
-                    completedApprovedAt={completedApprovedAt}
                     mode={mode}
                   />
                 );
@@ -514,8 +373,6 @@ export default function ProjectListView({
                       const assigneeName = p.assignee_id
                         ? memberMap.get(p.assignee_id)?.display_name ?? "-"
                         : "-";
-                      const blockedReason = blockedReasons[p.id];
-                      const completedApprovedAt = completedDates[p.id] ?? "";
 
                       return (
                         <tr key={p.id} className="border-t border-white/10 align-top hover:bg-white/[0.06]">
@@ -537,9 +394,9 @@ export default function ProjectListView({
                                   <div className="mt-1 text-xs text-white/45">{secondLine(p)}</div>
                                 ) : null}
 
-                                {mode === "BLOCKED" && blockedReason ? (
+                                {mode === "BLOCKED" && p.blocked_reason ? (
                                   <div className="mt-3 max-w-[560px] rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-6 text-red-100">
-                                    <span className="font-extrabold">รายละเอียดปัญหา:</span> {blockedReason}
+                                    <span className="font-extrabold">รายละเอียดปัญหา:</span> {p.blocked_reason}
                                   </div>
                                 ) : null}
                               </div>
@@ -563,7 +420,7 @@ export default function ProjectListView({
                           </td>
                           <td className="p-4 text-white/60">
                             {mode === "COMPLETED"
-                              ? formatDateTimeTH(completedApprovedAt)
+                              ? formatDateTimeTH(p.completed_at)
                               : formatDateTimeTH(p.due_date)}
                           </td>
                         </tr>

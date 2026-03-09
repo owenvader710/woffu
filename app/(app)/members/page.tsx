@@ -483,7 +483,7 @@ export default function MembersPage() {
     <div className="w-full bg-black text-white">
       <div className="w-full px-4 py-6 md:px-6 md:py-8 lg:px-10 lg:py-10">
         <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/5 to-white/[0.03] p-4 shadow-[0_25px_80px_rgba(0,0,0,0.55)] md:rounded-[34px] md:p-6">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[220px_1fr] xl:grid-cols-[260px_1fr] lg:gap-8">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr] xl:grid-cols-[320px_1fr] lg:gap-8">
             <div className="flex flex-col items-center gap-3">
               <div className="w-full">
                 <div className="text-xs font-semibold tracking-widest text-white/50">MY PROFILE</div>
@@ -491,46 +491,48 @@ export default function MembersPage() {
 
               <div className="mt-2 md:mt-4">
                 <Avatar
-                  url={me?.avatar_url ?? null}
-                  name={me?.display_name ?? me?.email ?? null}
-                  size={128}
-                />
+  url={me?.avatar_url ?? null}
+  name={me?.display_name ?? me?.email ?? null}
+  size={210}
+/>
               </div>
 
-              <div className="mt-3 w-full max-w-[220px]">
-                <label
-                  className={cn(
-                    "flex w-full cursor-pointer items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10",
-                    savingAvatar ? "opacity-60 pointer-events-none" : ""
-                  )}
-                  title={savingAvatar ? "กำลังอัปโหลด..." : "อัปโหลดรูปโปรไฟล์"}
-                >
-                  {savingAvatar ? "กำลังอัปโหลด..." : "อัปโหลดรูป"}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0] ?? null;
-                      if (!f) return;
-                      setCropFile(f);
-                      setCropOpen(true);
-                      e.currentTarget.value = "";
-                    }}
-                  />
-                </label>
+              <div className="mt-3 flex w-full max-w-[260px] gap-2">
+  <label
+    className={cn(
+      "flex flex-1 cursor-pointer items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white/85 hover:bg-white/10",
+      savingAvatar ? "pointer-events-none opacity-60" : ""
+    )}
+    title={savingAvatar ? "กำลังอัปโหลด..." : "อัปโหลดรูปโปรไฟล์"}
+  >
+    <span className="truncate">
+      {savingAvatar ? "กำลังอัปโหลด..." : "อัปโหลดรูป"}
+    </span>
+    <input
+      type="file"
+      accept="image/*"
+      className="hidden"
+      onChange={(e) => {
+        const f = e.target.files?.[0] ?? null;
+        if (!f) return;
+        setCropFile(f);
+        setCropOpen(true);
+        e.currentTarget.value = "";
+      }}
+    />
+  </label>
 
-                <button
-                  onClick={() => {
-                    loadMe();
-                    loadMembers();
-                  }}
-                  disabled={loading}
-                  className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50"
-                >
-                  รีเฟรช
-                </button>
-              </div>
+  <button
+    onClick={() => {
+      loadMe();
+      loadMembers();
+    }}
+    disabled={loading}
+    className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50"
+  >
+    รีเฟรช
+  </button>
+</div>
             </div>
 
             <div className="min-w-0">

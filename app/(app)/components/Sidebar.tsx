@@ -14,6 +14,11 @@ type MeProfile = {
   is_active?: boolean;
 };
 
+type SidebarProps = {
+  mobile?: boolean;
+  onNavigate?: () => void;
+};
+
 async function safeJson(res: Response) {
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -23,7 +28,10 @@ function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-export default function Sidebar() {
+export default function Sidebar({
+  mobile = false,
+  onNavigate,
+}: SidebarProps) {
   const pathname = usePathname();
   const [me, setMe] = useState<MeProfile | null>(null);
   const [isProjectOpen, setIsProjectOpen] = useState(false);
@@ -56,6 +64,10 @@ export default function Sidebar() {
     }
   }, [pathname]);
 
+  function handleNavigate() {
+    onNavigate?.();
+  }
+
   const projectActive =
     pathname?.startsWith("/projects") ||
     pathname === "/completed" ||
@@ -78,10 +90,23 @@ export default function Sidebar() {
     );
 
   return (
-    <aside className="h-full w-full shrink-0 lg:sticky lg:top-0 lg:h-screen lg:w-[320px] lg:p-5">
-      <div className="flex h-full flex-col border-white/10 bg-[#0a0a0a] bg-gradient-to-b from-white/5 to-transparent lg:rounded-[40px] lg:border lg:shadow-2xl">
+    <aside
+      className={
+        mobile
+          ? "h-full w-full"
+          : "h-full w-full shrink-0 lg:sticky lg:top-0 lg:h-screen lg:w-[320px] lg:p-5"
+      }
+    >
+      <div
+        className={cn(
+          "flex h-full flex-col bg-[#0a0a0a] bg-gradient-to-b from-white/5 to-transparent transition-all duration-300",
+          mobile
+            ? "border-none shadow-none"
+            : "border border-white/10 lg:rounded-[40px] lg:shadow-2xl"
+        )}
+      >
         <div className="px-5 pt-5 sm:px-6 sm:pt-6 lg:px-10 lg:pt-12">
-          <div className="text-[30px] font-black tracking-tighter leading-none text-[#e5ff78] lg:text-3xl">
+          <div className="text-[30px] leading-none font-black tracking-tighter text-[#e5ff78] lg:text-3xl">
             WOFFU OS
           </div>
           <div className="mt-2 text-[9px] font-bold uppercase tracking-[0.28em] text-white/28 sm:text-[10px] lg:mt-1 lg:text-[10px] lg:tracking-[0.3em]">
@@ -101,7 +126,11 @@ export default function Sidebar() {
         </div>
 
         <nav className="mt-6 flex-1 space-y-2 overflow-y-auto px-4 pb-6 sm:px-5 lg:mt-12 lg:px-6">
-          <Link href="/dashboard" className={linkCls(pathname === "/dashboard")}>
+          <Link
+            href="/dashboard"
+            onClick={handleNavigate}
+            className={linkCls(pathname === "/dashboard")}
+          >
             <span>DASHBOARD</span>
           </Link>
 
@@ -112,38 +141,80 @@ export default function Sidebar() {
               className={cn(linkCls(projectActive), "w-full text-left")}
             >
               <span>PROJECT</span>
-              <span className="text-[10px] opacity-55">{isProjectOpen ? "▲" : "▼"}</span>
+              <span
+                className={cn(
+                  "text-[10px] opacity-55 transition-transform duration-300",
+                  isProjectOpen ? "rotate-0" : "-rotate-90"
+                )}
+              >
+                ▼
+              </span>
             </button>
 
-            {isProjectOpen ? (
-              <div className="space-y-1 py-1">
-                <Link href="/projects" className={subLinkCls(pathname === "/projects")}>
-                  ALL PROJECT
-                </Link>
-                <Link href="/completed" className={subLinkCls(pathname === "/completed")}>
-                  COMPLETED
-                </Link>
-                <Link href="/blocked" className={subLinkCls(pathname === "/blocked")}>
-                  BLOCKED
-                </Link>
+            <div
+              className={cn(
+                "grid overflow-hidden transition-all duration-300 ease-out",
+                isProjectOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+              )}
+            >
+              <div className="min-h-0">
+                <div className="space-y-1 py-1">
+                  <Link
+                    href="/projects"
+                    onClick={handleNavigate}
+                    className={subLinkCls(pathname === "/projects")}
+                  >
+                    ALL PROJECT
+                  </Link>
+                  <Link
+                    href="/completed"
+                    onClick={handleNavigate}
+                    className={subLinkCls(pathname === "/completed")}
+                  >
+                    COMPLETED
+                  </Link>
+                  <Link
+                    href="/blocked"
+                    onClick={handleNavigate}
+                    className={subLinkCls(pathname === "/blocked")}
+                  >
+                    BLOCKED
+                  </Link>
+                </div>
               </div>
-            ) : null}
+            </div>
           </div>
 
-          <Link href="/my-work" className={linkCls(pathname === "/my-work")}>
+          <Link
+            href="/my-work"
+            onClick={handleNavigate}
+            className={linkCls(pathname === "/my-work")}
+          >
             <span>MY WORK</span>
           </Link>
 
-          <Link href="/team-notices" className={linkCls(pathname === "/team-notices")}>
+          <Link
+            href="/team-notices"
+            onClick={handleNavigate}
+            className={linkCls(pathname === "/team-notices")}
+          >
             <span>TEAM NOTICES</span>
           </Link>
 
-          <Link href="/members" className={linkCls(pathname === "/members")}>
+          <Link
+            href="/members"
+            onClick={handleNavigate}
+            className={linkCls(pathname === "/members")}
+          >
             <span>MEMBERS</span>
           </Link>
 
           {isLeader ? (
-            <Link href="/approvals" className={linkCls(pathname === "/approvals")}>
+            <Link
+              href="/approvals"
+              onClick={handleNavigate}
+              className={linkCls(pathname === "/approvals")}
+            >
               <span>APPROVALS</span>
             </Link>
           ) : null}

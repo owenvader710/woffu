@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseFromRequest } from "@/utils/supabase/api";
+import { createSupabaseAdmin } from "@/app/api/_supabaseAdmin";
+import { sendPushToUser } from "@/app/api/_push";
 
 async function getParamId(
   req: NextRequest,
@@ -16,6 +18,23 @@ async function getParamId(
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
+
+function statusLabel(status: string) {
+  switch (status) {
+    case "PRE_ORDER":
+      return "งานล่วงหน้า";
+    case "TODO":
+      return "รอเริ่ม";
+    case "IN_PROGRESS":
+      return "กำลังทำ";
+    case "COMPLETED":
+      return "เสร็จแล้ว";
+    case "BLOCKED":
+      return "ติดปัญหา";
+    default:
+      return status;
+  }
 }
 
 export async function POST(
@@ -37,7 +56,8 @@ export async function POST(
       return NextResponse.json({ error: "Invalid project id" }, { status: 400 });
     }
 
-    const { supabase, applyCookies } = supabaseFromRequest(req);
+    const { supabase, applyCookies } = await supabaseFromRequest(req);
+    const admin = createSupabaseAdmin();
 
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
@@ -77,6 +97,16 @@ export async function POST(
         { status: 200 }
       );
       return applyCookies(res);
+    }
+
+    const { data: projectRow, error: projectErr } = await supabase
+      .from("projects")
+      .select("id, title, department")
+      .eq("id", projectId)
+      .single();
+
+    if (projectErr) {
+      return NextResponse.json({ error: projectErr.message }, { status: 400 });
     }
 
     const insertPayload: Record<string, any> = {
@@ -121,6 +151,61 @@ export async function POST(
 
     if (logErr) {
       return NextResponse.json({ error: `Log insert failed: ${logErr.message}` }, { status: 400 });
+    }
+
+    // ===== แจ้งเตือนหัวหน้า =====
+    try {
+      const { data: leaders, error: leaderErr } = await admin
+        .from("profiles")
+        .select("id, role, is_active")
+        .in("role", ["LEADER", "ADMIN"])
+        .eq("is_active", true);
+
+      if (!leaderErr && leaders && leaders.length > 0) {
+        const targetLeaderIds = leaders
+          .map((x: any) => x.id)
+          .filter((id: string) => !!id && id !== user.id);
+
+        if (targetLeaderIds.length > 0) {
+          const projectTitle = projectRow?.title || "โปรเจกต์ไม่มีชื่อ";
+          const readableFrom = statusLabel(from_status);
+          const readableTo = statusLabel(to_status);
+
+          const notifTitle = "มีคำขอเปลี่ยนสถานะใหม่";
+          const notifMessage =
+            to_status === "BLOCKED" && blocked_reason
+              ? `${projectTitle} • ${readableFrom} → ${readableTo} • เหตุผล: ${blocked_reason}`
+              : `${projectTitle} • ${readableFrom} → ${readableTo}`;
+
+          const notifLink = "/approvals";
+
+          try {
+            await admin.from("notifications").insert(
+              targetLeaderIds.map((leaderId: string) => ({
+                user_id: leaderId,
+                type: "STATUS_CHANGE_REQUESTED",
+                title: notifTitle,
+                message: notifMessage,
+                link: notifLink,
+                is_read: false,
+              }))
+            );
+          } catch {}
+
+          await Promise.allSettled(
+            targetLeaderIds.map((leaderId: string) =>
+              sendPushToUser({
+                userId: leaderId,
+                title: notifTitle,
+                message: notifMessage,
+                url: notifLink,
+              })
+            )
+          );
+        }
+      }
+    } catch {
+      // ไม่ให้ notification ทำให้ request-status ล้ม
     }
 
     const res = NextResponse.json(

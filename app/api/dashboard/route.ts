@@ -78,12 +78,7 @@ export async function GET(req: NextRequest) {
 
     const isLeader = me.role === "LEADER" || me.role === "ADMIN";
 
-    const [
-      projectsRes,
-      membersRes,
-      approvalsRes,
-      noticesRes,
-    ] = await Promise.all([
+    const [projectsRes, membersRes, approvalsRes, noticesRes] = await Promise.all([
       supabase
         .from("projects")
         .select(
@@ -156,14 +151,23 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: noticesRes.error.message }, { status: 400 });
     }
 
-    const projects = (projectsRes.data ?? []) as ProjectRow[];
-    const members = (membersRes.data ?? []) as MemberRow[];
-    const approvals = ((approvalsRes as any)?.data ?? []) as ApprovalRow[];
-    const notices = (noticesRes.data ?? []) as NoticeRow[];
+    const projects = Array.isArray(projectsRes.data)
+      ? (projectsRes.data as unknown as ProjectRow[])
+      : [];
 
-    const activeProjects = projects.filter(
-      (p) => p.status !== "COMPLETED"
-    );
+    const members = Array.isArray(membersRes.data)
+      ? (membersRes.data as unknown as MemberRow[])
+      : [];
+
+    const approvals = Array.isArray((approvalsRes as any)?.data)
+      ? ((approvalsRes as any).data as unknown as ApprovalRow[])
+      : [];
+
+    const notices = Array.isArray(noticesRes.data)
+      ? (noticesRes.data as unknown as NoticeRow[])
+      : [];
+
+    const activeProjects = projects.filter((p) => p.status !== "COMPLETED");
 
     const projectCounts = {
       total: activeProjects.length,

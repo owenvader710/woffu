@@ -29,14 +29,6 @@ type Project = {
   assignee_id?: string | null;
 };
 
-type Member = {
-  id: string;
-  display_name?: string | null;
-  department?: "VIDEO" | "GRAPHIC" | "ALL" | string | null;
-  role?: "LEADER" | "MEMBER" | "ADMIN" | string | null;
-  is_active?: boolean;
-};
-
 type ApprovalItem = {
   id: string;
   project_id: string;
@@ -57,6 +49,37 @@ type DashboardNotice = {
   notice_type?: string | null;
   is_pinned?: boolean | null;
   created_at?: string | null;
+};
+
+type WorkloadItem = {
+  id: string;
+  name: string;
+  department: string;
+  count: number;
+};
+
+type DashboardPayload = {
+  me: MeProfile | null;
+  summary: {
+    projectCounts: {
+      total: number;
+      preOrder: number;
+      todo: number;
+      inProgress: number;
+      blocked: number;
+      completed: number;
+      progressPercent: number;
+    };
+  };
+  sections: {
+    approvals: ApprovalItem[];
+    notices: DashboardNotice[];
+    myIncompleteLatest: Project[];
+    queuePreOrder: Project[];
+    latestGraphic: Project[];
+    latestVideo: Project[];
+    workload: WorkloadItem[];
+  };
 };
 
 async function safeJson(res: Response) {
@@ -242,14 +265,14 @@ function ProjectMiniList({
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="break-words text-sm font-semibold leading-6 text-white line-clamp-2 md:text-base">
+              <div className="line-clamp-2 break-words text-sm font-semibold leading-6 text-white md:text-base">
                 {p.title || "-"}
               </div>
             </div>
           </div>
 
           {secondLine(p) ? (
-            <div className="mt-1 break-words text-xs leading-5 text-white/45 line-clamp-2">
+            <div className="mt-1 line-clamp-2 break-words text-xs leading-5 text-white/45">
               {secondLine(p)}
             </div>
           ) : null}
@@ -296,15 +319,12 @@ function ApprovalMiniList({
           >
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start">
               <div className="min-w-0 flex-1">
-                <Link
-                  href="/approvals"
-                  className="block min-w-0 transition hover:opacity-90"
-                >
+                <Link href="/approvals" className="block min-w-0 transition hover:opacity-90">
                   <div className="flex min-w-0 items-center gap-2">
                     <div className="shrink-0">
                       <CodeBadge code={getProjectCode(item.project)} />
                     </div>
-                    <div className="min-w-0 break-words font-semibold text-white line-clamp-2">
+                    <div className="min-w-0 line-clamp-2 break-words font-semibold text-white">
                       {item.project?.title || "-"}
                     </div>
                   </div>
@@ -499,29 +519,7 @@ function NoticeTypePill({ type }: { type?: string | null }) {
   );
 }
 
-function DashboardNoticePreview() {
-  const [items, setItems] = useState<DashboardNotice[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/team-notices?limit=5", { cache: "no-store" });
-        const json = await safeJson(res);
-        const rows = Array.isArray(json?.data) ? (json.data as DashboardNotice[]) : [];
-        setItems(rows);
-      } catch {
-        setItems([]);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  if (loading) {
-    return <div className="text-sm text-white/50">กำลังโหลดประกาศ...</div>;
-  }
-
+function DashboardNoticePreview({ items }: { items: DashboardNotice[] }) {
   if (items.length === 0) {
     return <div className="text-sm text-white/40">ยังไม่มีประกาศทีม</div>;
   }
@@ -542,9 +540,7 @@ function DashboardNoticePreview() {
 
           <div className="mt-3 break-words font-semibold text-white">{n.title}</div>
           {n.content ? (
-            <div className="mt-2 line-clamp-2 text-sm leading-6 text-white/65">
-              {n.content}
-            </div>
+            <div className="mt-2 line-clamp-2 text-sm leading-6 text-white/65">{n.content}</div>
           ) : null}
         </Link>
       ))}
@@ -565,10 +561,7 @@ export default function DashboardPage() {
   const router = useRouter();
 
   const [approvalSubmittingId, setApprovalSubmittingId] = useState<string | null>(null);
-  const [me, setMe] = useState<MeProfile | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [members, setMembers] = useState<Member[]>([]);
-  const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
+  const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -577,66 +570,14 @@ export default function DashboardPage() {
     setError("");
 
     try {
-      const [meRes, projectsRes, membersRes] = await Promise.all([
-        fetch("/api/me-profile", { cache: "no-store" }),
-        fetch("/api/projects", { cache: "no-store" }),
-        fetch("/api/members", { cache: "no-store" }),
-      ]);
+      const res = await fetch("/api/dashboard", { cache: "no-store" });
+      const json = await safeJson(res);
 
-      const [meJson, projectsJson, membersJson] = await Promise.all([
-        safeJson(meRes),
-        safeJson(projectsRes),
-        safeJson(membersRes),
-      ]);
-
-      if (!meRes.ok) throw new Error((meJson && (meJson.error || meJson.message)) || "Load profile failed");
-      if (!projectsRes.ok) throw new Error((projectsJson && (projectsJson.error || projectsJson.message)) || "Load projects failed");
-      if (!membersRes.ok) throw new Error((membersJson && (membersJson.error || membersJson.message)) || "Load members failed");
-
-      const meData = (meJson?.data ?? meJson ?? null) as MeProfile | null;
-      const projectData = Array.isArray(projectsJson?.data)
-        ? (projectsJson.data as Project[])
-        : Array.isArray(projectsJson)
-          ? (projectsJson as Project[])
-          : [];
-      const memberData = Array.isArray(membersJson?.data)
-        ? (membersJson.data as Member[])
-        : Array.isArray(membersJson)
-          ? (membersJson as Member[])
-          : [];
-
-      setMe(meData);
-      setProjects(projectData);
-      setMembers(memberData.filter((m) => m.is_active !== false));
-
-      const leaderLike = meData?.role === "LEADER" || meData?.role === "ADMIN";
-
-      if (leaderLike) {
-        try {
-          const approvalsRes = await fetch("/api/approvals", { cache: "no-store" });
-          const approvalsJson = await safeJson(approvalsRes);
-
-          if (approvalsRes.ok) {
-            const approvalData = Array.isArray(approvalsJson?.data)
-              ? (approvalsJson.data as ApprovalItem[])
-              : Array.isArray(approvalsJson)
-                ? (approvalsJson as ApprovalItem[])
-                : approvalsJson?.data?.pending
-                  ? (approvalsJson.data.pending as ApprovalItem[])
-                  : [];
-
-            setApprovals(approvalData.filter((a) => a.request_status === "PENDING"));
-          } else if (approvalsRes.status === 403) {
-            setApprovals([]);
-          } else {
-            throw new Error((approvalsJson && (approvalsJson.error || approvalsJson.message)) || "Load approvals failed");
-          }
-        } catch {
-          setApprovals([]);
-        }
-      } else {
-        setApprovals([]);
+      if (!res.ok) {
+        throw new Error((json && (json.error || json.message)) || "Load dashboard failed");
       }
+
+      setDashboard((json?.data ?? null) as DashboardPayload | null);
     } catch (e: any) {
       setError(e?.message || "Load dashboard failed");
     } finally {
@@ -670,84 +611,36 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    loadAll();
+    void loadAll();
   }, []);
 
+  const me = dashboard?.me ?? null;
   const isLeader = me?.role === "LEADER" || me?.role === "ADMIN";
 
-  const activeProjects = useMemo(
-    () => projects.filter((p) => p.status !== "COMPLETED"),
-    [projects]
+  const projectCounts = useMemo(
+    () =>
+      dashboard?.summary.projectCounts ?? {
+        total: 0,
+        preOrder: 0,
+        todo: 0,
+        inProgress: 0,
+        blocked: 0,
+        completed: 0,
+        progressPercent: 0,
+      },
+    [dashboard]
   );
 
-  const projectCounts = useMemo(() => {
-    const total = activeProjects.length;
-    const preOrder = activeProjects.filter((p) => p.status === "PRE_ORDER").length;
-    const todo = activeProjects.filter((p) => p.status === "TODO").length;
-    const inProgress = activeProjects.filter((p) => p.status === "IN_PROGRESS").length;
-    const blocked = activeProjects.filter((p) => p.status === "BLOCKED").length;
-    const completed = projects.filter((p) => p.status === "COMPLETED").length;
-    const progressPercent = projects.length > 0 ? Math.round((completed / projects.length) * 100) : 0;
+  const approvals = dashboard?.sections.approvals ?? [];
+  const notices = dashboard?.sections.notices ?? [];
+  const myIncompleteLatest = dashboard?.sections.myIncompleteLatest ?? [];
+  const queuePreOrder = dashboard?.sections.queuePreOrder ?? [];
+  const latestGraphic = dashboard?.sections.latestGraphic ?? [];
+  const latestVideo = dashboard?.sections.latestVideo ?? [];
+  const workload = dashboard?.sections.workload ?? [];
 
-    return {
-      total,
-      preOrder,
-      todo,
-      inProgress,
-      blocked,
-      completed,
-      progressPercent,
-    };
-  }, [projects, activeProjects]);
-
-  const myIncompleteLatest = useMemo(() => {
-    if (!me?.id) return [];
-    return projects
-      .filter((p) => p.assignee_id === me.id && p.status !== "COMPLETED" && p.status !== "BLOCKED")
-      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
-      .slice(0, isLeader ? 0 : 3);
-  }, [projects, me?.id, isLeader]);
-
-  const queuePreOrder = useMemo(() => {
-    if (!me?.id) return [];
-    return projects
-      .filter((p) => p.assignee_id === me.id && p.status === "PRE_ORDER")
-      .sort((a, b) => new Date(a.start_date || 0).getTime() - new Date(b.start_date || 0).getTime())
-      .slice(0, isLeader ? 0 : 5);
-  }, [projects, me?.id, isLeader]);
-
-  const latestGraphic = useMemo(() => {
-    return projects
-      .filter((p) => p.type === "GRAPHIC" && p.status !== "COMPLETED")
-      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
-      .slice(0, 5);
-  }, [projects]);
-
-  const latestVideo = useMemo(() => {
-    return projects
-      .filter((p) => p.type === "VIDEO" && p.status !== "COMPLETED")
-      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
-      .slice(0, 5);
-  }, [projects]);
-
-  const workload = useMemo(() => {
-    return members
-      .filter((m) => m.role !== "LEADER" && m.role !== "ADMIN")
-      .map((m) => {
-        const count = projects.filter(
-          (p) => p.assignee_id === m.id && p.status !== "COMPLETED"
-        ).length;
-
-        return {
-          id: m.id,
-          name: m.display_name || m.id,
-          department: m.department || "ALL",
-          count,
-        };
-      })
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "th"))
-      .slice(0, 8);
-  }, [members, projects]);
+  const totalProjectsForDonut =
+    projectCounts.total + projectCounts.completed;
 
   if (loading) {
     return (
@@ -780,7 +673,7 @@ export default function DashboardPage() {
         </div>
 
         <button
-          onClick={loadAll}
+          onClick={() => void loadAll()}
           className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
         >
           รีเฟรช
@@ -802,7 +695,7 @@ export default function DashboardPage() {
         <div className="grid min-w-0 gap-6 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)] xl:gap-8">
           <div className="flex min-w-0 flex-col items-center">
             <StatusDonut
-              total={projects.length}
+              total={totalProjectsForDonut}
               counts={{
                 preOrder: projectCounts.preOrder,
                 todo: projectCounts.todo,
@@ -891,7 +784,7 @@ export default function DashboardPage() {
         desc="ใช้สำหรับแจ้งลา ประชุม ปัญหา และงานด่วนของทีม"
         className="mt-6 border-[#e5ff78]/10 bg-[radial-gradient(circle_at_top,rgba(229,255,120,0.08),rgba(255,255,255,0.02)_35%,rgba(255,255,255,0.02)_100%)] shadow-[0_0_30px_rgba(229,255,120,0.06)]"
       >
-        <DashboardNoticePreview />
+        <DashboardNoticePreview items={notices} />
       </DashboardCard>
 
       {!isLeader ? (
@@ -926,7 +819,7 @@ export default function DashboardPage() {
             className="xl:col-span-12"
           >
             <ApprovalMiniList
-              items={approvals.slice(0, 5)}
+              items={approvals}
               emptyText="ไม่มีรายการรออนุมัติ"
               submittingId={approvalSubmittingId}
               onApprove={(id) => handleApprovalAction(id, "approve")}
@@ -940,10 +833,7 @@ export default function DashboardPage() {
             onClick={() => router.push("/projects")}
             className="xl:col-span-6"
           >
-            <ProjectMiniList
-              items={latestGraphic}
-              emptyText="ยังไม่มีโปรเจกต์กราฟิก"
-            />
+            <ProjectMiniList items={latestGraphic} emptyText="ยังไม่มีโปรเจกต์กราฟิก" />
           </DashboardCard>
 
           <DashboardCard
@@ -952,10 +842,7 @@ export default function DashboardPage() {
             onClick={() => router.push("/projects")}
             className="xl:col-span-6"
           >
-            <ProjectMiniList
-              items={latestVideo}
-              emptyText="ยังไม่มีโปรเจกต์วิดีโอ"
-            />
+            <ProjectMiniList items={latestVideo} emptyText="ยังไม่มีโปรเจกต์วิดีโอ" />
           </DashboardCard>
 
           <DashboardCard

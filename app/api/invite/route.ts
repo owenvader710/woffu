@@ -1,77 +1,102 @@
-// app/api/invite/route.ts
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { supabaseFromRequest } from "@/utils/supabase/api";
+import { createSupabaseServer } from "../_supabase";
+import { createSupabaseAdmin } from "../_supabaseAdmin";
+import { sendInviteEmail } from "../_mailer";
+
+function hashToken(token: string) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
 
 export async function POST(req: NextRequest) {
   try {
-    // 1) เช็คว่าเป็น leader และล็อกอินอยู่
-    const { supabase, applyCookies } = supabaseFromRequest(req);
+    const supabase = await createSupabaseServer();
+    const admin = createSupabaseAdmin();
 
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
+
     const user = authData?.user;
-    if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { data: me, error: meErr } = await supabase
       .from("profiles")
-      .select("role, is_active")
+      .select("id, role, is_active")
       .eq("id", user.id)
       .single();
 
     if (meErr) return NextResponse.json({ error: meErr.message }, { status: 400 });
-    if (!me?.is_active || me.role !== "LEADER") {
-      return NextResponse.json({ error: "Leader only" }, { status: 403 });
+    if (!me?.is_active) return NextResponse.json({ error: "Inactive profile" }, { status: 403 });
+
+    const leaderLike = me.role === "LEADER" || me.role === "ADMIN";
+    if (!leaderLike) {
+      return NextResponse.json({ error: "Only leader can invite members" }, { status: 403 });
     }
 
-    // 2) อ่าน body
-    const body = await req.json();
-    const email: string = (body?.email || "").trim();
-    const display_name: string = (body?.display_name || "").trim();
-    const department: "VIDEO" | "GRAPHIC" | "ALL" = body?.department || "ALL";
-    const role: "LEADER" | "MEMBER" = body?.role || "MEMBER";
+    const body = await req.json().catch(() => null);
+    const email = String(body?.email || "").trim().toLowerCase();
+    const role = String(body?.role || "MEMBER").trim().toUpperCase();
+    const department = String(body?.department || "ALL").trim().toUpperCase();
 
-    if (!email) return NextResponse.json({ error: "Missing email" }, { status: 400 });
-
-    // 3) ใช้ Service role ส่ง invite
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-    if (!url || !serviceRole) {
-      return NextResponse.json(
-        { error: "Missing SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL" },
-        { status: 500 }
-      );
+    if (!email || !isValidEmail(email)) {
+      return NextResponse.json({ error: "Invalid email" }, { status: 400 });
     }
 
-    const admin = createClient(url, serviceRole, {
-      auth: { persistSession: false },
+    if (!["LEADER", "MEMBER"].includes(role)) {
+      return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+    }
+
+    if (!["VIDEO", "GRAPHIC", "ALL"].includes(department)) {
+      return NextResponse.json({ error: "Invalid department" }, { status: 400 });
+    }
+
+    const { data: existingInvite, error: existingInviteErr } = await admin
+      .from("invites")
+      .select("id, email, used_at, expires_at")
+      .eq("email", email)
+      .is("used_at", null)
+      .maybeSingle();
+
+    if (existingInviteErr) {
+      return NextResponse.json({ error: existingInviteErr.message }, { status: 400 });
+    }
+
+    if (existingInvite) {
+      return NextResponse.json({ error: "This email already has a pending invite" }, { status: 400 });
+    }
+
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = hashToken(rawToken);
+
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+
+    const { error: inviteErr } = await admin.from("invites").insert({
+      email,
+      role,
+      department,
+      invited_by: user.id,
+      token_hash: tokenHash,
+      expires_at: expiresAt,
     });
 
-    const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email);
-    if (inviteErr) return NextResponse.json({ error: inviteErr.message }, { status: 400 });
+    if (inviteErr) {
+      return NextResponse.json({ error: inviteErr.message }, { status: 400 });
+    }
 
-    const invitedUserId = invited?.user?.id;
-    if (!invitedUserId) return NextResponse.json({ error: "Invite failed" }, { status: 400 });
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    const inviteLink = `${siteUrl}/invite/${rawToken}`;
 
-    // 4) สร้าง/อัปเดต profiles ให้ user ที่ถูกเชิญ
-    const { error: upErr } = await admin
-      .from("profiles")
-      .upsert(
-        {
-          id: invitedUserId,
-          display_name: display_name || null,
-          department,
-          role,
-          is_active: true,
-        },
-        { onConflict: "id" }
-      );
+    await sendInviteEmail({
+      to: email,
+      inviteLink,
+    });
 
-    if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 });
-
-    const res = NextResponse.json({ ok: true, user_id: invitedUserId }, { status: 200 });
-    return applyCookies(res);
+    return NextResponse.json({ ok: true, message: "Invite sent successfully" });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 });
+    return NextResponse.json({ error: e?.message || "Internal error" }, { status: 500 });
   }
 }

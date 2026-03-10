@@ -278,6 +278,13 @@ function EditMyProfileModal({
 }
 
 export default function MembersPage() {
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"MEMBER" | "LEADER">("MEMBER");
+  const [inviteDepartment, setInviteDepartment] = useState<"VIDEO" | "GRAPHIC" | "ALL">("ALL");
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteMsg, setInviteMsg] = useState("");
+  const [inviteErr, setInviteErr] = useState("");
+
   const [me, setMe] = useState<MeProfile | null>(null);
   const isLeader = me?.role === "LEADER" && me?.is_active === true;
 
@@ -333,6 +340,40 @@ export default function MembersPage() {
       setLoading(false);
     }
   }, [loadMe, loadMembers]);
+
+  async function sendInvite() {
+    setInviteBusy(true);
+    setInviteMsg("");
+    setInviteErr("");
+
+    try {
+      const res = await fetch("/api/invites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: inviteEmail,
+          role: inviteRole,
+          department: inviteDepartment,
+        }),
+      });
+
+      const json = await safeJson(res);
+
+      if (!res.ok) {
+        setInviteErr((json && (json.error || json.message)) || "Invite failed");
+        return;
+      }
+
+      setInviteMsg("ส่งคำเชิญสำเร็จแล้ว");
+      setInviteEmail("");
+      setInviteRole("MEMBER");
+      setInviteDepartment("ALL");
+    } catch (e: any) {
+      setInviteErr(e?.message || "Invite failed");
+    } finally {
+      setInviteBusy(false);
+    }
+  }
 
   async function applyCroppedAvatar(blob: Blob) {
     setError("");
@@ -564,6 +605,56 @@ export default function MembersPage() {
             </div>
           </div>
         </div>
+
+        {isLeader ? (
+          <div className="mt-6 rounded-[28px] border border-white/10 bg-white/5 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.35)] md:rounded-[34px] md:p-6">
+            <div className="text-lg font-extrabold text-white md:text-xl">Invite Member</div>
+            <div className="mt-1 text-sm leading-6 text-white/45">
+              เชิญสมาชิกผ่านอีเมล เพื่อให้ผู้ถูกเชิญตั้งรหัสผ่านเองและเข้าใช้งานระบบได้
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+              <input
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="email@example.com"
+                className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm outline-none focus:border-[#e5ff78] md:col-span-2"
+              />
+
+              <select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as "MEMBER" | "LEADER")}
+                className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm outline-none focus:border-[#e5ff78]"
+              >
+                <option value="MEMBER">MEMBER</option>
+                <option value="LEADER">LEADER</option>
+              </select>
+
+              <select
+                value={inviteDepartment}
+                onChange={(e) => setInviteDepartment(e.target.value as "VIDEO" | "GRAPHIC" | "ALL")}
+                className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm outline-none focus:border-[#e5ff78]"
+              >
+                <option value="ALL">ALL</option>
+                <option value="VIDEO">VIDEO</option>
+                <option value="GRAPHIC">GRAPHIC</option>
+              </select>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                onClick={sendInvite}
+                disabled={inviteBusy}
+                className="rounded-2xl bg-[#e5ff78] px-5 py-2.5 text-sm font-bold text-black hover:opacity-90 disabled:opacity-60"
+              >
+                {inviteBusy ? "กำลังส่ง..." : "Send Invite"}
+              </button>
+
+              {inviteMsg ? <div className="text-sm text-lime-300">{inviteMsg}</div> : null}
+              {inviteErr ? <div className="text-sm text-red-300">{inviteErr}</div> : null}
+            </div>
+          </div>
+        ) : null}
 
         {loading ? (
           <div className="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 text-sm text-white/60">

@@ -153,7 +153,6 @@ export async function POST(
       return NextResponse.json({ error: `Log insert failed: ${logErr.message}` }, { status: 400 });
     }
 
-    // ===== แจ้งเตือนหัวหน้า =====
     try {
       const { data: leaders, error: leaderErr } = await admin
         .from("profiles")
@@ -167,7 +166,7 @@ export async function POST(
       if (!leaderErr && leaders && leaders.length > 0) {
         const targetLeaderIds = leaders
           .map((x: any) => x.id)
-          .filter((id: string) => !!id && id !== user.id);
+          .filter((id: string) => !!id);
 
         console.log("[STATUS REQUEST] requester =", user.id);
         console.log("[STATUS REQUEST] targetLeaderIds =", targetLeaderIds);

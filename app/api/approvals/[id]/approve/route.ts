@@ -78,12 +78,14 @@ export async function POST(
     return NextResponse.json({ error: "Already processed" }, { status: 400 });
   }
 
+  const approvedAt = new Date().toISOString();
+
   const { error: updReqErr } = await admin
     .from("status_change_requests")
     .update({
       request_status: "APPROVED",
       approved_by: user.id,
-      approved_at: new Date().toISOString(),
+      approved_at: approvedAt,
     })
     .eq("id", id);
 
@@ -107,8 +109,8 @@ export async function POST(
     .maybeSingle();
 
   const projectTitle = projectRow?.title || "งานของคุณ";
-  const statusText = `${statusLabel(reqRow.from_status)} → ${statusLabel(reqRow.to_status)}`;
-  const pushMessage = `${projectTitle} • ${statusText}`;
+  const pushMessage = `${projectTitle} • ${statusLabel(reqRow.from_status)} → ${statusLabel(reqRow.to_status)}`;
+  const link = `/projects/${reqRow.project_id}`;
 
   try {
     await admin.from("notifications").insert({
@@ -116,7 +118,7 @@ export async function POST(
       type: "JOB_STATUS_CHANGED",
       title: "สถานะงานของคุณถูกอนุมัติแล้ว",
       message: pushMessage,
-      link: `/projects/${reqRow.project_id}`,
+      link,
       is_read: false,
     });
   } catch {}
@@ -126,7 +128,7 @@ export async function POST(
       userId: reqRow.requested_by,
       title: "สถานะงานของคุณถูกอนุมัติแล้ว",
       message: pushMessage,
-      url: `/projects/${reqRow.project_id}`,
+      url: link,
     });
   } catch {}
 

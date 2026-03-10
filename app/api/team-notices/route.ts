@@ -3,83 +3,28 @@ import { createSupabaseServer } from "../_supabase";
 import { createSupabaseAdmin } from "../_supabaseAdmin";
 import { sendPushToUser } from "../_push";
 
-type NoticeType = "GENERAL" | "LEAVE" | "MEETING" | "ISSUE" | "URGENT";
-
-function normalizeNoticeType(v: unknown): NoticeType {
-  const s = String(v || "").trim().toUpperCase();
-
-  if (s === "GENERAL" || s === "ทั่วไป") return "GENERAL";
-  if (s === "LEAVE" || s === "ลางาน" || s === "ลาป่วย") return "LEAVE";
-  if (s === "MEETING" || s === "ประชุม") return "MEETING";
-  if (s === "ISSUE" || s === "ปัญหา") return "ISSUE";
-  if (s === "URGENT" || s === "เร่งด่วน" || s === "ด่วน") return "URGENT";
-
+function normalizeNoticeType(value: unknown) {
+  const raw = String(value || "").trim().toUpperCase();
+  if (raw === "URGENT") return "URGENT";
+  if (raw === "EVENT") return "EVENT";
   return "GENERAL";
 }
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const supabase = await createSupabaseServer();
-  const admin = createSupabaseAdmin();
 
-  const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
-
-  const user = authData?.user;
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const search = req.nextUrl.searchParams.get("q")?.trim() || "";
-  const type = req.nextUrl.searchParams.get("type")?.trim() || "ALL";
-  const pinned = req.nextUrl.searchParams.get("pinned") === "1";
-  const limit = Math.min(Number(req.nextUrl.searchParams.get("limit") || 20), 100);
-
-  let query = admin
+  const { data, error } = await supabase
     .from("team_notices")
     .select("*")
     .eq("is_active", true)
     .order("is_pinned", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(limit);
+    .order("created_at", { ascending: false });
 
-  if (type !== "ALL") {
-    query = query.eq("notice_type", normalizeNoticeType(type));
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (pinned) {
-    query = query.eq("is_pinned", true);
-  }
-
-  if (search) {
-    query = query.or(`title.ilike.%${search}%,content.ilike.%${search}%`);
-  }
-
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  const notices = Array.isArray(data) ? data : [];
-  const creatorIds = [...new Set(notices.map((x) => x.created_by).filter(Boolean))];
-
-  const profileMap = new Map<string, { display_name: string | null; role: string | null }>();
-
-  if (creatorIds.length > 0) {
-    const { data: profiles } = await admin
-      .from("profiles")
-      .select("id, display_name, role")
-      .in("id", creatorIds);
-
-    for (const p of profiles || []) {
-      profileMap.set(p.id, {
-        display_name: p.display_name ?? null,
-        role: p.role ?? null,
-      });
-    }
-  }
-
-  const rows = notices.map((n) => ({
-    ...n,
-    creator: profileMap.get(n.created_by) || null,
-  }));
-
-  return NextResponse.json({ data: rows });
+  return NextResponse.json({ data: data ?? [] });
 }
 
 export async function POST(req: NextRequest) {
@@ -92,16 +37,18 @@ export async function POST(req: NextRequest) {
   const user = authData?.user;
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: me, error: meErr } = await admin
+  const { data: me, error: meErr } = await supabase
     .from("profiles")
     .select("id, role, is_active")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
 
   if (meErr) return NextResponse.json({ error: meErr.message }, { status: 500 });
   if (!me || me.is_active === false) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const isLeader = me.role === "LEADER" || me.role === "ADMIN";
 
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
@@ -110,10 +57,8 @@ export async function POST(req: NextRequest) {
   const content = String(body.content || "").trim();
 
   if (!title) {
-    return NextResponse.json({ error: "Missing title" }, { status: 400 });
+    return NextResponse.json({ error: "กรุณาระบุหัวข้อประกาศ" }, { status: 400 });
   }
-
-  const isLeader = me.role === "LEADER" || me.role === "ADMIN";
 
   const insertRow = {
     title,
@@ -145,32 +90,39 @@ export async function POST(req: NextRequest) {
       .filter((id) => id && id !== user.id);
 
     if (targetUsers.length > 0) {
-  try {
-    await admin.from("notifications").insert(
-      targetUsers.map((uid) => ({
-        user_id: uid,
-        type: "TEAM_NOTICE",
-        title: "มีประกาศทีมใหม่",
-        message: title,
-        link: "/team-notices",
-        is_read: false,
-      }))
-    );
-  } catch {
-    // ignore
-  }
+      const noticeTitle = title;
+      const noticeSummary = content
+        ? String(content).replace(/\s+/g, " ").trim().slice(0, 80)
+        : "กรุณาเข้าไปอ่านรายละเอียด";
 
-  await Promise.allSettled(
-    targetUsers.map((uid) =>
-      sendPushToUser({
-        userId: uid,
-        title: "มีประกาศทีมใหม่",
-        message: title,
-        url: "/team-notices",
-      })
-    )
-  );
-}
+      const pushTitle = "มีประกาศทีมใหม่";
+      const pushMessage = `${noticeTitle} • ${noticeSummary}`;
+      const pushLink = "/team-notices";
+
+      try {
+        await admin.from("notifications").insert(
+          targetUsers.map((uid) => ({
+            user_id: uid,
+            type: "TEAM_NOTICE",
+            title: pushTitle,
+            message: pushMessage,
+            link: pushLink,
+            is_read: false,
+          }))
+        );
+      } catch {}
+
+      await Promise.allSettled(
+        targetUsers.map((uid) =>
+          sendPushToUser({
+            userId: uid,
+            title: pushTitle,
+            message: pushMessage,
+            url: pushLink,
+          })
+        )
+      );
+    }
   } catch {
     // ไม่ให้ notification ทำให้การสร้างประกาศล้ม
   }

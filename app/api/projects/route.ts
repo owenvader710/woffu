@@ -42,26 +42,6 @@ type ProjectRow = {
   description?: string | null;
   department?: string | null;
   created_by?: string | null;
-
-  completed_at?: string | null;
-  blocked_reason?: string | null;
-};
-
-type StatusChangeRequestRow = {
-  project_id: string;
-  to_status?: string | null;
-  request_status?: string | null;
-  status?: string | null;
-  approved_at?: string | null;
-  created_at?: string | null;
-};
-
-type ProjectLogRow = {
-  project_id: string;
-  message?: string | null;
-  meta?: any | null;
-  detail?: any | null;
-  created_at?: string | null;
 };
 
 function startOfToday() {
@@ -88,117 +68,6 @@ function shouldMovePreOrderToTodo(startDate?: string | null) {
 
   start.setHours(0, 0, 0, 0);
   return start.getTime() <= startOfToday().getTime();
-}
-
-function extractBlockedReasonFromLogs(logs: ProjectLogRow[]): Record<string, string> {
-  const out: Record<string, string> = {};
-
-  for (const log of logs) {
-    const projectId = log.project_id;
-    if (!projectId || out[projectId]) continue;
-
-    const metaReason =
-      typeof log?.meta?.blocked_reason === "string" ? log.meta.blocked_reason.trim() : "";
-    if (metaReason) {
-      out[projectId] = metaReason;
-      continue;
-    }
-
-    const detailReason =
-      typeof log?.detail?.blocked_reason === "string" ? log.detail.blocked_reason.trim() : "";
-    if (detailReason) {
-      out[projectId] = detailReason;
-      continue;
-    }
-
-    const msg = typeof log?.message === "string" ? log.message : "";
-    const marker = "blocked_reason:";
-    const idx = msg.toLowerCase().indexOf(marker);
-    if (idx >= 0) {
-      const text = msg.slice(idx + marker.length).trim();
-      if (text) {
-        out[projectId] = text;
-      }
-    }
-  }
-
-  return out;
-}
-
-function extractCompletedAtMap(rows: StatusChangeRequestRow[]): Record<string, string> {
-  const grouped = new Map<string, StatusChangeRequestRow[]>();
-
-  for (const row of rows) {
-    if (!row.project_id) continue;
-    const arr = grouped.get(row.project_id) ?? [];
-    arr.push(row);
-    grouped.set(row.project_id, arr);
-  }
-
-  const out: Record<string, string> = {};
-
-  for (const [projectId, arr] of grouped.entries()) {
-    const latest = arr
-      .filter((r) => r.to_status === "COMPLETED")
-      .filter((r) => r.request_status === "APPROVED" || r.status === "APPROVED")
-      .sort(
-        (a, b) =>
-          new Date(b.approved_at || b.created_at || 0).getTime() -
-          new Date(a.approved_at || a.created_at || 0).getTime()
-      )[0];
-
-    if (latest?.approved_at) {
-      out[projectId] = latest.approved_at;
-    }
-  }
-
-  return out;
-}
-
-async function enrichProjects(
-  supabase: Awaited<ReturnType<typeof createSupabaseServer>>,
-  projects: ProjectRow[]
-): Promise<ProjectRow[]> {
-  if (!projects.length) return projects;
-
-  const projectIds = projects.map((p) => p.id).filter(Boolean);
-  if (!projectIds.length) return projects;
-
-  const completedIds = projects.filter((p) => p.status === "COMPLETED").map((p) => p.id);
-  const blockedIds = projects.filter((p) => p.status === "BLOCKED").map((p) => p.id);
-
-  let completedAtMap: Record<string, string> = {};
-  let blockedReasonMap: Record<string, string> = {};
-
-  if (completedIds.length > 0) {
-    const { data: completedRows } = await supabase
-      .from("status_change_requests")
-      .select("project_id,to_status,request_status,status,approved_at,created_at")
-      .in("project_id", completedIds)
-      .eq("to_status", "COMPLETED");
-
-    completedAtMap = extractCompletedAtMap(
-      Array.isArray(completedRows) ? (completedRows as StatusChangeRequestRow[]) : []
-    );
-  }
-
-  if (blockedIds.length > 0) {
-    const { data: blockedLogs } = await supabase
-      .from("project_logs")
-      .select("project_id,message,meta,detail,created_at")
-      .in("project_id", blockedIds)
-      .order("created_at", { ascending: false });
-
-    blockedReasonMap = extractBlockedReasonFromLogs(
-      Array.isArray(blockedLogs) ? (blockedLogs as ProjectLogRow[]) : []
-    );
-  }
-
-  return projects.map((item) => ({
-    ...item,
-    completed_at: completedAtMap[item.id] ?? null,
-    blocked_reason: blockedReasonMap[item.id] ?? null,
-  }));
 }
 
 export async function GET() {
@@ -240,12 +109,10 @@ export async function GET() {
       return item;
     });
 
-    const enrichedRefreshed = await enrichProjects(supabase, refreshed);
-    return NextResponse.json({ data: enrichedRefreshed });
+    return NextResponse.json({ data: refreshed });
   }
 
-  const enriched = await enrichProjects(supabase, data);
-  return NextResponse.json({ data: enriched });
+  return NextResponse.json({ data });
 }
 
 export async function POST(req: Request) {
@@ -295,12 +162,17 @@ export async function POST(req: Request) {
   const insertedData = (insertedRaw ?? null) as unknown as ProjectRow | null;
 
   if (insertedData?.assignee_id) {
+    const projectTitle = insertedData.title || "งานใหม่";
     const notifTitle =
       insertRow.status === "PRE_ORDER"
         ? "คุณได้รับงานล่วงหน้าใหม่"
         : "คุณได้รับงานใหม่";
 
-    const notifMessage = insertedData.title || "มีงานใหม่ถูกมอบหมายให้คุณ";
+    const notifMessage =
+      insertRow.status === "PRE_ORDER"
+        ? `${projectTitle} • งานนี้จะเริ่มตามวันที่กำหนด`
+        : `${projectTitle} • กรุณาเข้าไปตรวจสอบรายละเอียด`;
+
     const notifLink = `/projects/${insertedData.id}`;
 
     try {

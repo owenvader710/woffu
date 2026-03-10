@@ -161,10 +161,16 @@ export async function POST(
         .in("role", ["LEADER", "ADMIN"])
         .eq("is_active", true);
 
+      console.log("[STATUS REQUEST] leaderErr =", leaderErr);
+      console.log("[STATUS REQUEST] leaders =", leaders);
+
       if (!leaderErr && leaders && leaders.length > 0) {
         const targetLeaderIds = leaders
           .map((x: any) => x.id)
           .filter((id: string) => !!id && id !== user.id);
+
+        console.log("[STATUS REQUEST] requester =", user.id);
+        console.log("[STATUS REQUEST] targetLeaderIds =", targetLeaderIds);
 
         if (targetLeaderIds.length > 0) {
           const projectTitle = projectRow?.title || "โปรเจกต์ไม่มีชื่อ";
@@ -179,8 +185,9 @@ export async function POST(
 
           const notifLink = "/approvals";
 
-          try {
-            await admin.from("notifications").insert(
+          const { data: notifRows, error: notifErr } = await admin
+            .from("notifications")
+            .insert(
               targetLeaderIds.map((leaderId: string) => ({
                 user_id: leaderId,
                 type: "STATUS_CHANGE_REQUESTED",
@@ -189,10 +196,13 @@ export async function POST(
                 link: notifLink,
                 is_read: false,
               }))
-            );
-          } catch {}
+            )
+            .select("id, user_id, type, title");
 
-          await Promise.allSettled(
+          console.log("[STATUS REQUEST] notifErr =", notifErr);
+          console.log("[STATUS REQUEST] notifRows =", notifRows);
+
+          const pushResults = await Promise.allSettled(
             targetLeaderIds.map((leaderId: string) =>
               sendPushToUser({
                 userId: leaderId,
@@ -202,10 +212,12 @@ export async function POST(
               })
             )
           );
+
+          console.log("[STATUS REQUEST] pushResults =", pushResults);
         }
       }
-    } catch {
-      // ไม่ให้ notification ทำให้ request-status ล้ม
+    } catch (e) {
+      console.log("[STATUS REQUEST] notify catch =", e);
     }
 
     const res = NextResponse.json(

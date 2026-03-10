@@ -157,7 +157,7 @@ export async function POST(
       const { data: leaders, error: leaderErr } = await admin
         .from("profiles")
         .select("id, role, is_active")
-        .in("role", ["LEADER", "ADMIN"])
+        .eq("role", "LEADER")
         .eq("is_active", true);
 
       console.log("[STATUS REQUEST] leaderErr =", leaderErr);

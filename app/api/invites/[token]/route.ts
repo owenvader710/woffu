@@ -111,17 +111,22 @@ export async function POST(
       return NextResponse.json({ error: "Failed to create auth user" }, { status: 400 });
     }
 
-    const { error: profileErr } = await admin.from("profiles").insert({
-      id: authUser.id,
-      display_name: null,
-      role: invite.role,
-      department: invite.department,
-      email: invite.email,
-      is_active: true,
-      avatar_url: null,
-      phone: null,
-      birth_date: null,
-    });
+    const { error: profileErr } = await admin.from("profiles").upsert(
+      {
+        id: authUser.id,
+        display_name: null,
+        role: invite.role,
+        department: invite.department,
+        email: invite.email,
+        is_active: true,
+        avatar_url: null,
+        phone: null,
+        birth_date: null,
+      },
+      {
+        onConflict: "id",
+      }
+    );
 
     if (profileErr) {
       return NextResponse.json({ error: profileErr.message }, { status: 400 });

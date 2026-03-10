@@ -17,11 +17,21 @@ export async function POST(req: NextRequest) {
     const supabase = await createSupabaseServer();
     const admin = createSupabaseAdmin();
 
+    console.log("[INVITE] POST called");
+
     const { data: authData, error: authErr } = await supabase.auth.getUser();
-    if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
+    console.log("[INVITE] authErr =", authErr);
+
+    if (authErr) {
+      return NextResponse.json({ error: authErr.message }, { status: 401 });
+    }
 
     const user = authData?.user;
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    console.log("[INVITE] user =", user?.id);
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const { data: me, error: meErr } = await supabase
       .from("profiles")
@@ -29,18 +39,36 @@ export async function POST(req: NextRequest) {
       .eq("id", user.id)
       .single();
 
-    if (meErr) return NextResponse.json({ error: meErr.message }, { status: 400 });
-    if (!me?.is_active) return NextResponse.json({ error: "Inactive profile" }, { status: 403 });
+    console.log("[INVITE] meErr =", meErr);
+    console.log("[INVITE] me =", me);
 
-    const leaderLike = me.role === "LEADER" || me.role === "ADMIN";
+    if (meErr) {
+      return NextResponse.json({ error: meErr.message }, { status: 400 });
+    }
+
+    if (!me?.is_active) {
+      return NextResponse.json({ error: "Inactive profile" }, { status: 403 });
+    }
+
+    const leaderLike = me.role === "LEADER";
     if (!leaderLike) {
       return NextResponse.json({ error: "Only leader can invite members" }, { status: 403 });
     }
 
     const body = await req.json().catch(() => null);
-    const email = String(body?.email || "").trim().toLowerCase();
-    const role = String(body?.role || "MEMBER").trim().toUpperCase();
-    const department = String(body?.department || "ALL").trim().toUpperCase();
+    console.log("[INVITE] body =", body);
+
+    const email = String(body?.email || "")
+      .trim()
+      .toLowerCase();
+
+    const role = String(body?.role || "MEMBER")
+      .trim()
+      .toUpperCase();
+
+    const department = String(body?.department || "ALL")
+      .trim()
+      .toUpperCase();
 
     if (!email || !isValidEmail(email)) {
       return NextResponse.json({ error: "Invalid email" }, { status: 400 });
@@ -61,17 +89,22 @@ export async function POST(req: NextRequest) {
       .is("used_at", null)
       .maybeSingle();
 
+    console.log("[INVITE] existingInviteErr =", existingInviteErr);
+    console.log("[INVITE] existingInvite =", existingInvite);
+
     if (existingInviteErr) {
       return NextResponse.json({ error: existingInviteErr.message }, { status: 400 });
     }
 
     if (existingInvite) {
-      return NextResponse.json({ error: "This email already has a pending invite" }, { status: 400 });
+      return NextResponse.json(
+        { error: "This email already has a pending invite" },
+        { status: 400 }
+      );
     }
 
     const rawToken = crypto.randomBytes(32).toString("hex");
     const tokenHash = hashToken(rawToken);
-
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
 
     const { error: inviteErr } = await admin.from("invites").insert({
@@ -83,6 +116,8 @@ export async function POST(req: NextRequest) {
       expires_at: expiresAt,
     });
 
+    console.log("[INVITE] inviteErr =", inviteErr);
+
     if (inviteErr) {
       return NextResponse.json({ error: inviteErr.message }, { status: 400 });
     }
@@ -90,13 +125,33 @@ export async function POST(req: NextRequest) {
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
     const inviteLink = `${siteUrl}/invite/${rawToken}`;
 
+    console.log("[INVITE] siteUrl =", siteUrl);
+    console.log("[INVITE] inviteLink =", inviteLink);
+    console.log("[INVITE] hasMailer =", typeof sendInviteEmail === "function");
+
     await sendInviteEmail({
       to: email,
       inviteLink,
     });
 
-    return NextResponse.json({ ok: true, message: "Invite sent successfully" });
+    console.log("[INVITE] email sent ok");
+
+    return NextResponse.json({
+      ok: true,
+      message: "Invite sent successfully",
+    });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Internal error" }, { status: 500 });
+    console.log("[INVITE] catch =", e);
+    return NextResponse.json(
+      { error: e?.message || "Internal error" },
+      { status: 500 }
+    );
   }
+}
+
+export async function GET() {
+  return NextResponse.json(
+    { error: "Method not allowed. Use POST." },
+    { status: 405 }
+  );
 }

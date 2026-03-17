@@ -64,6 +64,7 @@ function toUiStatus(s: any): Status {
 }
 
 const PENDING_KEY = "woffu_mywork_pending_v1";
+const LOCAL_PENDING_STALE_MS = 20000;
 
 function readPendingStore(): Record<string, PendingReq> {
   if (typeof window === "undefined") return {};
@@ -220,20 +221,38 @@ function getPendingStatus(req?: PendingReq | null) {
 }
 
 function mergePendingState(sourceItems: WorkItem[], store: Record<string, PendingReq>): WorkItem[] {
-  const merged = sourceItems.map((x) => {
-    const apiPending = getPendingStatus(x.pending_request) === "PENDING" ? x.pending_request : null;
+  const now = Date.now();
 
-    if (apiPending) {
-      setPendingForProject(x.id, apiPending);
-      return { ...x, pending_request: apiPending };
+  const merged = sourceItems.map((x) => {
+    const apiReqStatus = getPendingStatus(x.pending_request);
+
+    if (apiReqStatus === "PENDING" && x.pending_request) {
+      setPendingForProject(x.id, x.pending_request);
+      return { ...x, pending_request: x.pending_request };
+    }
+
+    if (apiReqStatus === "APPROVED" || apiReqStatus === "REJECTED") {
+      removePendingForProject(x.id);
+      return { ...x, pending_request: null };
     }
 
     const localPending = store[x.id];
+    const localStatus = getPendingStatus(localPending);
 
-    if (getPendingStatus(localPending) === "PENDING") {
-      const targetUiStatus = toUiStatus(localPending!.to_status);
+    if (localStatus === "PENDING" && localPending) {
+      const targetUiStatus = toUiStatus(localPending.to_status);
+      const createdAtMs = new Date(localPending.created_at || 0).getTime();
+      const isStale =
+        Number.isFinite(createdAtMs) &&
+        createdAtMs > 0 &&
+        now - createdAtMs > LOCAL_PENDING_STALE_MS;
 
       if (x.status === targetUiStatus) {
+        removePendingForProject(x.id);
+        return { ...x, pending_request: null };
+      }
+
+      if (isStale) {
         removePendingForProject(x.id);
         return { ...x, pending_request: null };
       }
@@ -246,18 +265,8 @@ function mergePendingState(sourceItems: WorkItem[], store: Record<string, Pendin
 
   for (const pid of Object.keys(store)) {
     const stillExists = merged.find((x) => x.id === pid);
-
     if (!stillExists) {
       removePendingForProject(pid);
-      continue;
-    }
-
-    const localPending = store[pid];
-    if (getPendingStatus(localPending) === "PENDING") {
-      const targetUiStatus = toUiStatus(localPending.to_status);
-      if (stillExists.status === targetUiStatus) {
-        removePendingForProject(pid);
-      }
     }
   }
 
@@ -544,7 +553,13 @@ export default function MyWorkPage() {
 
   useEffect(() => {
     void load();
+
+    const interval = window.setInterval(() => {
+      void load();
+    }, 15000);
+
     return () => {
+      window.clearInterval(interval);
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, [load]);

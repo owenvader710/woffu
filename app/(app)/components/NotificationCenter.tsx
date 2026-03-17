@@ -49,6 +49,8 @@ function toneClass(type: string) {
   if (type === "JOB_ASSIGNED") return "border-lime-400/20 bg-lime-400/10 text-lime-200";
   if (type === "JOB_STATUS_CHANGED") return "border-blue-400/20 bg-blue-400/10 text-blue-200";
   if (type === "STATUS_CHANGE_REQUESTED") return "border-cyan-400/20 bg-cyan-400/10 text-cyan-200";
+  if (type === "STATUS_CHANGE_APPROVED") return "border-emerald-400/20 bg-emerald-400/10 text-emerald-200";
+  if (type === "STATUS_CHANGE_REJECTED") return "border-red-400/20 bg-red-400/10 text-red-200";
   if (type === "TEAM_NOTICE") return "border-violet-400/20 bg-violet-400/10 text-violet-200";
   if (type === "JOB_ACKNOWLEDGED") return "border-amber-400/20 bg-amber-400/10 text-amber-200";
   return "border-white/10 bg-white/5 text-white/80";
@@ -78,15 +80,33 @@ function getProjectIdFromLink(link?: string | null) {
   return m?.[1] || null;
 }
 
-function showDesktopNotification(n: AppNotification) {
+async function showDesktopNotification(n: AppNotification) {
   try {
     if (!("Notification" in window)) return;
     if (Notification.permission !== "granted") return;
 
+    if ("serviceWorker" in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) {
+        await reg.showNotification(n.title, {
+          body: n.message || "",
+          tag: n.id,
+          renotify: true,
+          silent: false,
+          icon: "/icon-192.png",
+          badge: "/badge-72.png",
+          data: {
+            link: n.link || "/",
+          },
+        });
+        return;
+      }
+    }
+
     const notice = new Notification(n.title, {
       body: n.message || "",
       tag: n.id,
-      silent: true,
+      silent: false,
     });
 
     notice.onclick = () => {
@@ -393,8 +413,8 @@ export default function NotificationCenter() {
         playBeep();
       }
 
-      if (document.visibilityState === "hidden" && desktopPermission === "granted") {
-        showDesktopNotification(n);
+      if ((document.hidden || !document.hasFocus()) && desktopPermission === "granted") {
+        void showDesktopNotification(n);
       }
     }
   }

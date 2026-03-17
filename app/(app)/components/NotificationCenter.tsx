@@ -89,16 +89,15 @@ async function showDesktopNotification(n: AppNotification) {
       const reg = await navigator.serviceWorker.getRegistration();
       if (reg) {
         await reg.showNotification(n.title, {
-          body: n.message || "",
-          tag: n.id,
-          renotify: true,
-          silent: false,
-          icon: "/icon-192.png",
-          badge: "/badge-72.png",
-          data: {
-            link: n.link || "/",
-          },
-        });
+  body: n.message || "",
+  tag: n.id,
+  silent: false,
+  icon: "/icon-192.png",
+  badge: "/badge-72.png",
+  data: {
+    link: n.link || "/",
+  },
+});
         return;
       }
     }

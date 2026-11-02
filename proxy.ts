@@ -13,6 +13,22 @@ function normalizeSameSite(v: unknown): SameSite | undefined {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // The Vercel Preview might share a Supabase project with production.
+  // Fail closed for application mutations until a separate staging DB is verified.
+  // Authentication-only actions are allowed so reviewers can sign in and inspect UI.
+  if (
+    process.env.VERCEL_ENV === "preview" &&
+    process.env.WOFFU_ENABLE_PREVIEW_MUTATIONS !== "true" &&
+    pathname.startsWith("/api/") &&
+    !["GET", "HEAD", "OPTIONS"].includes(request.method) &&
+    !["/api/login", "/api/logout"].includes(pathname)
+  ) {
+    return NextResponse.json({
+      error: "Preview is read-only until a separate staging database is configured.",
+      code: "PREVIEW_READ_ONLY",
+    }, { status: 423 });
+  }
+
   // root → /login
   if (pathname === "/") {
     const url = request.nextUrl.clone();

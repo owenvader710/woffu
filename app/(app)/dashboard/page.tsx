@@ -788,10 +788,10 @@ export default function DashboardPage() {
       </DashboardCard>
 
       <div className="mt-6 grid gap-4 md:grid-cols-3">
-        <Link href="/approvals" className="rounded-2xl border border-yellow-400/20 bg-yellow-400/5 p-4 transition hover:bg-yellow-400/10">
+        <Link href="#qc-overview" className="rounded-2xl border border-yellow-400/20 bg-yellow-400/5 p-4 transition hover:bg-yellow-400/10">
           <div className="text-xs font-semibold text-yellow-200">DRAFTS รอตรวจ</div>
           <div className="mt-2 text-3xl font-extrabold">{reviewQueue.length}</div>
-          <p className="mt-1 text-xs text-white/50">ดูรายการที่รอ QC ด้านล่าง</p>
+          <p className="mt-1 text-xs text-white/50">แสดงรายการล่าสุดด้านล่าง</p>
         </Link>
         <Link href="/my-work" className="rounded-2xl border border-red-400/20 bg-red-400/5 p-4 transition hover:bg-red-400/10">
           <div className="text-xs font-semibold text-red-200">DRAFTS ต้องแก้ไข</div>
@@ -805,7 +805,7 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+      <div id="qc-overview" className="mt-4 grid scroll-mt-24 gap-4 xl:grid-cols-2">
         <DashboardCard title="Draft รอ Senior QC" desc="คลิกเพื่อเปิดรายละเอียดและตรวจงาน">
           {reviewQueue.length === 0 ? <p className="text-sm text-white/50">ไม่มี Draft รอตรวจ</p> :
           <div className="space-y-2">

@@ -390,6 +390,7 @@ export default function ApprovalsPage() {
           >
             <h2 id="reject-reason-title" className="text-lg font-bold">ระบุเหตุผลที่ไม่อนุมัติ</h2>
             <p className="mt-2 text-sm text-white/65">เหตุผลนี้จะถูกบันทึกและแสดงในประวัติการตรวจงาน</p>
+            {err && <p role="alert" className="mt-3 rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{err}</p>}
             <label htmlFor="reject-reason" className="mt-4 block text-sm font-semibold">รายละเอียดที่ต้องแก้ไข</label>
             <textarea
               id="reject-reason"

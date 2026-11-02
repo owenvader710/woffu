@@ -70,6 +70,24 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "ไม่พบบัญชี Auth ที่ตรงกับสมาชิก" }, { status: 409 });
     }
 
+    // Prevent repeated issuance of bearer reset links for the same member.
+    const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const { data: recent, error: recentError } = await admin
+      .from("notifications")
+      .select("id")
+      .eq("user_id", id)
+      .eq("type", "ACCOUNT_RECOVERY")
+      .gte("created_at", since)
+      .limit(1);
+    if (recentError) {
+      return NextResponse.json({ error: "ไม่สามารถตรวจสอบประวัติการกู้คืนได้" }, { status: 503 });
+    }
+    if (recent && recent.length) {
+      return NextResponse.json({
+        error: "มีการออกลิงก์ให้บัญชีนี้เมื่อไม่นานมานี้ กรุณารอ 15 นาทีก่อนสร้างใหม่",
+      }, { status: 429 });
+    }
+
     const { data, error } = await admin.auth.admin.generateLink({
       type: "recovery",
       email,
@@ -88,7 +106,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       user_id: id,
       type: "ACCOUNT_RECOVERY",
       title: "มีการออกลิงก์ตั้งรหัสผ่านใหม่",
-      message: "หัวหน้าทีมออกลิงก์กู้คืนบัญชีให้คุณ หากไม่ได้ร้องขอ โปรดแจ้งผู้ดูแลทันที",
+      message: `หัวหน้าทีมออกลิงก์กู้คืนบัญชีให้คุณ (ผู้ดำเนินการ: ${access.user.id}) หากไม่ได้ร้องขอ โปรดแจ้งผู้ดูแลทันที`,
       link: "/members",
       is_read: false,
     });

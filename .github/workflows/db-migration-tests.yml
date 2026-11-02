@@ -1,0 +1,62 @@
+name: WOFFU DB Migration Tests
+
+on:
+  push:
+    branches: ["v2/**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-integration:
+    name: PostgreSQL schema and workflow integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: woffu_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d woffu_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGDATABASE: woffu_ci
+      PGUSER: postgres
+      PGPASSWORD: local_ci_only
+
+    steps:
+      - name: Check out reviewed SQL
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install PostgreSQL client if missing
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+
+      - name: Set up isolated schema fixture
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/fixture.sql
+
+      - name: Apply Phase 2 atomic approval migration
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611020001_atomic_status_approvals.sql
+
+      - name: Apply Phase 3 Draft QC migration
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611020002_project_draft_reviews.sql
+
+      - name: Test roles, approval and Draft QC workflow
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/workflow.sql

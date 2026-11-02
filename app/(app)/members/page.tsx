@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import dynamic from "next/dynamic";
+import MemberRecoveryModal from "./MemberRecoveryModal";
 
 const AvatarCropModal = dynamic(() => import("./AvatarCropModal"), {
   loading: () => null,
@@ -285,6 +286,7 @@ export default function MembersPage() {
   const [inviteMsg, setInviteMsg] = useState("");
   const [inviteErr, setInviteErr] = useState("");
   const [inviteLink, setInviteLink] = useState("");
+  const [recoveryTarget, setRecoveryTarget] = useState<Member | null>(null);
 
   const [me, setMe] = useState<MeProfile | null>(null);
   const isLeader = me?.role === "LEADER" && me?.is_active === true;
@@ -479,13 +481,20 @@ export default function MembersPage() {
         </div>
 
         {isLeader ? (
-          <button
-            onClick={() => openEdit(m)}
-            className="w-fit rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
-            title="แก้ไขสมาชิก"
-          >
-            แก้ไข
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button"
+              onClick={() => openEdit(m)}
+              className="woffu-focus-ring w-fit rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
+              title="แก้ไขสมาชิก">
+              แก้ไข
+            </button>
+            {m.role === "MEMBER" && m.is_active && m.id !== me?.id && m.email && (
+              <button type="button" onClick={() => setRecoveryTarget(m)}
+                className="woffu-focus-ring w-fit rounded-xl border border-[#e5ff78]/30 bg-[#e5ff78]/10 px-3 py-2 text-xs font-semibold text-[#e5ff78] hover:bg-[#e5ff78]/20">
+                ช่วยรีเซ็ตรหัสผ่าน
+              </button>
+            )}
+          </div>
         ) : null}
       </div>
 
@@ -685,6 +694,12 @@ export default function MembersPage() {
             <Section title="GRAPHIC" list={group.GRAPHIC} />
             <Section title="ALL" list={group.ALL} />
           </>
+        )}
+
+        {recoveryTarget && (
+          <MemberRecoveryModal key={recoveryTarget.id}
+            member={recoveryTarget}
+            onClose={() => setRecoveryTarget(null)} />
         )}
 
         <AvatarCropModal

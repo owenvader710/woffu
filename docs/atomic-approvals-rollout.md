@@ -1,7 +1,7 @@
 # WOFFU OS V2 — Atomic approvals rollout
 
 ## Why this migration is needed
-The legacy application updates \`status_change_requests\` and \`projects\` in
+The legacy application updates `status_change_requests` and `projects` in
 separate API calls. If one succeeds and the other fails, the approval history
 and actual project status diverge. V2 uses a single PostgreSQL function with
 row locks; any SQL error rolls back both writes.
@@ -10,11 +10,11 @@ row locks; any SQL error rolls back both writes.
 
 1. **Backup** the existing Supabase database (schema and data).
 2. Create a separate **staging Supabase project** and restore representative
-   data. Verify that \`public.profiles\`, \`public.projects\`, and
-   \`public.status_change_requests\` exist and their column types match.
-3. Review and execute \`supabase/migrations/202611020001_atomic_status_approvals.sql\`
+   data. Verify that `public.profiles`, `public.projects`, and
+   `public.status_change_requests` exist and their column types match.
+3. Review and execute `supabase/migrations/202611020001_atomic_status_approvals.sql`
    on staging. Check that no existing function with that name has incompatible
-   signatures and that \`status\` and \`request_status\` accept the existing values.
+   signatures and that `status` and `request_status` accept the existing values.
 4. Configure staging environment variables; deploy the V2 branch to staging.
 5. Test:
    - An anonymous user and a MEMBER cannot approve/reject.
@@ -31,8 +31,8 @@ row locks; any SQL error rolls back both writes.
 
 ## Operational notes
 
-- Function runs as \`SECURITY DEFINER\` and checks \`auth.uid()\` against
-  active LEADER/ADMIN profiles. EXECUTE is granted only to \`authenticated\`.
+- Function runs as `SECURITY DEFINER` and checks `auth.uid()` against
+  active LEADER/ADMIN profiles. EXECUTE is granted only to `authenticated`.
 - A service role key must never be made available to browser code.
 - Keep the PR in Draft until migrations, RLS review and live smoke tests pass.
 - No production data or secrets are changed by committing the SQL file.

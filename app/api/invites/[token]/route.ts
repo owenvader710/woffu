@@ -110,12 +110,14 @@ export async function POST(
       );
     }
 
+    // Narrow the claimed ID before the async closure for strict TypeScript.
+    const inviteId = invite.id;
     // Only release the *same* claim on failure. A newer claim must never
     // be cleared by a request that failed earlier.
     async function releaseClaim() {
       const { error } = await admin.from("invites")
         .update({ used_at: null })
-        .eq("id", invite.id)
+        .eq("id", inviteId)
         .eq("used_at", claimedAt);
       if (error) console.error("[INVITES] Claim release failed", error.code);
     }

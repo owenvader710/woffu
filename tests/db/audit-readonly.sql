@@ -9,7 +9,9 @@ WHERE table_schema = 'public'
     'project_draft_reviews', 'project_logs', 'notifications')
 ORDER BY table_name, ordinal_position;
 
-SELECT schemaname, tablename, rowsecurity, forcerowsecurity
+SELECT t.schemaname, t.tablename,
+       c.relrowsecurity AS rowsecurity,
+       c.relforcerowsecurity AS forcerowsecurity
 FROM pg_tables t
 JOIN pg_class c ON c.relname = t.tablename
 JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = t.schemaname
@@ -34,4 +36,4 @@ FROM pg_constraint
 WHERE connamespace = 'public'::regnamespace
   AND conrelid IN ('public.projects'::regclass,
                    'public.status_change_requests'::regclass)
-ORDER BY table_name::text, constraint_name;
+ORDER BY conrelid, conname;

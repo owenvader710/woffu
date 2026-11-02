@@ -79,6 +79,10 @@ type DashboardPayload = {
     latestGraphic: Project[];
     latestVideo: Project[];
     workload: WorkloadItem[];
+    reviewQueue?: { projectId: string; title: string; draftNumber: number; submittedAt: string }[];
+    revisionCount?: number;
+    overdue?: Project[];
+    deadlineSoon?: Project[];
   };
 };
 
@@ -638,6 +642,10 @@ export default function DashboardPage() {
   const latestGraphic = dashboard?.sections.latestGraphic ?? [];
   const latestVideo = dashboard?.sections.latestVideo ?? [];
   const workload = dashboard?.sections.workload ?? [];
+  const reviewQueue = dashboard?.sections.reviewQueue ?? [];
+  const revisionCount = dashboard?.sections.revisionCount ?? 0;
+  const overdue = dashboard?.sections.overdue ?? [];
+  const deadlineSoon = dashboard?.sections.deadlineSoon ?? [];
 
   const totalProjectsForDonut =
     projectCounts.total + projectCounts.completed;
@@ -779,6 +787,53 @@ export default function DashboardPage() {
         </div>
       </DashboardCard>
 
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
+        <Link href="/approvals" className="rounded-2xl border border-yellow-400/20 bg-yellow-400/5 p-4 transition hover:bg-yellow-400/10">
+          <div className="text-xs font-semibold text-yellow-200">DRAFTS รอตรวจ</div>
+          <div className="mt-2 text-3xl font-extrabold">{reviewQueue.length}</div>
+          <p className="mt-1 text-xs text-white/50">ดูรายการที่รอ QC ด้านล่าง</p>
+        </Link>
+        <Link href="/my-work" className="rounded-2xl border border-red-400/20 bg-red-400/5 p-4 transition hover:bg-red-400/10">
+          <div className="text-xs font-semibold text-red-200">DRAFTS ต้องแก้ไข</div>
+          <div className="mt-2 text-3xl font-extrabold">{revisionCount}</div>
+          <p className="mt-1 text-xs text-white/50">รอบ QC แยกจากสถานะงาน</p>
+        </Link>
+        <Link href="/projects" className="rounded-2xl border border-white/15 bg-white/5 p-4 transition hover:bg-white/10">
+          <div className="text-xs font-semibold text-white/75">งานเกิน Deadline</div>
+          <div className="mt-2 text-3xl font-extrabold">{overdue.length}</div>
+          <p className="mt-1 text-xs text-white/50">รายการที่ยังไม่ปิดงาน</p>
+        </Link>
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <DashboardCard title="Draft รอ Senior QC" desc="คลิกเพื่อเปิดรายละเอียดและตรวจงาน">
+          {reviewQueue.length === 0 ? <p className="text-sm text-white/50">ไม่มี Draft รอตรวจ</p> :
+          <div className="space-y-2">
+            {reviewQueue.map(item => <Link key={item.projectId}
+              href={`/projects/${item.projectId}#draft-reviews`}
+              className="block rounded-xl border border-white/10 bg-black/20 p-3 transition hover:bg-white/10">
+              <div className="text-sm font-semibold text-white">{item.title}</div>
+              <div className="mt-1 text-xs text-white/50">Draft {item.draftNumber} · รอ QC</div>
+            </Link>)}
+          </div>}
+        </DashboardCard>
+        <DashboardCard title="ใกล้กำหนดส่ง (72 ชั่วโมง)" desc="งานที่ยังไม่ปิดและต้องติดตาม">
+          {deadlineSoon.length === 0 && overdue.length === 0 ? <p className="text-sm text-white/50">ไม่มีงานใกล้หรือเกินกำหนด</p> :
+          <div className="space-y-2">
+            {overdue.map(p => <Link key={p.id} href={`/projects/${p.id}`}
+              className="block rounded-xl border border-red-500/20 bg-red-500/10 p-3">
+              <div className="text-sm font-semibold">{p.title}</div>
+              <div className="mt-1 text-xs text-red-200">เลยกำหนด · {formatDateTimeTH(p.due_date)}</div>
+            </Link>)}
+            {deadlineSoon.map(p => <Link key={p.id} href={`/projects/${p.id}`}
+              className="block rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="text-sm font-semibold">{p.title}</div>
+              <div className="mt-1 text-xs text-white/55">ครบกำหนด {formatDateTimeTH(p.due_date)}</div>
+            </Link>)}
+          </div>}
+        </DashboardCard>
+      </div>
+
       <DashboardCard
         title="ประกาศทีม"
         desc="ใช้สำหรับแจ้งลา ประชุม ปัญหา และงานด่วนของทีม"
@@ -823,7 +878,7 @@ export default function DashboardPage() {
               emptyText="ไม่มีรายการรออนุมัติ"
               submittingId={approvalSubmittingId}
               onApprove={(id) => handleApprovalAction(id, "approve")}
-              onReject={(id) => handleApprovalAction(id, "reject")}
+              onReject={() => router.push("/approvals")}
             />
           </DashboardCard>
 

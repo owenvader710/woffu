@@ -62,16 +62,6 @@ function getInitialStatus(startDate?: string | null) {
   return start.getTime() > startOfToday().getTime() ? "PRE_ORDER" : "TODO";
 }
 
-function shouldMovePreOrderToTodo(startDate?: string | null) {
-  if (!startDate) return false;
-
-  const start = new Date(startDate);
-  if (Number.isNaN(start.getTime())) return false;
-
-  start.setHours(0, 0, 0, 0);
-  return start.getTime() <= startOfToday().getTime();
-}
-
 export async function GET() {
   const supabase = await createSupabaseServer();
 
@@ -105,32 +95,7 @@ export async function GET() {
   }
   const enriched = data.map(item => ({ ...item, review_summary: qcMap.get(item.id) ?? null }));
 
-  const preOrderIdsToActivate = data
-    .filter((item) => item.status === "PRE_ORDER" && shouldMovePreOrderToTodo(item.start_date))
-    .map((item) => item.id)
-    .filter(Boolean);
-
-  if (preOrderIdsToActivate.length > 0) {
-    const { error: updateErr } = await supabase
-      .from("projects")
-      .update({ status: "TODO" })
-      .in("id", preOrderIdsToActivate)
-      .eq("status", "PRE_ORDER");
-
-    if (updateErr) {
-      return NextResponse.json({ error: updateErr.message }, { status: 500 });
-    }
-
-    const refreshed: ProjectRow[] = enriched.map((item) => {
-      if (preOrderIdsToActivate.includes(item.id) && item.status === "PRE_ORDER") {
-        return { ...item, status: "TODO" };
-      }
-      return item;
-    });
-
-    return NextResponse.json({ data: refreshed });
-  }
-
+  // GET must remain read-only. Status activation uses a separately authenticated POST.
   return NextResponse.json({ data: enriched });
 }
 

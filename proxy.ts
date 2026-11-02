@@ -65,9 +65,13 @@ export async function proxy(request: NextRequest) {
   const user = data?.user;
 
   const isPublic =
-    pathname.startsWith("/login") ||
-    pathname.startsWith("/api") ||
-    pathname.startsWith("/_next") ||
+    pathname === "/login" ||
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password" ||
+    pathname === "/auth/confirm" ||
+    pathname.startsWith("/invite/") ||
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico";
 
   if (user && pathname.startsWith("/login")) {

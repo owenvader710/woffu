@@ -20,6 +20,9 @@ type StatusRequest = {
   created_at: string;
   requested_by: string;
   approved_by?: string | null;
+  reject_reason?: string | null;
+  rejected_by?: string | null;
+  rejected_at?: string | null;
 
   project?: {
     id: string;
@@ -152,6 +155,12 @@ function ApprovalCard({
             {item.from_status} → {item.to_status}
           </div>
 
+          {item.request_status === "REJECTED" && item.reject_reason && (
+            <div className="mt-2 break-words rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-xs text-red-100">
+              เหตุผลที่ไม่อนุมัติ: {item.reject_reason}
+            </div>
+          )}
+
           <div className="mt-2 break-words text-xs leading-6 text-white/55">
             {item.assignee?.display_name
               ? `ผู้รับผิดชอบ ${item.assignee.display_name}`
@@ -192,6 +201,9 @@ export default function ApprovalsPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [filter, setFilter] = useState<DepartmentFilter>("ALL");
+  const [workingId, setWorkingId] = useState<string | null>(null);
+  const [rejectId, setRejectId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   async function loadAll() {
     setLoading(true);
@@ -222,10 +234,15 @@ export default function ApprovalsPage() {
     }
   }
 
-  async function act(id: string, action: "approve" | "reject") {
+  async function act(id: string, action: "approve" | "reject", reason?: string) {
+    if (workingId) return;
+    setWorkingId(id);
+    setErr("");
     try {
       const res = await fetch(`/api/approvals/${encodeURIComponent(id)}/${action}`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(action === "reject" ? { reason } : {}),
       });
       const json = await safeJson(res);
 
@@ -233,9 +250,13 @@ export default function ApprovalsPage() {
         throw new Error((json && (json.error || json.message)) || "Action failed");
       }
 
+      setRejectId(null);
+      setRejectReason("");
       await loadAll();
-    } catch (e: any) {
-      alert(e?.message || "Action failed");
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Action failed");
+    } finally {
+      setWorkingId(null);
     }
   }
 
@@ -351,7 +372,7 @@ export default function ApprovalsPage() {
                     key={r.id}
                     item={r}
                     onApprove={() => act(r.id, "approve")}
-                    onReject={() => act(r.id, "reject")}
+                    onReject={() => { if (!workingId) { setRejectId(r.id); setRejectReason(""); } }}
                   />
                 ))}
               </div>
@@ -359,6 +380,40 @@ export default function ApprovalsPage() {
           </div>
         )}
       </div>
+      {rejectId && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4" role="presentation">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reject-reason-title"
+            className="w-full max-w-lg rounded-2xl border border-white/20 bg-[#151515] p-5 shadow-2xl"
+          >
+            <h2 id="reject-reason-title" className="text-lg font-bold">ระบุเหตุผลที่ไม่อนุมัติ</h2>
+            <p className="mt-2 text-sm text-white/65">เหตุผลนี้จะถูกบันทึกและแสดงในประวัติการตรวจงาน</p>
+            <label htmlFor="reject-reason" className="mt-4 block text-sm font-semibold">รายละเอียดที่ต้องแก้ไข</label>
+            <textarea
+              id="reject-reason"
+              autoFocus
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              maxLength={2000}
+              rows={4}
+              className="mt-2 w-full resize-y rounded-xl border border-white/20 bg-black/50 p-3 text-sm text-white outline-none focus:border-[#e5ff78]"
+              placeholder="เช่น แก้ไขข้อมูลสเปกสินค้าและส่ง Draft ใหม่"
+            />
+            <div className="mt-2 text-right text-xs text-white/50">{rejectReason.length}/2000</div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" disabled={!!workingId} onClick={() => setRejectId(null)}
+                className="rounded-xl border border-white/20 px-4 py-2 text-sm font-semibold disabled:opacity-50">ยกเลิก</button>
+              <button type="button" disabled={!!workingId || !rejectReason.trim()}
+                onClick={() => act(rejectId, "reject", rejectReason.trim())}
+                className="rounded-xl bg-red-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                {workingId ? "กำลังบันทึก..." : "ยืนยัน Reject"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

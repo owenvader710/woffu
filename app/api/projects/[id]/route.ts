@@ -55,7 +55,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (reviewerError || !candidate?.is_active) {
       return NextResponse.json({ error: "Reviewer must be an active member" }, { status: 400 });
     }
-    if (body.assignee_id && body.assignee_id === patch.reviewer_id) {
+    const { data: currentProject, error: projectError } = await supabase.from("projects")
+      .select("assignee_id").eq("id", id).maybeSingle();
+    if (projectError || !currentProject) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+    if ((body.assignee_id || currentProject.assignee_id) === patch.reviewer_id) {
       return NextResponse.json({ error: "Reviewer cannot be the assignee" }, { status: 400 });
     }
   }

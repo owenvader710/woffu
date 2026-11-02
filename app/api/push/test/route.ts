@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
+import { requireActiveManager } from "@/app/api/_authorization";
 import { sendPushToUser } from "@/app/api/_push";
 
 export async function POST(req: Request) {
   try {
+    const access = await requireActiveManager();
+    if (access.response) return access.response;
     const body = await req.json();
 
     if (!body?.userId) {

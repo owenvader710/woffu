@@ -115,6 +115,8 @@ channel before issuing a recovery link. The backend:
    to issue a Supabase single-use recovery token **without sending email**.
 5. Writes a security notification to the member, without storing the token.
 6. Returns the link once to the manager, for private delivery.
+7. Allows at most one successfully issued link per member every 15 minutes,
+   and records the manager's user ID in the member's security notification.
 
 The link points to `/auth/confirm?token_hash=...&type=recovery`. Existing
 server verification, password update and sign-out handle the rest.

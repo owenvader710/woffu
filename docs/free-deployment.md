@@ -79,3 +79,26 @@ have no production uptime SLA, and can pause on inactivity/usage limits.
 - Netlify Next.js: https://docs.netlify.com/build/frameworks/framework-setup-guides/nextjs/overview/
 - Netlify Free & commercial projects: https://www.netlify.com/blog/introducing-netlify-free-plan/
 - Vercel Hobby terms (personal/noncommercial): https://vercel.com/legal/terms
+
+## November 2 staging integration verification
+
+A real **rollback-only SQL smoke test** was run against the isolated free
+staging Supabase database (no actual user credentials or production data).
+Temporary Auth rows and a project were created inside a transaction, and
+all test records were rolled back. Verified: leader atomic status approval,
+worker Draft 1 submission, unrelated MEMBER denied access to QC records,
+assigned reviewer REQUEST_CHANGES, then worker Draft 2 submission.
+After rollback there were **zero Auth users and zero projects**.
+
+During this test we caught and fixed a PostgreSQL enum incompatibility:
+`woffu_submit_project_draft` compared `project_status` against unsupported
+`CANCELLED`, causing 22P02 failures. Fixed both the fresh Phase 3 migration
+and added a forward migration (`202611020003_fix_draft_closed_status.sql`),
+which has been applied **to staging only**. CI now tests the actual enum.
+
+**Free-tier optimization:** My Work background polling now occurs every
+2 minutes when the browser tab is visible; it refreshes on tab return.
+This reduces Netlify request/compute consumption for idle team members.
+
+**Not yet verified:** browser login or application HTTP workflows. The
+staging Auth user list is empty and Netlify has not been connected/deployed.

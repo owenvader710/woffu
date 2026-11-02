@@ -198,7 +198,9 @@ export async function GET(req: NextRequest) {
     const sortedByDue = deadlineCandidates
       .filter(p => p.due_date && Number.isFinite(new Date(p.due_date).getTime()))
       .sort((a, b) => new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime());
-    const overdue = sortedByDue.filter(p => new Date(p.due_date!).getTime() < now).slice(0, 5);
+    const overdueAll = sortedByDue.filter(p => new Date(p.due_date!).getTime() < now);
+    const overdueCount = overdueAll.length;
+    const overdue = overdueAll.slice(0, 5);
     const deadlineSoon = sortedByDue.filter(p => {
       const when = new Date(p.due_date!).getTime();
       return when >= now && when <= now + 3 * 24 * 60 * 60 * 1000;
@@ -286,6 +288,7 @@ export async function GET(req: NextRequest) {
         workload,
         reviewQueue,
         revisionCount,
+        overdueCount,
         overdue,
         deadlineSoon,
       },

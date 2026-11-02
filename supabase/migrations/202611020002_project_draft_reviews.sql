@@ -43,7 +43,7 @@ USING (
       AND (
         p.assignee_id = actor.id
         OR p.reviewer_id = actor.id
-        OR actor.role IN ('ADMIN', 'LEADER')
+        OR actor.role::text IN ('ADMIN', 'LEADER')
       )
   )
 );

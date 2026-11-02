@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/app/api/_supabaseAdmin";
+import { requireActiveManager } from "@/app/api/_authorization";
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
@@ -10,6 +11,8 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
+    const access = await requireActiveManager();
+    if (access.response) return access.response;
     const { id } = await ctx.params;
 
     if (!id || !isUuid(id)) {

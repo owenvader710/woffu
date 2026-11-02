@@ -39,12 +39,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
 
-  const permitted = ["code", "title", "type", "start_date", "due_date", "product_group", "brand", "video_priority", "video_purpose", "graphic_job_type", "assignee_id", "description", "department"] as const;
+  const permitted = ["code", "title", "type", "start_date", "due_date", "product_group", "brand", "video_priority", "video_purpose", "graphic_job_type", "assignee_id", "description", "department", "reviewer_id"] as const;
   const patch: Record<string, unknown> = {};
   for (const key of permitted) {
     if (Object.prototype.hasOwnProperty.call(body, key)) patch[key] = body[key] === "" ? null : body[key];
   }
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: "No editable fields" }, { status: 400 });
+
+  if (Object.prototype.hasOwnProperty.call(patch, "reviewer_id") && patch.reviewer_id !== null) {
+    if (typeof patch.reviewer_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(patch.reviewer_id)) {
+      return NextResponse.json({ error: "Invalid reviewer" }, { status: 400 });
+    }
+    const { data: candidate, error: reviewerError } = await supabase.from("profiles")
+      .select("id, is_active").eq("id", patch.reviewer_id).maybeSingle();
+    if (reviewerError || !candidate?.is_active) {
+      return NextResponse.json({ error: "Reviewer must be an active member" }, { status: 400 });
+    }
+    if (body.assignee_id && body.assignee_id === patch.reviewer_id) {
+      return NextResponse.json({ error: "Reviewer cannot be the assignee" }, { status: 400 });
+    }
+  }
 
   const { data, error } = await supabase
     .from("projects")

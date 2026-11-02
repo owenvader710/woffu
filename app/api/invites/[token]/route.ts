@@ -25,8 +25,8 @@ export async function GET(
     const admin = createSupabaseAdmin();
     const token = await getTokenFromContext(context);
 
-    if (!token) {
-      return NextResponse.json({ error: "Missing token" }, { status: 400 });
+    if (!/^[0-9a-f]{64}$/i.test(token)) {
+      return NextResponse.json({ error: "Invalid invitation" }, { status: 400 });
     }
 
     const tokenHash = hashToken(token);
@@ -81,19 +81,43 @@ export async function POST(
       return NextResponse.json({ error: "Passwords do not match" }, { status: 400 });
     }
 
-    const tokenHash = hashToken(token);
+    if (!/^[0-9a-f]{64}$/i.test(token)) {
+      return NextResponse.json({ error: "Invalid invitation" }, { status: 400 });
+    }
 
-    const { data: invite, error: inviteErr } = await admin
+    const tokenHash = hashToken(token);
+    const claimedAt = new Date().toISOString();
+
+    // Claim atomically BEFORE creating an Auth account. Two simultaneous requests
+    // cannot consume the same invite; the second update matches zero rows.
+    const { data: invite, error: claimError } = await admin
       .from("invites")
-      .select("id, email, role, department, expires_at, used_at")
+      .update({ used_at: claimedAt })
       .eq("token_hash", tokenHash)
+      .is("used_at", null)
+      .gt("expires_at", claimedAt)
+      .select("id, email, role, department")
       .maybeSingle();
 
-    if (inviteErr) return NextResponse.json({ error: inviteErr.message }, { status: 400 });
-    if (!invite) return NextResponse.json({ error: "Invite not found" }, { status: 404 });
-    if (invite.used_at) return NextResponse.json({ error: "Invite already used" }, { status: 400 });
-    if (new Date(invite.expires_at).getTime() < Date.now()) {
-      return NextResponse.json({ error: "Invite expired" }, { status: 400 });
+    if (claimError) {
+      console.error("[INVITES] Could not claim invitation", claimError.code);
+      return NextResponse.json({ error: "Could not accept invitation" }, { status: 500 });
+    }
+    if (!invite) {
+      return NextResponse.json(
+        { error: "Invitation expired, already used, or unavailable" },
+        { status: 409 }
+      );
+    }
+
+    // Only release the *same* claim on failure. A newer claim must never
+    // be cleared by a request that failed earlier.
+    async function releaseClaim() {
+      const { error } = await admin.from("invites")
+        .update({ used_at: null })
+        .eq("id", invite.id)
+        .eq("used_at", claimedAt);
+      if (error) console.error("[INVITES] Claim release failed", error.code);
     }
 
     const created = await admin.auth.admin.createUser({
@@ -102,43 +126,35 @@ export async function POST(
       email_confirm: true,
     });
 
-    if (created.error) {
-      return NextResponse.json({ error: created.error.message }, { status: 400 });
+    if (created.error || !created.data?.user?.id) {
+      await releaseClaim();
+      return NextResponse.json({
+        error: created.error?.message || "Could not create account",
+      }, { status: 400 });
     }
 
-    const authUser = created.data.user;
-    if (!authUser?.id) {
-      return NextResponse.json({ error: "Failed to create auth user" }, { status: 400 });
-    }
+    const authUserId = created.data.user.id;
+    const { error: profileError } = await admin.from("profiles").upsert({
+      id: authUserId,
+      display_name: null,
+      role: invite.role,
+      department: invite.department,
+      email: invite.email,
+      is_active: true,
+      avatar_url: null,
+      phone: null,
+      birth_date: null,
+    }, { onConflict: "id" });
 
-    const { error: profileErr } = await admin.from("profiles").upsert(
-      {
-        id: authUser.id,
-        display_name: null,
-        role: invite.role,
-        department: invite.department,
-        email: invite.email,
-        is_active: true,
-        avatar_url: null,
-        phone: null,
-        birth_date: null,
-      },
-      {
-        onConflict: "id",
-      }
-    );
-
-    if (profileErr) {
-      return NextResponse.json({ error: profileErr.message }, { status: 400 });
-    }
-
-    const { error: usedErr } = await admin
-      .from("invites")
-      .update({ used_at: new Date().toISOString() })
-      .eq("id", invite.id);
-
-    if (usedErr) {
-      return NextResponse.json({ error: usedErr.message }, { status: 400 });
+    if (profileError) {
+      // Creating Auth and writing a profile are separate services. Compensate
+      // for partial failure; never leave an unapproved MEMBER account behind.
+      const { error: cleanupError } = await admin.auth.admin.deleteUser(authUserId);
+      if (!cleanupError) await releaseClaim();
+      else console.error("[INVITES] Manual cleanup needed for partially created user", cleanupError.message);
+      return NextResponse.json({
+        error: "Could not finish account setup. Contact your team leader.",
+      }, { status: 500 });
     }
 
     return NextResponse.json({

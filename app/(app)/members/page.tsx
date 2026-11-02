@@ -284,6 +284,7 @@ export default function MembersPage() {
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMsg, setInviteMsg] = useState("");
   const [inviteErr, setInviteErr] = useState("");
+  const [inviteLink, setInviteLink] = useState("");
 
   const [me, setMe] = useState<MeProfile | null>(null);
   const isLeader = me?.role === "LEADER" && me?.is_active === true;
@@ -345,6 +346,7 @@ export default function MembersPage() {
     setInviteBusy(true);
     setInviteMsg("");
     setInviteErr("");
+    setInviteLink("");
 
     try {
       const res = await fetch("/api/invites", {
@@ -364,7 +366,8 @@ export default function MembersPage() {
         return;
       }
 
-      setInviteMsg("ส่งคำเชิญสำเร็จแล้ว");
+      setInviteLink(typeof json?.inviteLink === "string" ? json.inviteLink : "");
+      setInviteMsg(json?.message || "สร้างคำเชิญสำเร็จแล้ว");
       setInviteEmail("");
       setInviteRole("MEMBER");
       setInviteDepartment("ALL");
@@ -608,9 +611,9 @@ export default function MembersPage() {
 
         {isLeader ? (
           <div className="mt-6 rounded-[28px] border border-white/10 bg-white/5 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.35)] md:rounded-[34px] md:p-6">
-            <div className="text-lg font-extrabold text-white md:text-xl">Invite Member</div>
+            <div className="text-lg font-bold text-white md:text-xl">เชิญสมาชิกเข้าร่วมทีม</div>
             <div className="mt-1 text-sm leading-6 text-white/45">
-              เชิญสมาชิกผ่านอีเมล เพื่อให้ผู้ถูกเชิญตั้งรหัสผ่านเองและเข้าใช้งานระบบได้
+              สร้างลิงก์เชิญสมาชิกแล้วแชร์ผ่านแชตได้ฟรี ไม่จำเป็นต้องใช้บริการส่งอีเมล
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
@@ -647,12 +650,24 @@ export default function MembersPage() {
                 disabled={inviteBusy}
                 className="rounded-2xl bg-[#e5ff78] px-5 py-2.5 text-sm font-bold text-black hover:opacity-90 disabled:opacity-60"
               >
-                {inviteBusy ? "กำลังส่ง..." : "Send Invite"}
+                {inviteBusy ? "กำลังสร้างลิงก์..." : "สร้างคำเชิญ"}
               </button>
 
               {inviteMsg ? <div className="text-sm text-lime-300">{inviteMsg}</div> : null}
               {inviteErr ? <div className="text-sm text-red-300">{inviteErr}</div> : null}
             </div>
+            {inviteLink && (
+              <div className="mt-4 rounded-xl border border-[#e5ff78]/30 bg-[#e5ff78]/10 p-4">
+                <label htmlFor="new-invite-link" className="mb-2 block text-xs font-semibold text-[#e5ff78]">ลิงก์คำเชิญ (หมดอายุภายใน 48 ชั่วโมง)</label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input id="new-invite-link" readOnly value={inviteLink}
+                    className="woffu-input-simple min-w-0 flex-1" onFocus={e => e.target.select()}/>
+                  <button type="button" onClick={() => void navigator.clipboard.writeText(inviteLink)}
+                    className="rounded-xl bg-[#e5ff78] px-4 py-2 text-sm font-semibold text-black">คัดลอกลิงก์</button>
+                </div>
+                <p className="mt-2 text-xs text-white/60">ลิงก์นี้ใช้ตั้งรหัสผ่านได้ครั้งเดียว ส่งให้ผู้รับโดยตรงเท่านั้น</p>
+              </div>
+            )}
           </div>
         ) : null}
 

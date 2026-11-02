@@ -14,5 +14,9 @@ GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated, anon;
 
 CREATE SCHEMA storage;
 CREATE TABLE storage.buckets (
-  id text PRIMARY KEY, name text NOT NULL, public boolean NOT NULL DEFAULT false
+  id text PRIMARY KEY,
+  name text NOT NULL,
+  public boolean NOT NULL DEFAULT false,
+  file_size_limit bigint,
+  allowed_mime_types text[]
 );

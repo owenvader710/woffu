@@ -60,3 +60,6 @@ jobs:
 
       - name: Test roles, approval and Draft QC workflow
         run: psql -X -v ON_ERROR_STOP=1 -f tests/db/workflow.sql
+
+      - name: Verify schema-audit script (read-only)
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/audit-readonly.sql > /dev/null

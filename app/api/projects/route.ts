@@ -43,6 +43,7 @@ type ProjectRow = {
   description?: string | null;
   department?: string | null;
   created_by?: string | null;
+  review_summary?: { draft_number: number; review_status: string } | null;
 };
 
 function startOfToday() {
@@ -87,6 +88,23 @@ export async function GET() {
     ? (rawData as unknown as ProjectRow[])
     : [];
 
+  // Attach QC state without altering the project status or requiring a migration on legacy builds.
+  const projectIds = data.map(item => item.id);
+  const reviewsRes = projectIds.length
+    ? await supabase.from("project_draft_reviews")
+        .select("project_id, draft_number, review_status")
+        .in("project_id", projectIds)
+        .order("draft_number", { ascending: false })
+    : { data: [], error: null };
+  if (reviewsRes.error && !["42P01", "PGRST205", "42703"].includes(reviewsRes.error.code || "")) {
+    return NextResponse.json({ error: "Unable to load draft review summaries" }, { status: 500 });
+  }
+  const qcMap = new Map<string, { draft_number: number; review_status: string }>();
+  for (const review of reviewsRes.data ?? []) {
+    if (!qcMap.has(review.project_id)) qcMap.set(review.project_id, review);
+  }
+  const enriched = data.map(item => ({ ...item, review_summary: qcMap.get(item.id) ?? null }));
+
   const preOrderIdsToActivate = data
     .filter((item) => item.status === "PRE_ORDER" && shouldMovePreOrderToTodo(item.start_date))
     .map((item) => item.id)
@@ -103,7 +121,7 @@ export async function GET() {
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
     }
 
-    const refreshed: ProjectRow[] = data.map((item) => {
+    const refreshed: ProjectRow[] = enriched.map((item) => {
       if (preOrderIdsToActivate.includes(item.id) && item.status === "PRE_ORDER") {
         return { ...item, status: "TODO" };
       }
@@ -113,7 +131,7 @@ export async function GET() {
     return NextResponse.json({ data: refreshed });
   }
 
-  return NextResponse.json({ data });
+  return NextResponse.json({ data: enriched });
 }
 
 export async function POST(req: Request) {

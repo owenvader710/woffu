@@ -93,7 +93,7 @@ BEGIN
   IF v_project.assignee_id IS DISTINCT FROM v_actor THEN
     RETURN jsonb_build_object('ok', false, 'code', 'FORBIDDEN');
   END IF;
-  IF v_project.status IN ('COMPLETED', 'CANCELLED') THEN
+  IF v_project.status = 'COMPLETED' THEN
     RETURN jsonb_build_object('ok', false, 'code', 'PROJECT_CLOSED');
   END IF;
 

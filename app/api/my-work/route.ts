@@ -87,9 +87,37 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Draft QC is independent from the project's existing status.
+    // Legacy installations without Phase 3 migration retain normal My Work behavior.
+    const reviewResult = await supabase
+      .from("project_draft_reviews")
+      .select("project_id, draft_number, review_status, created_at")
+      .in("project_id", ids)
+      .order("draft_number", { ascending: false });
+
+    if (reviewResult.error && !["42P01", "PGRST205", "42703"].includes(reviewResult.error.code || "")) {
+      return applyCookies(NextResponse.json({ error: "Unable to load QC status" }, { status: 500 }));
+    }
+
+    const qcByProject = new Map<string, {
+      draft_number: number;
+      review_status: string;
+      created_at: string;
+    }>();
+    for (const review of reviewResult.data ?? []) {
+      if (!qcByProject.has(review.project_id)) {
+        qcByProject.set(review.project_id, {
+          draft_number: review.draft_number,
+          review_status: review.review_status,
+          created_at: review.created_at,
+        });
+      }
+    }
+
     const merged = rows.map((p: any) => ({
       ...p,
       pending_request: map.get(p.id) ?? null,
+      review_summary: qcByProject.get(p.id) ?? null,
     }));
 
     const res = NextResponse.json({ data: merged }, { status: 200 });

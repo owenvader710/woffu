@@ -9,11 +9,11 @@ approving a project status change.
 1. Back up Supabase production. Use a separate **staging Supabase** project
    containing a copy of the schema and representative projects/accounts.
 2. Apply the database migrations **in order**:
-   - \`202611020001_atomic_status_approvals.sql\`
-   - \`202611020002_project_draft_reviews.sql\`
-3. Validate existing RLS on \`projects\` and \`profiles\`. The migration adds
-   a SELECT-only RLS policy on \`project_draft_reviews\`; all mutations are via
-   protected SECURITY DEFINER functions that re-check \`auth.uid()\`.
+   - `202611020001_atomic_status_approvals.sql`
+   - `202611020002_project_draft_reviews.sql`
+3. Validate existing RLS on `projects` and `profiles`. The migration adds
+   a SELECT-only RLS policy on `project_draft_reviews`; all mutations are via
+   protected SECURITY DEFINER functions that re-check `auth.uid()`.
    A reviewer selected in the UI is assigned via manager-only project PATCH:
    verify that direct SQL/PostgREST writes cannot bypass project RLS.
 4. Deploy V2 to staging with staging Supabase credentials.
@@ -25,7 +25,7 @@ approving a project status change.
    - Assigned reviewer can APPROVE or REQUEST_CHANGES; unrelated MEMBER cannot.
    - REQUEST_CHANGES requires written feedback.
    - Next Draft number increments only after CHANGES_REQUESTED (up to Draft 4).
-   - Approval/rejection of Draft does not mutate \`projects.status\`.
+   - Approval/rejection of Draft does not mutate `projects.status`.
    - Concurrent decisions/submissions produce exactly one successful transition.
    - Inactive accounts are rejected.
    - My Work latest Draft chip and Dashboard QC queue match real data.

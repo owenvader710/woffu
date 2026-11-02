@@ -3,7 +3,7 @@ import { supabaseFromRequest } from "@/utils/supabase/api";
 import { createSupabaseAdmin } from "@/app/api/_supabaseAdmin";
 
 function isLeaderRole(role?: string | null) {
-  return String(role || "").toUpperCase() === "LEADER";
+  return ["LEADER", "ADMIN"].includes(String(role || "").toUpperCase());
 }
 
 // NOTE:
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   const admin = createSupabaseAdmin();
 
   const baseSelect =
-    "id, project_id, from_status, to_status, note, request_status, created_at, requested_by, approved_by";
+    "id, project_id, from_status, to_status, note, request_status, created_at, requested_by, approved_by, reject_reason, rejected_by, rejected_at";
 
   const [pendingRes, historyRes] = await Promise.all([
     admin

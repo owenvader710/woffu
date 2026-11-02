@@ -81,6 +81,7 @@ type DashboardPayload = {
     workload: WorkloadItem[];
     reviewQueue?: { projectId: string; title: string; draftNumber: number; submittedAt: string }[];
     revisionCount?: number;
+    overdueCount?: number;
     overdue?: Project[];
     deadlineSoon?: Project[];
   };
@@ -645,6 +646,7 @@ export default function DashboardPage() {
   const reviewQueue = dashboard?.sections.reviewQueue ?? [];
   const revisionCount = dashboard?.sections.revisionCount ?? 0;
   const overdue = dashboard?.sections.overdue ?? [];
+  const overdueCount = dashboard?.sections.overdueCount ?? overdue.length;
   const deadlineSoon = dashboard?.sections.deadlineSoon ?? [];
 
   const totalProjectsForDonut =
@@ -800,7 +802,7 @@ export default function DashboardPage() {
         </Link>
         <Link href="/projects" className="rounded-2xl border border-white/15 bg-white/5 p-4 transition hover:bg-white/10">
           <div className="text-xs font-semibold text-white/75">งานเกิน Deadline</div>
-          <div className="mt-2 text-3xl font-extrabold">{overdue.length}</div>
+          <div className="mt-2 text-3xl font-extrabold">{overdueCount}</div>
           <p className="mt-1 text-xs text-white/50">รายการที่ยังไม่ปิดงาน</p>
         </Link>
       </div>

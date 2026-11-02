@@ -80,23 +80,29 @@ export async function POST(
 
   const approvedAt = new Date().toISOString();
 
-  const { error: updReqErr } = await admin
+  const { data: claimedRequest, error: updReqErr } = await admin
     .from("status_change_requests")
     .update({
       request_status: "APPROVED",
       approved_by: user.id,
       approved_at: approvedAt,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("request_status", "PENDING")
+    .select("id")
+    .maybeSingle();
 
   if (updReqErr) {
     return NextResponse.json({ error: updReqErr.message }, { status: 500 });
   }
 
+  if (!claimedRequest) return NextResponse.json({ error: "Already processed" }, { status: 409 });
+
   const { error: updProjErr } = await admin
     .from("projects")
     .update({ status: reqRow.to_status })
-    .eq("id", reqRow.project_id);
+    .eq("id", reqRow.project_id)
+    .eq("status", reqRow.from_status);
 
   if (updProjErr) {
     return NextResponse.json({ error: updProjErr.message }, { status: 500 });

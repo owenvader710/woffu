@@ -1,8 +1,9 @@
-// app/login/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { LockKeyhole, Mail, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,8 +12,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  async function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (loading) return;
     setErr(null);
     setLoading(true);
 
@@ -20,73 +22,69 @@ export default function LoginPage() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim(), password }),
       });
-
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j?.error || "Login failed");
-      }
-
-      router.push("/dashboard");
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.error || "ไม่สามารถเข้าสู่ระบบได้");
+      router.replace("/dashboard");
       router.refresh();
-    } catch (e: any) {
-      setErr(e?.message || "Login failed");
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "ไม่สามารถเข้าสู่ระบบได้");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg">
-        <div className="mb-5">
-          <div className="text-3xl font-black tracking-tighter text-[#e5ff78] text-center">WOFFU OS</div>
-          <div className="text-sm text-white/60 text-center">Sign in to continue</div>
+    <main className="flex min-h-screen items-center justify-center bg-[#0e1011] px-4 py-10 text-white">
+      <section className="w-full max-w-md rounded-[24px] border border-white/10 bg-[#191b1d] p-6 shadow-xl sm:p-8">
+        <div className="mb-8 text-center">
+          <p className="text-[11px] font-semibold tracking-[0.2em] text-white/45">TEAM WORKSPACE</p>
+          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-[#e5ff78]">WOFFU OS</h1>
+          <p className="mt-3 text-sm text-white/60">เข้าสู่ระบบจัดการงานของทีม</p>
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-3">
-          <div className="space-y-1">
-            <label className="text-xs text-white/60">Email</label>
-            <input
-              className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 outline-none focus:border-white/30"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@email.com"
-              autoComplete="email"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs text-white/60">Password</label>
-            <input
-              className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 outline-none focus:border-white/30"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              type="password"
-              autoComplete="current-password"
-            />
-          </div>
-
-          {err ? (
-            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-              {err}
+        <form onSubmit={onSubmit} className="space-y-5">
+          <div>
+            <label htmlFor="login-email" className="mb-2 block text-sm font-semibold text-white/80">อีเมล</label>
+            <div className="relative">
+              <Mail size={18} aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
+              <input id="login-email" type="email" required autoComplete="username"
+                value={email} onChange={e => setEmail(e.target.value)}
+                placeholder="name@company.com"
+                className="woffu-input-simple pl-11" />
             </div>
-          ) : null}
+          </div>
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <label htmlFor="login-password" className="text-sm font-semibold text-white/80">รหัสผ่าน</label>
+              <Link href="/forgot-password"
+                className="woffu-focus-ring rounded text-xs font-semibold text-[#e5ff78] hover:underline">
+                ลืมรหัสผ่าน?
+              </Link>
+            </div>
+            <div className="relative">
+              <LockKeyhole size={18} aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
+              <input id="login-password" type="password" required autoComplete="current-password"
+                value={password} onChange={e => setPassword(e.target.value)}
+                placeholder="กรอกรหัสผ่าน" className="woffu-input-simple pl-11" />
+            </div>
+          </div>
 
-          <button
-            disabled={loading}
-            className="w-full rounded-xl bg-[#e5ff78] tracking-tighter text-black py-2 font-semibold disabled:opacity-60"
-          >
-            {loading ? "Signing in..." : "Sign in"}
+          {err && (
+            <div role="alert" className="rounded-xl border border-red-400/25 bg-red-400/10 p-3 text-sm text-red-200">{err}</div>
+          )}
+
+          <button type="submit" disabled={loading}
+            className="woffu-focus-ring flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#e5ff78] px-4 py-3 text-sm font-bold text-black transition hover:bg-[#daef83] disabled:opacity-60">
+            {loading ? "กำลังเข้าสู่ระบบ..." : <>เข้าสู่ระบบ <ArrowRight size={17} aria-hidden="true" /></>}
           </button>
         </form>
 
-        <div className="mt-4 text-xs text-white/40">
-          ถ้าเข้าระบบไม่ได้ ให้ติดต่อแอดมินเพื่อ invite
-        </div>
-      </div>
-    </div>
+        <p className="mt-7 border-t border-white/10 pt-5 text-center text-xs leading-6 text-white/50">
+          ยังไม่มีบัญชี? ติดต่อหัวหน้าทีมเพื่อรับลิงก์เชิญสมาชิก
+        </p>
+      </section>
+    </main>
   );
 }

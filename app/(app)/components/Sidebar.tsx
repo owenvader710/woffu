@@ -15,11 +15,6 @@ type MeProfile = {
   is_active?: boolean;
 };
 
-type NavItem = {
-  label: string;
-  href: string;
-};
-
 type SidebarProps = {
   mobile?: boolean;
   onNavigate?: () => void;
@@ -39,7 +34,7 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
   const router = useRouter();
 
   const [me, setMe] = useState<MeProfile | null>(null);
-  const [isProjectOpen, setIsProjectOpen] = useState(false);
+  const [projectOpenOverride, setProjectOpenOverride] = useState<boolean | null>(null);
 
   const isLeader = useMemo(
     () => (me?.role === "LEADER" || me?.role === "ADMIN") && me?.is_active !== false,
@@ -68,19 +63,15 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
     );
   }, [pathname]);
 
-  useEffect(() => {
-    if (projectActive) {
-      setIsProjectOpen(true);
-    }
-  }, [projectActive]);
+  const isProjectOpen = projectOpenOverride ?? projectActive;
 
   const handleNavigate = useCallback(() => {
     if (mobile) onNavigate?.();
   }, [mobile, onNavigate]);
 
   const handleProjectToggle = useCallback(() => {
-    setIsProjectOpen((prev) => !prev);
-  }, []);
+    setProjectOpenOverride((previous) => !(previous ?? projectActive));
+  }, [projectActive]);
 
   async function logout() {
     try {
@@ -154,6 +145,8 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
             <button
               type="button"
               onClick={handleProjectToggle}
+              aria-expanded={isProjectOpen}
+              aria-controls="woffu-project-submenu"
               className={cn(linkCls(projectActive), "w-full text-left")}
             >
               <span className="flex items-center gap-3"><FolderKanban size={18} aria-hidden="true" /> โปรเจกต์</span>
@@ -165,7 +158,7 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
               />
             </button>
 
-            <div
+            <div id="woffu-project-submenu"
               className={cn(
                 "grid transition-all duration-200 ease-out",
                 isProjectOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"

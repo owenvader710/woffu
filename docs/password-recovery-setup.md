@@ -99,3 +99,43 @@ Official documentation:
 - [ ] Confirm inactive user still cannot enter the workspace.
 - [ ] Verify keyboard/mobile UI and use long Thai error messages.
 - [ ] Never change Production SMTP/Auth settings before staging sign-off.
+
+
+## Free fallback: leader-assisted recovery without SMTP
+
+If normal recovery emails are unavailable, the active **LEADER** can open
+**Members → ช่วยรีเซ็ตรหัสผ่าน** for an active MEMBER.
+
+The manager must verify the person's identity through a trusted internal
+channel before issuing a recovery link. The backend:
+1. Checks active manager authentication.
+2. Allows active MEMBER targets only (LEADER-to-LEADER takeovers prohibited).
+3. Verifies the target's profile email matches their Supabase Auth user.
+4. Uses the service-role `auth.admin.generateLink({ type: 'recovery' })`
+   to issue a Supabase single-use recovery token **without sending email**.
+5. Writes a security notification to the member, without storing the token.
+6. Returns the link once to the manager, for private delivery.
+
+The link points to `/auth/confirm?token_hash=...&type=recovery`. Existing
+server verification, password update and sign-out handle the rest.
+
+**Requirements:** `NEXT_PUBLIC_SITE_URL` must be a trusted HTTPS origin
+of the **staging website**; server-only `SUPABASE_SERVICE_ROLE_KEY` must
+belong to the same staging project. This protected endpoint stays blocked
+by the Vercel read-only Preview guard until isolation is verified.
+
+**Security warning:** A bearer recovery link enables password takeover.
+A LEADER must not issue it without independent identity verification,
+post it in a group chat, or retain it after delivering it. The link is
+single-use and expires according to Supabase Auth settings. Manual recovery
+is a fallback, not equivalent to verified email ownership. Keep leader
+access limited to trusted staff. No password or token is stored in the audit.
+
+### Manual recovery acceptance tests
+- [ ] MEMBER gets no button; LEADER sees controls only for active MEMBER.
+- [ ] POST without login returns 401; MEMBER caller returns 403.
+- [ ] Target LEADER/inactive/member without matching Auth user is denied.
+- [ ] Missing identity confirmation or HTTPS site origin is denied.
+- [ ] One-time recovery link is shown once, used once and expires.
+- [ ] Member receives an account recovery notification, with no token.
+- [ ] Vercel read-only Preview blocks this endpoint until staging is verified.

@@ -27,6 +27,7 @@ type Project = {
 
   type: "VIDEO" | "GRAPHIC";
   status: "PRE_ORDER" | "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
+  review_summary?: { draft_number: number; review_status: string } | null;
   created_at: string;
   start_date: string | null;
   due_date: string | null;
@@ -171,6 +172,13 @@ function CodeBadge({ code }: { code?: string | null }) {
   );
 }
 
+function projectQcLabel(project: Project) {
+  const draft = project.review_summary;
+  if (!draft) return null;
+  const text = draft.review_status === "SUBMITTED" ? "รอ QC" : draft.review_status === "APPROVED" ? "ผ่าน QC" : "ต้องแก้ไข";
+  return `Draft ${draft.draft_number} · ${text}`;
+}
+
 function MobileProjectCard({
   p,
   assigneeName,
@@ -209,6 +217,7 @@ function MobileProjectCard({
           <div className="mt-3 flex flex-wrap gap-2">
             <Pill tone={p.type === "VIDEO" ? "blue" : "amber"}>{p.type}</Pill>
             <Pill tone={statusTone(p.status)}>{p.status}</Pill>
+            {p.review_summary && <Link href={`/projects/${p.id}#draft-reviews`} className="rounded-full border border-[#e5ff78]/30 px-2.5 py-1 text-xs font-semibold text-[#e5ff78]">{projectQcLabel(p)}</Link>}
             {p.brand ? <Pill tone="neutral">{p.brand}</Pill> : null}
           </div>
         </div>
@@ -280,7 +289,7 @@ export default function ProjectsPage() {
     const r = await fetch("/api/me-profile", { cache: "no-store" });
     const j = await safeJson(r);
     const me = j?.data ?? j;
-    return me?.role === "LEADER" && me?.is_active === true;
+    return ["LEADER", "ADMIN"].includes(me?.role) && me?.is_active === true;
   }, []);
 
   const loadProjects = useCallback(async () => {
@@ -595,6 +604,10 @@ export default function ProjectsPage() {
                                     {secondLine(p)}
                                   </div>
                                 ) : null}
+
+                                {p.review_summary && (
+                                  <Link href={`/projects/${p.id}#draft-reviews`} className="mt-2 inline-flex rounded-lg border border-[#e5ff78]/30 px-2 py-1 text-xs font-semibold text-[#e5ff78]">{projectQcLabel(p)}</Link>
+                                )}
 
                                 {p.brand ? (
                                   <div className="mt-2 flex flex-wrap gap-2">

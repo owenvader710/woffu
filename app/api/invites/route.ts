@@ -125,17 +125,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: inviteErr.message }, { status: 400 });
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-    const inviteLink = `${siteUrl}/invite/${rawToken}`;
+    const configuredUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+    const baseUrl = configuredUrl && /^https?:\/\//i.test(configuredUrl)
+      ? configuredUrl.replace(/\/$/, "")
+      : req.nextUrl.origin;
+    const inviteLink = `${baseUrl}/invite/${rawToken}`;
 
-    await sendInviteEmail({
-      to: email,
-      inviteLink,
-    });
+    // Email is optional on the Free deployment: share the invitation link
+    // from the authenticated leader's screen when no email provider exists.
+    let delivery: "email" | "manual" = "manual";
+    if (process.env.RESEND_API_KEY && process.env.INVITE_FROM_EMAIL) {
+      try {
+        await sendInviteEmail({ to: email, inviteLink });
+        delivery = "email";
+      } catch (error) {
+        console.error("[INVITES] Email delivery failed; returning a private share link", error instanceof Error ? error.message : "unknown");
+      }
+    }
 
     return NextResponse.json({
       ok: true,
-      message: "Invite sent successfully",
+      delivery,
+      ...(delivery === "manual" ? { inviteLink } : {}),
+      message: delivery === "email"
+        ? "ส่งคำเชิญทางอีเมลแล้ว"
+        : "สร้างลิงก์คำเชิญแล้ว คัดลอกและส่งให้สมาชิกด้วยตัวเอง",
     });
   } catch (e: any) {
     return NextResponse.json(

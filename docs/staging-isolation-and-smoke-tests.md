@@ -76,3 +76,33 @@ Asia/Bangkok.
 - Production backup and a reviewed migration plan.
 - **Migrate production DB first, then deploy V2** after approval.
 - Do not merge PR #1 before the above checks pass.
+
+
+## Production schema observations — read-only audit, 2026-11-02
+
+Current Supabase project: `woffu Project`. Its role enum `public.role_type`
+contains only `LEADER` and `MEMBER` (no `ADMIN`). Existing V2 code models
+`ADMIN` as an optional role, but **an ADMIN account cannot be created using
+that enum without a separate reviewed schema change**. Phase 2 SQL compares
+`role::text` for compatibility; do not silently add enum values in production.
+
+The Supabase security advisor currently reports:
+- RLS disabled: `invites`, `push_tokens`, `push_subscriptions`,
+  `team_notices` in the exposed public schema.
+- `members` is a security-definer view.
+- `notifications` has RLS enabled but no RLS policies.
+- Some objects are discoverable through `anon` GraphQL grants.
+- Several functions have mutable `search_path`.
+
+These are **existing production risks** and require a reviewed security
+migration after inspecting use patterns. Do not change production grants
+blindly because the current app may depend on them. Security advisor docs:
+https://supabase.com/docs/guides/database/database-linter
+
+## Staging branch creation cost / permission gate
+
+Supabase branch creation reported an additional cost of **$0.01344 per
+hour** (organization-specific quote on 2026-11-02).
+Creation was **not** performed: Supabase requires explicit acceptance of
+the quoted hourly charge. Obtain the user's agreement before confirming
+the cost and calling `create_branch`.

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
+import { requireActiveManager } from "@/app/api/_authorization";
 import { createSupabaseAdmin } from "../../_supabaseAdmin";
 
 function getEnv(name: string) {
@@ -18,6 +19,8 @@ function initWebPush() {
 
 export async function POST(req: NextRequest) {
   try {
+    const access = await requireActiveManager();
+    if (access.response) return access.response;
     initWebPush();
     const admin = createSupabaseAdmin();
 

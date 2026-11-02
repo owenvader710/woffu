@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ArrowLeft, MailCheck, Send } from "lucide-react";
 
@@ -9,6 +9,11 @@ export default function ForgotPasswordPage() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
+  const [expiredLink, setExpiredLink] = useState(false);
+
+  useEffect(() => {
+    setExpiredLink(new URLSearchParams(window.location.search).get("error") === "invalid_link");
+  }, []);
 
   async function requestReset(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,6 +63,11 @@ export default function ForgotPasswordPage() {
             <p className="mt-3 text-sm leading-7 text-white/60">
               กรอกอีเมลที่ใช้เข้าระบบ WOFFU OS เพื่อรับลิงก์ตั้งรหัสผ่านใหม่
             </p>
+            {expiredLink && (
+              <p role="alert" className="mt-4 rounded-xl border border-amber-400/25 bg-amber-400/10 p-3 text-sm text-amber-100">
+                ลิงก์ก่อนหน้าไม่ถูกต้องหรือหมดอายุ กรุณาขอลิงก์ใหม่
+              </p>
+            )}
             <form className="mt-6 space-y-4" onSubmit={requestReset}>
               <div>
                 <label className="mb-2 block text-sm font-semibold" htmlFor="recovery-email">อีเมลบัญชีของคุณ</label>

@@ -115,7 +115,7 @@ export async function POST(
     if (projectRow.status !== from_status || from_status === to_status) {
       return NextResponse.json({ error: "Stale or invalid status transition" }, { status: 409 });
     }
-    const allowedStatuses = ["TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED", "CANCELLED"];
+    const allowedStatuses = ["TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"];
     if (!allowedStatuses.includes(String(to_status))) {
       return NextResponse.json({ error: "Invalid target status" }, { status: 400 });
     }

@@ -48,6 +48,7 @@ export default function ProjectDraftReviewPanel({
       }
       if (!res.ok) throw new Error(j?.error || "โหลดรายการ Draft ไม่สำเร็จ");
       setMissingMigration(false);
+      setError("");
       setReviews(Array.isArray(j?.data) ? j.data : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "โหลดรายการ Draft ไม่สำเร็จ");
@@ -120,15 +121,37 @@ export default function ProjectDraftReviewPanel({
   }
 
   return (
-    <section id="draft-reviews" className="mt-6 scroll-mt-24 rounded-2xl border border-white/10 bg-white/5 p-4 text-white md:p-6">
+    <section id="draft-reviews" className="woffu-clean-panel mt-6 scroll-mt-24 p-4 text-white md:p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-xs font-semibold tracking-widest text-[#e5ff78]">WOFFU WORKFLOW</div>
-          <h2 className="mt-1 text-xl font-bold">Draft & Senior QC</h2>
+          <h2 className="mt-1 text-xl font-semibold">Draft & Senior QC</h2>
           <p className="mt-2 text-sm text-white/55">รอบตรวจ Draft 1–4 แยกจากสถานะงานหลัก</p>
         </div>
         <button type="button" disabled={working || loading} onClick={() => void load()}
           className="rounded-xl border border-white/20 px-3 py-2 text-sm disabled:opacity-50">รีเฟรช</button>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="ความคืบหน้าการตรวจ Draft">
+        {[1, 2, 3, 4].map(number => {
+          const round = reviews.find(item => item.draft_number === number);
+          const isLatest = round?.id === reviews[0]?.id;
+          const state = round?.review_status;
+          const label = state === "APPROVED" ? "ผ่าน QC" :
+            state === "CHANGES_REQUESTED" ? "ต้องแก้ไข" :
+            state === "SUBMITTED" ? "รอตรวจ" : "ยังไม่ส่ง";
+          return (
+            <div key={number} className={`rounded-xl border p-3 ${isLatest ?
+              "border-[#e5ff78]/45 bg-[#e5ff78]/10" : "border-white/10 bg-[#121416]"}`}>
+              <div className="text-xs font-semibold text-white/85">Draft {number}</div>
+              <div className={`mt-1 text-xs ${state === "APPROVED" ? "text-green-200" :
+                state === "CHANGES_REQUESTED" ? "text-red-200" :
+                state === "SUBMITTED" ? "text-amber-200" : "text-white/35"}`}>
+                {label}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {missingMigration && <p className="mt-4 rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-3 text-sm text-yellow-200">
@@ -137,7 +160,7 @@ export default function ProjectDraftReviewPanel({
       {error && <p role="alert" className="mt-4 rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{error}</p>}
       {message && <p role="status" className="mt-4 rounded-xl border border-green-400/30 bg-green-400/10 p-3 text-sm text-green-200">{message}</p>}
 
-      {!missingMigration && <div className="mt-5 rounded-xl border border-white/10 bg-black/20 p-4">
+      {!missingMigration && <div className="mt-5 rounded-xl border border-white/10 bg-[#121416] p-4">
         <label htmlFor="reviewer-picker" className="mb-2 block text-sm font-bold">ผู้ตรวจงาน (Senior QC)</label>
         {isManager ? <select id="reviewer-picker" value={reviewer} disabled={working}
           onChange={(e) => void saveReviewer(e.target.value)}
@@ -156,7 +179,7 @@ export default function ProjectDraftReviewPanel({
         <label htmlFor="draft-link" className="mt-3 block text-xs text-white/65">ลิงก์ไฟล์งาน (HTTPS)</label>
         <input type="url" required id="draft-link" value={link} maxLength={2048}
           onChange={e => setLink(e.target.value)} placeholder="https://drive.google.com/..."
-          className="mt-2 w-full rounded-lg border border-white/20 bg-[#202020] p-3 text-sm"/>
+          className="woffu-input-simple mt-2"/>
         <label htmlFor="draft-note" className="mt-3 block text-xs text-white/65">หมายเหตุ</label>
         <textarea id="draft-note" rows={2} value={note} maxLength={4000}
           onChange={e => setNote(e.target.value)}

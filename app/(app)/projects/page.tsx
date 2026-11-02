@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { WorkspaceHeader } from "../components/WorkspaceKit";
 
 const CreateProjectModal = dynamic(() => import("./CreateProjectModal"), {
   loading: () => null,
@@ -444,34 +445,17 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="px-4 py-6 md:px-6 lg:px-10">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0">
-          <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
-          <h1 className="mt-2 break-words text-3xl font-extrabold tracking-tight text-white">Projects</h1>
-          <div className="mt-2 text-sm text-white/60">ทั้งหมด: {filteredItems.length}</div>
-        </div>
+    <div className="mx-auto max-w-[1600px] px-4 py-6 md:px-6 md:py-8 lg:px-8">
+      <WorkspaceHeader title="โปรเจกต์ทั้งหมด"
+        description={`พบ ${filteredItems.length} รายการตามตัวกรอง · เลือกโปรเจกต์เพื่อดูรายละเอียดและ Draft QC`}
+        onRefresh={() => void refreshAll()} refreshing={loading}>
+        {isLeader && <button type="button" onClick={() => setCreateOpen(true)}
+          className="woffu-focus-ring flex min-h-10 items-center rounded-xl bg-[#e5ff78] px-4 py-2 text-sm font-semibold text-black hover:bg-[#d9f36c]">
+          + สั่งงานใหม่
+        </button>}
+      </WorkspaceHeader>
 
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <button
-            onClick={() => void refreshAll()}
-            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
-          >
-            รีเฟรช
-          </button>
-
-          {isLeader && (
-            <button
-              onClick={() => setCreateOpen(true)}
-              className="rounded-xl bg-[#e5ff78] px-4 py-2 text-sm font-semibold text-black hover:opacity-90"
-            >
-              + สั่งงานใหม่
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+      <div className="woffu-clean-panel mt-5 p-4">
         <div className="flex flex-wrap gap-2">
           {(["ALL", "PRE_ORDER", "TODO", "IN_PROGRESS"] as const).map((s) => {
             const active = statusFilter === s;
@@ -485,7 +469,7 @@ export default function ProjectsPage() {
                     : "border-white/10 bg-transparent text-white/70 hover:bg-white/10 hover:text-white"
                 }`}
               >
-                {s === "ALL" ? "ทั้งหมด" : s} <span className={active ? "opacity-80" : "text-white/40"}>({counts[s] ?? 0})</span>
+                {s === "ALL" ? "ทั้งหมด" : s === "PRE_ORDER" ? "งานล่วงหน้า" : s === "TODO" ? "รอเริ่ม" : "กำลังทำ"} <span className={active ? "opacity-80" : "text-white/40"}>({counts[s] ?? 0})</span>
               </button>
             );
           })}
@@ -514,8 +498,8 @@ export default function ProjectsPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="ค้นหา: รหัสโปรเจกต์ / ชื่อโปรเจกต์ / ผู้รับผิดชอบ / แบรนด์ / รูปแบบงาน / ประเภทงาน"
-            className="w-full min-w-0 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#e5ff78] xl:max-w-[520px]"
+            placeholder="ค้นหาโปรเจกต์ รหัสงาน แบรนด์ หรือผู้รับผิดชอบ..."
+            className="woffu-input-simple min-w-0 xl:max-w-[520px]"
           />
         </div>
       </div>

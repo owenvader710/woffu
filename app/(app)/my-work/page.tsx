@@ -571,12 +571,17 @@ export default function MyWorkPage() {
   useEffect(() => {
     void load();
 
-    const interval = window.setInterval(() => {
-      void load(true);
-    }, 30000);
+    // Free hosting: refresh only while this tab is active, not every 30 s
+    // in background tabs. Returning users get a quiet refresh immediately.
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible") void load(true);
+    };
+    const interval = window.setInterval(refreshVisible, 120000);
+    document.addEventListener("visibilitychange", refreshVisible);
 
     return () => {
       window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshVisible);
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, [load]);

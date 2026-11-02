@@ -102,3 +102,30 @@ This reduces Netlify request/compute consumption for idle team members.
 
 **Not yet verified:** browser login or application HTTP workflows. The
 staging Auth user list is empty and Netlify has not been connected/deployed.
+
+
+## Latest security & small-file compatibility checks
+
+The standalone Free Supabase staging DB has additional **staging-only**
+hardening changes:
+- `free_active_member_rls.sql`: suspended users have no direct Data API
+  access to projects, profiles, notices, requests or notifications, even
+  with an otherwise valid Supabase Auth token.
+- `free_public_attachments.sql`: creates missing `project-files` bucket,
+  restricts project/notice uploads to 5 MB JPG/PNG/WebP/PDF and avatars
+  to 2 MB images. Both the API and Storage limits reject other types.
+- The invitation endpoint atomically claims unused tokens before creating
+  an Auth account, so a link cannot register two people concurrently.
+  If Auth creation fails, the claim is released for retry.
+- Login rejects disabled profiles and signs out the failed session.
+- PostgreSQL 17 CI covers disabled-account access, one-time claims, new
+  bucket constraints and all Draft/Approval migrations.
+
+**Privacy reminder:** project-files and team-notices use public Storage
+links for small presentation attachments. Do not upload private customer
+footage, contracts or confidential project sources there. Prefer restricted
+Google Drive access links for those files.
+
+**Deployment still pending:** No Netlify project has been connected and
+no staging user credentials have been created. Never point the preview at
+the original production Supabase project.

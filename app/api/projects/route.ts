@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServer } from "../_supabase";
 import { createSupabaseAdmin } from "../_supabaseAdmin";
 import { sendPushToUser } from "../_push";
+import { requireActiveManager } from "../_authorization";
 
 const SELECT_FIELDS = [
   "id",
@@ -116,7 +117,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const supabase = await createSupabaseServer();
+  const access = await requireActiveManager();
+  if (access.response) return access.response;
+  const supabase = access.supabase;
   const admin = createSupabaseAdmin();
 
   const { data: authData, error: authErr } = await supabase.auth.getUser();
@@ -134,10 +137,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const insertRow: Record<string, any> = {
-    ...body,
-    created_by: user.id,
-  };
+  const permitted = ["code", "title", "type", "start_date", "due_date", "product_group", "brand", "video_priority", "video_purpose", "graphic_job_type", "assignee_id", "description", "department"] as const;
+  const insertRow: Record<string, unknown> = { created_by: user.id };
+  for (const key of permitted) {
+    if (Object.prototype.hasOwnProperty.call(body, key)) insertRow[key] = body[key];
+  }
+  if (typeof insertRow.title !== "string" || !insertRow.title.trim() || !["VIDEO", "GRAPHIC"].includes(String(insertRow.type))) {
+    return NextResponse.json({ error: "Invalid title/type" }, { status: 400 });
+  }
 
   for (const k of Object.keys(insertRow)) {
     if (insertRow[k] === "") insertRow[k] = null;
@@ -147,7 +154,7 @@ export async function POST(req: Request) {
     insertRow.department = insertRow.type;
   }
 
-  insertRow.status = getInitialStatus(insertRow.start_date);
+  insertRow.status = getInitialStatus(typeof insertRow.start_date === "string" ? insertRow.start_date : null);
 
   const { data: insertedRaw, error } = await supabase
     .from("projects")

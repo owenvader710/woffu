@@ -129,3 +129,19 @@ Google Drive access links for those files.
 **Deployment still pending:** No Netlify project has been connected and
 no staging user credentials have been created. Never point the preview at
 the original production Supabase project.
+
+
+## Password recovery (new in V2)
+
+The login screen now includes a Thai **ลืมรหัสผ่าน?** link,
+a recovery request page, token/code callback and new-password form.
+See `docs/password-recovery-setup.md` for the exact Supabase Auth
+redirect allowlist and email-template configuration required after the
+Netlify site has a real HTTPS address.
+
+**Free-tier caveat:** Supabase's included test SMTP only sends Auth
+emails to organization-authorized addresses, with strict rate limits.
+Manual one-time invitation links remain free, but automatic reset email
+delivery to all staff **cannot be guaranteed** until a suitable SMTP
+provider is configured. Do not advertise email recovery as fully
+operational before testing it with normal team accounts on staging.

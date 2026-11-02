@@ -16,7 +16,7 @@ DECLARE
   current_request_status text;
   observed_reason text;
   visible_count integer;
-  project_id constant uuid := '20000000-0000-4000-8000-000000000001';
+  v_project_id constant uuid := '20000000-0000-4000-8000-000000000001';
 BEGIN
   PERFORM set_config('request.jwt.claim.sub', '', true);
   result := public.woffu_process_status_approval(
@@ -50,7 +50,7 @@ BEGIN
     RAISE EXCEPTION 'Leader could not approve: %', result;
   END IF;
 
-  SELECT status INTO current_status FROM public.projects WHERE id = project_id;
+  SELECT status INTO current_status FROM public.projects WHERE id = v_project_id;
   SELECT request_status INTO current_request_status FROM public.status_change_requests
   WHERE id = '30000000-0000-4000-8000-000000000001';
   IF current_status <> 'IN_PROGRESS' OR current_request_status <> 'APPROVED' THEN
@@ -85,7 +85,7 @@ BEGIN
   IF result->>'ok' IS DISTINCT FROM 'true' THEN
     RAISE EXCEPTION 'Admin rejection failed: %', result;
   END IF;
-  SELECT status INTO current_status FROM public.projects WHERE id = project_id;
+  SELECT status INTO current_status FROM public.projects WHERE id = v_project_id;
   SELECT reject_reason INTO observed_reason FROM public.status_change_requests
   WHERE id = '30000000-0000-4000-8000-000000000003';
   IF current_status <> 'IN_PROGRESS' OR observed_reason <> 'Needs correction' THEN
@@ -95,7 +95,7 @@ BEGIN
   -- Draft review: the assignee submits a URL, not a project status change.
   PERFORM set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000004', true);
   result := public.woffu_submit_project_draft(
-    project_id, 'https://drive.google.com/file/d/first', 'first cut'
+    v_project_id, 'https://drive.google.com/file/d/first', 'first cut'
   );
   IF result->>'code' IS DISTINCT FROM 'FORBIDDEN' THEN
     RAISE EXCEPTION 'Unrelated member submitted draft: %', result;
@@ -103,20 +103,20 @@ BEGIN
 
   PERFORM set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000002', true);
   result := public.woffu_submit_project_draft(
-    project_id, 'http://example.test/insecure', null
+    v_project_id, 'http://example.test/insecure', null
   );
   IF result->>'code' IS DISTINCT FROM 'INVALID_URL' THEN
     RAISE EXCEPTION 'HTTP URL accepted: %', result;
   END IF;
   result := public.woffu_submit_project_draft(
-    project_id, 'https://drive.google.com/file/d/first', 'first cut'
+    v_project_id, 'https://drive.google.com/file/d/first', 'first cut'
   );
   IF result->>'ok' IS DISTINCT FROM 'true' OR (result->>'draft_number')::int <> 1 THEN
     RAISE EXCEPTION 'Draft 1 submit failed: %', result;
   END IF;
   review_id := (result->>'id')::uuid;
   result := public.woffu_submit_project_draft(
-    project_id, 'https://drive.google.com/file/d/duplicate', null
+    v_project_id, 'https://drive.google.com/file/d/duplicate', null
   );
   IF result->>'code' IS DISTINCT FROM 'REVIEW_NOT_READY' THEN
     RAISE EXCEPTION 'Duplicate pending draft was accepted: %', result;
@@ -125,14 +125,14 @@ BEGIN
   -- RLS prevents unrelated members from reading Draft QC rows.
   PERFORM set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000004', true);
   SELECT count(*) INTO visible_count FROM public.project_draft_reviews
-  WHERE project_id = project_id;
+  WHERE project_id = v_project_id;
   IF visible_count <> 0 THEN
     RAISE EXCEPTION 'Unrelated user could read draft: % rows', visible_count;
   END IF;
 
   PERFORM set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000003', true);
   SELECT count(*) INTO visible_count FROM public.project_draft_reviews
-  WHERE project_id = project_id;
+  WHERE project_id = v_project_id;
   IF visible_count <> 1 THEN
     RAISE EXCEPTION 'Assigned reviewer cannot read submitted draft: %', visible_count;
   END IF;
@@ -152,7 +152,7 @@ BEGIN
 
   PERFORM set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000002', true);
   result := public.woffu_submit_project_draft(
-    project_id, 'https://drive.google.com/file/d/second', 'revised cut'
+    v_project_id, 'https://drive.google.com/file/d/second', 'revised cut'
   );
   IF result->>'ok' IS DISTINCT FROM 'true' OR (result->>'draft_number')::int <> 2 THEN
     RAISE EXCEPTION 'Draft 2 did not advance: %', result;
@@ -173,12 +173,12 @@ BEGIN
 
   PERFORM set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000002', true);
   result := public.woffu_submit_project_draft(
-    project_id, 'https://drive.google.com/file/d/third', null
+    v_project_id, 'https://drive.google.com/file/d/third', null
   );
   IF result->>'code' IS DISTINCT FROM 'REVIEW_NOT_READY' THEN
     RAISE EXCEPTION 'Approved Draft still allowed a new round: %', result;
   END IF;
-  SELECT status INTO current_status FROM public.projects WHERE id = project_id;
+  SELECT status INTO current_status FROM public.projects WHERE id = v_project_id;
   IF current_status <> 'IN_PROGRESS' THEN
     RAISE EXCEPTION 'Draft review should not change project status: %', current_status;
   END IF;

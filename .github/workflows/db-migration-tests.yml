@@ -63,3 +63,51 @@ jobs:
 
       - name: Verify schema-audit script (read-only)
         run: psql -X -v ON_ERROR_STOP=1 -f tests/db/audit-readonly.sql > /dev/null
+
+  fresh-free-staging:
+    name: Free Supabase staging schema, Auth and RLS
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: woffu_free_staging
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d woffu_free_staging"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGDATABASE: woffu_free_staging
+      PGUSER: postgres
+      PGPASSWORD: local_ci_only
+    steps:
+      - name: Check out reviewed SQL
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install PostgreSQL client if missing
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+      - name: Create isolated Supabase Auth and Storage stand-ins
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/free_staging_fixture.sql
+      - name: Build fresh schema on Free tier
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/staging/free_baseline.sql
+      - name: Apply V2 approval migration
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611020001_atomic_status_approvals.sql
+      - name: Apply V2 Draft QC migration
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611020002_project_draft_reviews.sql
+      - name: Harden free staging
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/staging/free_security_tightening.sql
+      - name: Assert role and RLS behavior
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/free_staging_checks.sql

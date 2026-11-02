@@ -57,6 +57,8 @@ jobs:
 
       - name: Apply Phase 3 Draft QC migration
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611020002_project_draft_reviews.sql
+      - name: Apply forward-compatible Draft enum repair
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611020003_fix_draft_closed_status.sql
 
       - name: Test roles, approval and Draft QC workflow
         run: psql -X -v ON_ERROR_STOP=1 -f tests/db/workflow.sql
@@ -107,6 +109,8 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611020001_atomic_status_approvals.sql
       - name: Apply V2 Draft QC migration
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611020002_project_draft_reviews.sql
+      - name: Apply forward-compatible Draft enum repair
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611020003_fix_draft_closed_status.sql
       - name: Harden free staging
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/staging/free_security_tightening.sql
       - name: Assert role and RLS behavior

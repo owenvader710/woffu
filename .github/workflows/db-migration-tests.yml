@@ -115,3 +115,7 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/staging/free_security_tightening.sql
       - name: Assert role and RLS behavior
         run: psql -X -v ON_ERROR_STOP=1 -f tests/db/free_staging_checks.sql
+      - name: Harden RLS for disabled accounts
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/staging/free_active_member_rls.sql
+      - name: Test account suspension and one-time invites
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/free_security_checks.sql

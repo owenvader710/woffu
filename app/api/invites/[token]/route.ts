@@ -120,11 +120,21 @@ export async function POST(
       if (error) console.error("[INVITES] Claim release failed", error.code);
     }
 
-    const created = await admin.auth.admin.createUser({
-      email: invite.email,
-      password,
-      email_confirm: true,
-    });
+    let created: Awaited<ReturnType<typeof admin.auth.admin.createUser>>;
+    try {
+      created = await admin.auth.admin.createUser({
+        email: invite.email,
+        password,
+        email_confirm: true,
+      });
+    } catch (error) {
+      await releaseClaim();
+      console.error("[INVITES] Auth service temporarily unavailable", error);
+      return NextResponse.json(
+        { error: "บริการสร้างบัญชีไม่พร้อมใช้งาน กรุณาลองอีกครั้ง" },
+        { status: 503 }
+      );
+    }
 
     if (created.error || !created.data?.user?.id) {
       await releaseClaim();

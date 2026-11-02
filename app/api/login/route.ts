@@ -25,6 +25,23 @@ export async function POST(req: NextRequest) {
       return applyCookies(res);
     }
 
+    // A signed-in Auth user can still have a disabled WOFFU profile. Check
+    // the application account before establishing a usable browser session.
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("is_active")
+      .eq("id", data.user.id)
+      .maybeSingle();
+
+    if (profileError || !profile?.is_active) {
+      await supabase.auth.signOut();
+      const res = NextResponse.json(
+        { error: "บัญชีนี้ยังไม่ได้รับอนุญาตหรือถูกปิดใช้งาน กรุณาติดต่อหัวหน้าทีม" },
+        { status: 403 }
+      );
+      return applyCookies(res);
+    }
+
     const res = NextResponse.json({ ok: true }, { status: 200 });
     return applyCookies(res);
   } catch (e: any) {

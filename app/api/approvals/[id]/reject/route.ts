@@ -93,14 +93,19 @@ export async function POST(
     updatePayload.reject_reason = rejectReason;
   }
 
-  const { error: updReqErr } = await admin
+  const { data: claimedRequest, error: updReqErr } = await admin
     .from("status_change_requests")
     .update(updatePayload)
-    .eq("id", id);
+    .eq("id", id)
+    .eq("request_status", "PENDING")
+    .select("id")
+    .maybeSingle();
 
   if (updReqErr) {
     return NextResponse.json({ error: updReqErr.message }, { status: 500 });
   }
+
+  if (!claimedRequest) return NextResponse.json({ error: "Already processed" }, { status: 409 });
 
   const { data: projectRow } = await admin
     .from("projects")

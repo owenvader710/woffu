@@ -56,4 +56,44 @@ BEGIN
   END;
   RAISE NOTICE 'Free staging RLS roles: PASS';
 END $$;
+-- Regression: project_status is an enum without CANCELLED. A bad comparison
+-- in the draft RPC used to abort even when the status was TODO.
+DO $
+DECLARE r jsonb;
+BEGIN
+  r := public.woffu_submit_project_draft(
+    '20000000-0000-4000-8000-000000000001',
+    'https://drive.google.com/file/d/staging-first',
+    'first cut'
+  );
+  IF r->>'ok' IS DISTINCT FROM 'true' OR (r->>'draft_number')::int <> 1 THEN
+    RAISE EXCEPTION 'Draft submit failed on real project_status enum: %', r;
+  END IF;
+  r := public.woffu_submit_project_draft(
+    '20000000-0000-4000-8000-000000000001',
+    'https://drive.google.com/file/d/staging-duplicate',
+    'should be refused'
+  );
+  IF r->>'code' IS DISTINCT FROM 'REVIEW_NOT_READY' THEN
+    RAISE EXCEPTION 'Duplicate Draft submit allowed: %', r;
+  END IF;
+  RAISE NOTICE 'Draft submission on enum project status: PASS';
+END $;
+
+SELECT set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000001',false);
+DO $
+DECLARE r jsonb; review_id uuid;
+BEGIN
+  SELECT id INTO review_id FROM public.project_draft_reviews
+  WHERE project_id='20000000-0000-4000-8000-000000000001';
+  r := public.woffu_review_project_draft(review_id,'REQUEST_CHANGES','แก้ไขซับไตเติล');
+  IF r->>'ok' IS DISTINCT FROM 'true' THEN
+    RAISE EXCEPTION 'Leader could not request changes: %', r;
+  END IF;
+  IF (SELECT status FROM public.projects
+      WHERE id='20000000-0000-4000-8000-000000000001') <> 'TODO' THEN
+    RAISE EXCEPTION 'QC decision unexpectedly altered project status';
+  END IF;
+  RAISE NOTICE 'Draft QC feedback keeps project status independent: PASS';
+END $;
 RESET ROLE;

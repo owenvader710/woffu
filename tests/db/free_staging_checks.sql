@@ -58,7 +58,7 @@ BEGIN
 END $$;
 -- Regression: project_status is an enum without CANCELLED. A bad comparison
 -- in the draft RPC used to abort even when the status was TODO.
-DO $
+DO $$
 DECLARE r jsonb;
 BEGIN
   r := public.woffu_submit_project_draft(
@@ -78,10 +78,10 @@ BEGIN
     RAISE EXCEPTION 'Duplicate Draft submit allowed: %', r;
   END IF;
   RAISE NOTICE 'Draft submission on enum project status: PASS';
-END $;
+END $$;
 
 SELECT set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000001',false);
-DO $
+DO $$
 DECLARE r jsonb; review_id uuid;
 BEGIN
   SELECT id INTO review_id FROM public.project_draft_reviews
@@ -95,5 +95,5 @@ BEGIN
     RAISE EXCEPTION 'QC decision unexpectedly altered project status';
   END IF;
   RAISE NOTICE 'Draft QC feedback keeps project status independent: PASS';
-END $;
+END $$;
 RESET ROLE;

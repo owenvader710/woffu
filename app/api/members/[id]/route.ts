@@ -22,6 +22,13 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const user = authData?.user;
   if (!user) return applyCookies(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
 
+  const { data: actor, error: actorError } = await supabase
+    .from("profiles").select("role, is_active").eq("id", user.id).maybeSingle();
+  if (actorError) return applyCookies(NextResponse.json({ error: "Permission lookup failed" }, { status: 500 }));
+  if (!actor?.is_active || !["ADMIN", "LEADER"].includes(actor.role)) {
+    return applyCookies(NextResponse.json({ error: "Forbidden" }, { status: 403 }));
+  }
+
   const body = await req.json().catch(() => null);
   if (!body) return applyCookies(NextResponse.json({ error: "Invalid JSON" }, { status: 400 }));
 

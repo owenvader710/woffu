@@ -117,5 +117,7 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f tests/db/free_staging_checks.sql
       - name: Harden RLS for disabled accounts
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/staging/free_active_member_rls.sql
+      - name: Configure small public preview buckets
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/staging/free_public_attachments.sql
       - name: Test account suspension and one-time invites
         run: psql -X -v ON_ERROR_STOP=1 -f tests/db/free_security_checks.sql

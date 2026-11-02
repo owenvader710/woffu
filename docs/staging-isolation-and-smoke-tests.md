@@ -99,10 +99,22 @@ migration after inspecting use patterns. Do not change production grants
 blindly because the current app may depend on them. Security advisor docs:
 https://supabase.com/docs/guides/database/database-linter
 
-## Staging branch creation cost / permission gate
+## $0 staging instead of paid branching — completed 2026-11-02
 
-Supabase branch creation reported an additional cost of **$0.01344 per
-hour** (organization-specific quote on 2026-11-02).
-Creation was **not** performed: Supabase requires explicit acceptance of
-the quoted hourly charge. Obtain the user's agreement before confirming
-the cost and calling `create_branch`.
+Supabase paid branching was **not** used. The existing `woffu` Free
+organization had one remaining project slot and quoted **$0/month** for a
+second standalone project. Created `woffu-v2-staging-free`
+(ref `xofndnlyqueyuqyweqyi`) without importing production data.
+
+Applied the isolated free baseline, atomic approval, Draft Review and
+security-tightening migrations to the new project. All 10 public tables
+have RLS enabled. The Security Advisor has no critical/error findings;
+remaining warnings concern authenticated SECURITY DEFINER functions that
+perform their own checks. Verified the full baseline in GitHub CI using a
+fresh PostgreSQL 17 database.
+
+**Next required action:** connect a separate hosting environment with
+staging-only Supabase URL, publishable key, service-role key and first test
+account. Recommended commercial-use zero-cost hosting: Netlify Free.
+See `docs/free-deployment.md`. Never enable writes on the old Vercel
+Preview until its environment keys are verified to point at staging.

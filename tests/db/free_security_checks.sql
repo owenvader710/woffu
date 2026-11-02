@@ -54,3 +54,21 @@ BEGIN
   IF claimed <> 0 THEN RAISE EXCEPTION 'Duplicate invite claim was accepted'; END IF;
   RAISE NOTICE 'One-time invitation claim: PASS';
 END $verify$;
+
+DO $verify$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM storage.buckets WHERE id='project-files'
+      AND public=true AND file_size_limit=5242880
+      AND 'application/pdf'=ANY(allowed_mime_types)
+  ) THEN
+    RAISE EXCEPTION 'Public preview bucket not configured for small PDF assets';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM storage.buckets WHERE id='team-notices'
+      AND (file_size_limit IS DISTINCT FROM 5242880 OR allowed_mime_types IS NULL)
+  ) THEN
+    RAISE EXCEPTION 'Team notice free-tier upload limits missing';
+  END IF;
+  RAISE NOTICE 'Public preview Storage quotas: PASS';
+END $verify$;

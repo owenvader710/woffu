@@ -30,6 +30,7 @@ type WorkItem = {
   video_purpose?: string | null;
   graphic_job_type?: string | null;
   pending_request?: PendingReq | null;
+  review_summary?: { draft_number: number; review_status: "SUBMITTED" | "APPROVED" | "CHANGES_REQUESTED" } | null;
 };
 
 async function safeJson(res: Response) {
@@ -279,6 +280,13 @@ type BlockedModalState = {
   projectTitle: string;
 };
 
+function reviewLabel(w: WorkItem) {
+  const review = w.review_summary;
+  if (!review) return "ยังไม่ส่ง Draft";
+  const label = review.review_status === "SUBMITTED" ? "รอ QC" : review.review_status === "APPROVED" ? "ผ่าน QC" : "ต้องแก้ไข";
+  return `Draft ${review.draft_number} · ${label}`;
+}
+
 function MobileWorkCard({
   w,
   pending,
@@ -325,6 +333,9 @@ function MobileWorkCard({
       <div className="mt-4 flex flex-wrap gap-2">
         <DeptPill dept={w.department} />
         <StatusPill s={w.status} />
+        <Link href={`/projects/${w.id}#draft-reviews`} className="rounded-full border border-[#e5ff78]/30 bg-[#e5ff78]/10 px-3 py-1 text-xs font-semibold text-[#e5ff78]">
+          {reviewLabel(w)}
+        </Link>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -768,6 +779,9 @@ export default function MyWorkPage() {
                                   {secondLine(w) ? (
                                     <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div>
                                   ) : null}
+                                  <Link href={`/projects/${w.id}#draft-reviews`} className="mt-2 inline-flex rounded-lg border border-[#e5ff78]/25 bg-[#e5ff78]/10 px-2 py-1 text-xs font-semibold text-[#e5ff78] hover:bg-[#e5ff78]/20">
+                                    {reviewLabel(w)}
+                                  </Link>
 
                                   {pending ? (
                                     <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-lime-400/20 bg-lime-400/10 px-4 py-1 text-xs font-extrabold text-lime-200">

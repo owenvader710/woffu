@@ -167,7 +167,42 @@ export async function GET(req: NextRequest) {
       ? (noticesRes.data as unknown as NoticeRow[])
       : [];
 
-    const activeProjects = projects.filter((p) => p.status !== "COMPLETED");
+    const activeProjects = projects.filter((p) => p.status !== "COMPLETED" && p.status !== "CANCELLED");
+
+    // Read-only QC overview. Older databases remain available before Phase 3 migration.
+    const reviewResult = await supabase
+      .from("project_draft_reviews")
+      .select("project_id, draft_number, review_status, created_at")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (reviewResult.error && !["42P01", "PGRST205", "42703"].includes(reviewResult.error.code || "")) {
+      return NextResponse.json({ error: "Unable to load QC dashboard" }, { status: 500 });
+    }
+    const latestDrafts = new Map<string, { project_id: string; draft_number: number; review_status: string; created_at: string }>();
+    for (const row of reviewResult.data ?? []) {
+      if (!latestDrafts.has(row.project_id)) latestDrafts.set(row.project_id, row);
+    }
+    const projectMap = new Map(projects.map(p => [p.id, p]));
+    const reviewQueue = Array.from(latestDrafts.values())
+      .filter(d => d.review_status === "SUBMITTED")
+      .map(d => ({
+        projectId: d.project_id,
+        title: projectMap.get(d.project_id)?.title || "โปรเจกต์",
+        draftNumber: d.draft_number,
+        submittedAt: d.created_at,
+      })).slice(0, 8);
+    const revisionCount = Array.from(latestDrafts.values()).filter(d => d.review_status === "CHANGES_REQUESTED").length;
+
+    const now = Date.now();
+    const deadlineCandidates = activeProjects.filter(p => isLeader || p.assignee_id === user.id);
+    const sortedByDue = deadlineCandidates
+      .filter(p => p.due_date && Number.isFinite(new Date(p.due_date).getTime()))
+      .sort((a, b) => new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime());
+    const overdue = sortedByDue.filter(p => new Date(p.due_date!).getTime() < now).slice(0, 5);
+    const deadlineSoon = sortedByDue.filter(p => {
+      const when = new Date(p.due_date!).getTime();
+      return when >= now && when <= now + 3 * 24 * 60 * 60 * 1000;
+    }).slice(0, 5);
 
     const projectCounts = {
       total: activeProjects.length,
@@ -249,6 +284,10 @@ export async function GET(req: NextRequest) {
         latestGraphic,
         latestVideo,
         workload,
+        reviewQueue,
+        revisionCount,
+        overdue,
+        deadlineSoon,
       },
     };
 

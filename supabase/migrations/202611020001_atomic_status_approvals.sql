@@ -35,7 +35,7 @@ BEGIN
     SELECT 1 FROM public.profiles
     WHERE id = v_actor
       AND is_active = true
-      AND role IN ('LEADER', 'ADMIN')
+      AND role::text IN ('LEADER', 'ADMIN')
   ) THEN
     RETURN jsonb_build_object('ok', false, 'code', 'FORBIDDEN', 'message', 'Manager access required');
   END IF;

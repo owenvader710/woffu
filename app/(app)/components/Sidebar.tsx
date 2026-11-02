@@ -162,7 +162,6 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
                   "opacity-55 transition-transform duration-200",
                   isProjectOpen ? "rotate-90" : "rotate-0"
                 )}
-              >
               />
             </button>
 

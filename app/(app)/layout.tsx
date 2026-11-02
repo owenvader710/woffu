@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import NotificationCenter from "./components/NotificationCenter";
 import Sidebar from "./components/Sidebar";
 import PushBootstrap from "../components/PushBootstrap";
+import PreviewSafetyBanner from "./components/PreviewSafetyBanner";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -90,6 +91,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <NotificationCenter />
         </div>
 
+        <PreviewSafetyBanner />
         <main className="px-4 pb-8 pt-5 md:px-6 lg:px-0 lg:pb-0 lg:pt-8">
           <PushBootstrap />
           {children}

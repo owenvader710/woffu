@@ -39,6 +39,18 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Report production dependency advisories
+        run: |
+          timeout 90s npm audit --omit=dev --json > /tmp/woffu-prod-audit.json || true
+          node -e '
+            const fs=require("node:fs");
+            const report=JSON.parse(fs.readFileSync("/tmp/woffu-prod-audit.json","utf8"));
+            const totals=report.metadata?.vulnerabilities || {};
+            console.log("Production dependency audit:", JSON.stringify(totals));
+            if((totals.high||0)+(totals.critical||0)>0)
+              console.log("::warning::Production dependencies have high/critical advisories; review before release.");
+          '
+
       - name: Test staging deployment guards
         run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/security/stagingSafety.test.mjs
 

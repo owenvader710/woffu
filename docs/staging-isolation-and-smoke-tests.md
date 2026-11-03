@@ -7,8 +7,10 @@
 - Vercel currently lists the same Supabase environment-variable records with targets
   `production`, `preview`, and `development`. That does **not** establish an
   independent staging Supabase database.
-- The V2 Preview defaults to **read-only API mutations** (HTTP 423) until
-  `WOFFU_ENABLE_PREVIEW_MUTATIONS=true` is deliberately configured.
+- The V2 Preview **blocks all API and authenticated page access** (HTTP 423)
+  while it points to any Supabase project other than the isolated Free staging
+  project. Merely setting `WOFFU_ENABLE_PREVIEW_MUTATIONS=true` cannot bypass
+  this database isolation check.
 - This API guard is **not** a database firewall: direct calls from a browser
   to Supabase bypass Next.js API middleware. **Never test writes until Vercel
   Preview uses a distinct Supabase project.**

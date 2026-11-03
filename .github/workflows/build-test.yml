@@ -85,6 +85,9 @@ jobs:
       - name: Lint login API and credential parser
         run: npx eslint "app/api/login/route.ts" "lib/loginCredentials.ts"
 
+      - name: Test safe Netlify staging environment preflight
+        run: node --test tests/security/stagingEnv.test.mjs
+
       - name: Test public Staging readiness checker
         run: node --test tests/security/stagingLiveSmoke.test.mjs
 

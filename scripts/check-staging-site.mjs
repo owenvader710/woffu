@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { pathToFileURL } from "node:url";
+import { resolve } from "node:path";
 // Public, credential-free smoke test for a separately deployed WOFFU V2 staging site.
 // Usage: node scripts/check-staging-site.mjs https://your-site.netlify.app
 import assert from "node:assert/strict";
@@ -65,7 +67,7 @@ export async function inspectStagingSite(origin, fetcher = fetch) {
   return { origin, stagingConnected: true, readOnly: mode.readOnly, login: "ok", publicDataIsolation: "ok" };
 }
 
-if (process.argv[1] && import.meta.url === new URL("file://" + process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
     const origin = parseStagingOrigin(process.argv[2] || process.env.STAGING_BASE_URL);
     const result = await inspectStagingSite(origin);

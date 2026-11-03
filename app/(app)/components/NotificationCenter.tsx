@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { supabaseBrowser } from "@/utils/supabase/client";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { urlBase64ToUint8Array } from "./push";
 import { normalizeInternalNotificationPath } from "@/lib/notificationUrl";
 
@@ -135,7 +136,9 @@ export default function NotificationCenter() {
 
   const initializedRef = useRef(false);
   const pollingRef = useRef(false);
-  const channelRef = useRef<any>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const pollingLatestRef = useRef<() => Promise<void>>(async () => {});
+  const incomingLatestRef = useRef<(n: AppNotification) => void>(() => {});
   const seenIdsRef = useRef<Set<string>>(new Set());
   const audioCtxRef = useRef<AudioContext | null>(null);
 
@@ -153,7 +156,8 @@ export default function NotificationCenter() {
   function playBeep() {
     try {
       if (!audioCtxRef.current) {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        const AudioCtx = window.AudioContext ||
+          (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (!AudioCtx) return;
         audioCtxRef.current = new AudioCtx();
       }
@@ -344,8 +348,8 @@ export default function NotificationCenter() {
       }
 
       setPushEnabled(true);
-    } catch (e: any) {
-      alert(e?.message || "Push subscribe failed");
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Push subscribe failed");
     } finally {
       setPushBusy(false);
     }
@@ -367,16 +371,20 @@ export default function NotificationCenter() {
         return;
       }
 
-      await fetch("/api/push-subscriptions/delete", {
+      const response = await fetch("/api/push-subscriptions/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ endpoint: sub.endpoint }),
       });
+      if (!response.ok) {
+        throw new Error("ไม่สามารถยกเลิก Push บนเซิร์ฟเวอร์ กรุณาลองอีกครั้ง");
+      }
 
-      await sub.unsubscribe();
+      const removed = await sub.unsubscribe();
+      if (!removed) throw new Error("เบราว์เซอร์ไม่สามารถยกเลิก Push ได้");
       setPushEnabled(false);
-    } catch (e: any) {
-      alert(e?.message || "Push unsubscribe failed");
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Push unsubscribe failed");
     } finally {
       setPushBusy(false);
     }
@@ -401,14 +409,16 @@ export default function NotificationCenter() {
       }
 
       await readOne(n.id);
-    } catch (e: any) {
-      alert(e?.message || "Acknowledge failed");
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Acknowledge failed");
     } finally {
       setAckBusyId(null);
     }
   }
 
   function pushIncoming(n: AppNotification) {
+    if (seenIdsRef.current.has(n.id)) return;
+    seenIdsRef.current.add(n.id);
     setItems((prev) => {
       const exists = prev.some((x) => x.id === n.id);
       if (exists) return prev;
@@ -417,7 +427,6 @@ export default function NotificationCenter() {
       );
     });
 
-    seenIdsRef.current.add(n.id);
     setUnread((prev) => prev + (n.is_read ? 0 : 1));
 
     if (initializedRef.current) {
@@ -432,6 +441,13 @@ export default function NotificationCenter() {
       }
     }
   }
+
+  // Realtime and polling listeners remain stable across sound/permission changes.
+  // Only their current callbacks update in an effect after each render.
+  useEffect(() => {
+    pollingLatestRef.current = pollNotifications;
+    incomingLatestRef.current = pushIncoming;
+  });
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setHiddenIds(readHiddenIds()));
@@ -469,7 +485,7 @@ export default function NotificationCenter() {
     // Realtime is the primary channel; 60-second polling is only a fallback.
     // Do not consume hosting or Supabase reads from background tabs.
     const whenVisible = () => {
-      if (document.visibilityState === "visible") void pollNotifications();
+      if (document.visibilityState === "visible") void pollingLatestRef.current();
     };
     const t = window.setInterval(whenVisible, 60000);
     document.addEventListener("visibilitychange", whenVisible);
@@ -479,7 +495,7 @@ export default function NotificationCenter() {
       document.removeEventListener("visibilitychange", whenVisible);
       window.removeEventListener("focus", whenVisible);
     };
-  }, [desktopPermission, soundEnabled]);
+  }, []);
 
   useEffect(() => {
     if (!me?.id) return;
@@ -503,7 +519,7 @@ export default function NotificationCenter() {
         },
         (payload) => {
           const row = payload.new as AppNotification;
-          pushIncoming(row);
+          incomingLatestRef.current(row);
         }
       )
       .subscribe();
@@ -516,7 +532,7 @@ export default function NotificationCenter() {
         channelRef.current = null;
       }
     };
-  }, [me?.id, desktopPermission, soundEnabled]);
+  }, [me?.id]);
 
   useEffect(() => {
     if (toasts.length === 0) return;

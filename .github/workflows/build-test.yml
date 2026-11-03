@@ -103,7 +103,9 @@ jobs:
         run: |
           npx eslint "lib/notificationUrl.ts" "app/api/_push.ts" \
             "app/api/push/send/route.ts" "app/api/push/test/route.ts" \
-            "app/api/push/register/route.ts" "app/api/push/unregister/route.ts"
+            "app/api/push/register/route.ts" "app/api/push/unregister/route.ts" \
+            "app/(app)/components/NotificationCenter.tsx" "app/(app)/layout.tsx" \
+            "public/sw.js"
 
       - name: Lint final onboarding and workflow compatibility (required)
         run: |

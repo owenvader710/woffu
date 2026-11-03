@@ -104,27 +104,18 @@ export async function POST(req: Request) {
   const access = await requireActiveManager();
   if (access.response) return access.response;
   const supabase = access.supabase;
-  const admin = createSupabaseAdmin();
+  const user = access.user;
 
-  const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) {
-    return NextResponse.json({ error: authErr.message }, { status: 401 });
-  }
-
-  const user = authData?.user;
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const body = await req.json().catch(() => null);
-  if (!body) {
+  const body: unknown = await req.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
   const permitted = ["code", "title", "type", "start_date", "due_date", "product_group", "brand", "video_priority", "video_purpose", "graphic_job_type", "assignee_id", "description", "department"] as const;
   const insertRow: Record<string, unknown> = { created_by: user.id };
+  const fields = body as Record<string, unknown>;
   for (const key of permitted) {
-    if (Object.prototype.hasOwnProperty.call(body, key)) insertRow[key] = body[key];
+    if (Object.prototype.hasOwnProperty.call(fields, key)) insertRow[key] = fields[key];
   }
   if (typeof insertRow.title !== "string" || !insertRow.title.trim() || !["VIDEO", "GRAPHIC"].includes(String(insertRow.type))) {
     return NextResponse.json({ error: "Invalid title/type" }, { status: 400 });
@@ -167,6 +158,7 @@ export async function POST(req: Request) {
     const notifLink = `/projects/${insertedData.id}`;
 
     try {
+      const admin = createSupabaseAdmin();
       await admin.from("notifications").insert({
         user_id: insertedData.assignee_id,
         type: "JOB_ASSIGNED",

@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+# Save CI minutes on the Free plan: keep only the newest run per branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest

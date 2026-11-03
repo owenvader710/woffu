@@ -158,6 +158,9 @@ jobs:
       - name: Lint secured My Work endpoint
         run: npx eslint "app/api/my-work/route.ts"
 
+      - name: Guard Netlify staging build configuration
+        run: node --test tests/security/netlifyBuildGate.test.mjs
+
       - name: Typecheck
         run: npx tsc --noEmit
 

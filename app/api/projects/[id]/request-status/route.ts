@@ -160,8 +160,10 @@ export async function POST(
 
     const { error: logErr } = await supabase.from("project_logs").insert(logPayload);
 
+    // The status request is already committed. A secondary activity-log error
+    // must never report the *entire* request as failed or encourage a retry.
     if (logErr) {
-      return NextResponse.json({ error: `Log insert failed: ${logErr.message}` }, { status: 400 });
+      console.warn("[STATUS REQUEST] Activity log unavailable", logErr.code);
     }
 
     try {

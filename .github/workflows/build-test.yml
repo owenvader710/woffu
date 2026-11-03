@@ -39,7 +39,7 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Audit production dependencies (required: no High/Critical)
+      - name: Audit production dependencies - High/Critical release gate
         run: |
           set +e
           timeout 90s npm audit --omit=dev --audit-level=high --json > /tmp/woffu-prod-audit.json

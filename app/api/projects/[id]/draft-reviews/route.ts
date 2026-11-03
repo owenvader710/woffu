@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireActiveUser } from "@/app/api/_authorization";
-import { draftRpcError, draftResultResponse, notifyDraftRecipient, type DraftRpcResult } from "@/app/api/_draftReview";
+import { draftRpcError, draftResultResponse, notifySubmittedDraft, type DraftRpcResult } from "@/app/api/_draftReview";
 
 type Context = { params: Promise<{ id: string }> };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -46,12 +46,8 @@ export async function POST(request: NextRequest, context: Context) {
   if (failure) return failure;
 
   const result = data as DraftRpcResult | null;
-  if (result?.ok && result.reviewer_id && result.reviewer_id !== access.user?.id) {
-    await notifyDraftRecipient(
-      result.reviewer_id, "มี Draft รอตรวจ",
-      String.raw`${result.project_title || "โปรเจกต์"} • Draft ${result.draft_number} รอ QC`,
-      "/projects/" + id + "#draft-reviews"
-    );
+  if (result?.ok) {
+    await notifySubmittedDraft(result, access.user?.id);
   }
   return draftResultResponse(result);
 }

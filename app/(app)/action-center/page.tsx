@@ -84,8 +84,12 @@ export default function ActionCenterPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void load(controller.signal);
-    return () => controller.abort();
+    // Schedule stateful loading outside the effect's synchronous body.
+    const frame = window.requestAnimationFrame(() => void load(controller.signal));
+    return () => {
+      window.cancelAnimationFrame(frame);
+      controller.abort();
+    };
   }, [load]);
 
   const filtered = useMemo(() => {

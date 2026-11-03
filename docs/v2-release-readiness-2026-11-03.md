@@ -83,10 +83,12 @@ validation error and uses 10–128-character passwords.
 
 ## Known unresolved release risks
 
-1. **Dependency vulnerabilities:** production dependency audit has previously
-   reported **32 advisories including 3 critical and 12 high**. CI now reports
-   current packages/fixability. Do not treat the green Build as a security
-   clearance; triage and remediate before business production rollout.
+1. **Dependency vulnerabilities:** patched Next.js to **16.4.3**,
+   upgraded Firebase to **13.1.0**, Firebase Admin to **14.5.0**,
+   and refreshed transitive package lockfile via read-only CI build validation.
+   Prior to the Firebase upgrade the audit reduced from **32 (3 critical)**
+   to **11 (0 critical, 4 high)**. Recheck the final Firebase-upgraded CI
+   audit before any release; green Build alone is not a security clearance.
 2. **Legacy lint:** the baseline whole-project report is nonblocking; targeted
    security/feature modules are enforced. Full lint remediation remains.
 3. **Email delivery:** Supabase's test SMTP has recipient/rate restrictions.
@@ -96,6 +98,20 @@ validation error and uses 10–128-character passwords.
    storage and build/compute consumption to avoid interruptions.
 5. **No real browser E2E:** a successful build, SQL fixture test or
    READY Vercel Preview does not prove full user workflows.
+
+## Completed patch verification
+
+The disposable GitHub Actions jobs generated lockfiles with **read-only**
+GitHub access, verified `npm ci`, TypeScript and Next.js production build
+before a separate minimal write job committed only `package.json` and
+`package-lock.json` to the V2 branch. Both temporary elevated write
+workflows were deleted after success. The final permanent CI repeats
+audit, typechecks, targeted lint, build, PostgreSQL integration and HTTP
+proxy smoke tests.
+
+`/api/my-work/[id]` legacy direct PATCH now returns 410 because the current
+UI uses the canonical controlled status approval workflow. No Production
+schema or customer records were changed.
 
 ## Operational links
 

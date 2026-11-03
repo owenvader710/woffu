@@ -17,7 +17,7 @@ the GitHub main branch are intentionally untouched.
 | Draft 1–4 submission/reviewer QC | SQL workflow test + alerts | Pending |
 | Action Center and Dashboard | Unit tests + Next.js production build | Pending |
 | In-app Notifications/Realtime | Staging publication + owner-only SQL | Pending |
-| Optional Web Push/FCM | Server code, RLS ownership tests | Pending |
+| Optional Web Push (VAPID) | Server + Service Worker security tests | Pending device test |
 | Small-file attachments | Staging buckets and MIME/size test | Pending |
 | Preview/Production isolation | Unit tests and actual Next.js HTTP smoke | Pending |
 
@@ -38,8 +38,10 @@ validation error and uses 10–128-character passwords.
 - Real staging queries/RLS tests used rollback-only temporary accounts;
   authorization and draft workflow tests left no test users behind.
 - Status approvals and Draft QC use DB functions, not two independent writes.
-- In-app notifications use per-user RLS; private Push endpoints and FCM
-  token ownership are protected. Browser Push is optional.
+- In-app notifications use per-user RLS; Browser Push uses one optional
+  VAPID transport with same-origin link validation. Legacy FCM APIs are
+  intentionally retired in V2 (HTTP 410); the historical token table is
+  retained but not read by the new application.
 - GitHub Node 24 CI: TypeScript, Next.js Build, targeted new-module lint,
   security tests, PostgreSQL 16+17 integration, and Preview HTTP smoke.
 - Existing ESLint baseline is reported separately, currently nonblocking.
@@ -83,18 +85,17 @@ validation error and uses 10–128-character passwords.
 
 ## Known unresolved release risks
 
-1. **Dependency vulnerabilities:** patched Next.js to **16.4.3**,
-   upgraded Firebase to **13.1.0**, Firebase Admin to **14.5.0**,
-   and refreshed transitive package lockfile via read-only CI build validation.
-   After all upgrades the latest CI audit has **10 total advisories:
-   0 critical, 4 high, 6 moderate** (down from 32 total/3 critical). The
-   remaining high advisories concern `firebase`, `@firebase/firestore`,
-   `@firebase/firestore-compat` and `@grpc/grpc-js`; those require further
-   upstream-compatible upgrades or reviewed replacements. Green Build is
-   **not** a security clearance.
-2. **Legacy lint:** the full-repository report still contains **149 errors
-   and 13 warnings** under the patched lint rules; it is nonblocking. Targeted
-   security/feature modules all pass enforced lint. Full remediation remains.
+1. **Dependency audit:** patched Next.js to **16.4.3**, refreshed transitive
+   dependencies and removed the redundant Firebase client/Admin SDKs after
+   consolidating Browser Push on VAPID. Latest GitHub CI reports
+   **zero production dependency advisories** (down from 32, including three
+   critical). The audit is now a required fail-closed gate for High/Critical
+   findings. This does not replace infrastructure or workflow penetration
+   testing, and new advisories can appear later.
+2. **Legacy lint:** the full-repository report still contains **143 errors
+   and 12 warnings** after removing the obsolete Firebase code; it is
+   nonblocking. Targeted security/feature modules pass enforced lint.
+   Full remediation remains.
 3. **Email delivery:** Supabase's test SMTP has recipient/rate restrictions.
    The manager-assisted one-time recovery link does not require SMTP,
    but needs manual identity verification and an authenticated manager.
@@ -108,10 +109,10 @@ validation error and uses 10–128-character passwords.
 The disposable GitHub Actions jobs generated lockfiles with **read-only**
 GitHub access, verified `npm ci`, TypeScript and Next.js production build
 before a separate minimal write job committed only `package.json` and
-`package-lock.json` to the V2 branch. Both temporary elevated write
-workflows were deleted after success. The final permanent CI repeats
-audit, typechecks, targeted lint, build, PostgreSQL integration and HTTP
-proxy smoke tests.
+`package-lock.json` to the V2 branch. All temporary elevated-write
+workflows were deleted after success. The permanent CI now **requires**
+a zero-High/Critical production audit and repeats typecheck, targeted lint,
+build, PostgreSQL integration and HTTP proxy/Push safety tests.
 
 `/api/my-work/[id]` legacy direct PATCH now returns 410 because the current
 UI uses the canonical controlled status approval workflow. No Production

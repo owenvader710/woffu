@@ -103,7 +103,7 @@ export async function sendPushToUser({
         } else {
           const tokens = (data ?? []).map(row => row.token).filter(Boolean);
           if (tokens.length) {
-            const result = await app.messaging().sendEachForMulticast({
+            const result = await admin.messaging(app).sendEachForMulticast({
               tokens,
               notification: { title, body: message },
               data: { title, body: message, link: url || "/notifications" },

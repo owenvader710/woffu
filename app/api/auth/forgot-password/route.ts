@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseFromRequest } from "@/utils/supabase/api";
+import { getTrustedSiteOrigin } from "@/lib/stagingSafety";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -14,7 +15,19 @@ export async function POST(req: NextRequest) {
     // Use the same SSR cookie client for request + callback so PKCE verifier
     // cookies are available to exchangeCodeForSession on the same browser.
     const { supabase, applyCookies } = supabaseFromRequest(req);
-    const recoveryUrl = new URL("/auth/confirm", req.nextUrl.origin);
+    const siteOrigin = getTrustedSiteOrigin(
+      process.env.NEXT_PUBLIC_SITE_URL,
+      req.nextUrl.origin,
+      process.env.NODE_ENV === "development"
+    );
+    if (!siteOrigin) {
+      return NextResponse.json(
+        { error: "ยังไม่สามารถขอลิงก์รีเซ็ตได้ กรุณาติดต่อผู้ดูแลระบบ" },
+        { status: 503 }
+      );
+    }
+
+    const recoveryUrl = new URL("/auth/confirm", siteOrigin);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: recoveryUrl.toString(),
     });

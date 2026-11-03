@@ -60,6 +60,11 @@ jobs:
               console.log("::warning::Production dependencies have high/critical advisories; review before release.");
           '
 
+      - name: Inventory legacy Firebase consumers
+        run: |
+          echo "Firebase references in current application sources:"
+          grep -RInE 'firebase(/|-admin|App|Messaging)|getFcmToken|subscribeForegroundMessages|FCM_VAPID_KEY|/api/push/register' app lib utils --include='*.ts' --include='*.tsx' || true
+
       - name: Test staging deployment guards
         run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/security/stagingSafety.test.mjs
 

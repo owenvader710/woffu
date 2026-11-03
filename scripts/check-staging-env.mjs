@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { pathToFileURL } from "node:url";
+import { resolve } from "node:path";
 // Validates Netlify staging settings without printing credentials.
 // Usage: node scripts/check-staging-env.mjs
 const STAGING_ORIGIN = "https://xofndnlyqueyuqyweqyi.supabase.co";
@@ -30,7 +32,7 @@ export function checkStagingEnvironment(env) {
   return { ok: errors.length === 0, errors };
 }
 
-if (process.argv[1] && import.meta.url === new URL("file://" + process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const result = checkStagingEnvironment(process.env);
   if (result.ok) {
     console.log("PASS: staging environment settings are present and isolated (credentials not displayed)");

@@ -85,6 +85,9 @@ jobs:
       - name: Lint login API and credential parser
         run: npx eslint "app/api/login/route.ts" "lib/loginCredentials.ts"
 
+      - name: Test public Staging readiness checker
+        run: node --test tests/security/stagingLiveSmoke.test.mjs
+
       - name: Test Action Center role and priority logic
         run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/action-center/actionCenter.test.mjs
 

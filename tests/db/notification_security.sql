@@ -78,3 +78,33 @@ BEGIN
     RAISE EXCEPTION 'Push subscription owner was changed';
   END IF;
 END $verify$;
+
+-- Legacy FCM token registration must obey the same ownership policy.
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000002',false);
+INSERT INTO public.push_tokens(user_id,token,platform)
+VALUES('10000000-0000-4000-8000-000000000002','fcm-editor-only','web');
+RESET ROLE;
+
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000001',false);
+DO $verify$
+DECLARE hijackSucceeded boolean := false;
+BEGIN
+  IF (SELECT count(*) FROM public.push_tokens) <> 0 THEN
+    RAISE EXCEPTION 'Manager can read editor FCM token';
+  END IF;
+
+  BEGIN
+    INSERT INTO public.push_tokens(user_id,token,platform)
+    VALUES('10000000-0000-4000-8000-000000000001','fcm-editor-only','web')
+    ON CONFLICT (token) DO UPDATE SET user_id=EXCLUDED.user_id;
+    hijackSucceeded := true;
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+  IF hijackSucceeded THEN
+    RAISE EXCEPTION 'FCM device token was transferable to another user';
+  END IF;
+  RAISE NOTICE 'FCM token ownership: PASS';
+END $verify$;
+RESET ROLE;

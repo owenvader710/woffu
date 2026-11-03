@@ -55,7 +55,9 @@ jobs:
             "app/api/notifications/read-all/route.ts" \
             "app/api/notifications/read/[id]/route.ts" \
             "app/api/push-subscriptions/route.ts" \
-            "app/api/push-subscriptions/delete/route.ts"
+            "app/api/push-subscriptions/delete/route.ts" \
+            "app/api/push/register/route.ts" \
+            "app/api/push/unregister/route.ts"
 
       - name: Typecheck
         run: npx tsc --noEmit

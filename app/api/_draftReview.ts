@@ -68,4 +68,33 @@ export async function notifyDraftRecipient(
   }
 }
 
+/** Route a Draft to its assigned reviewer, otherwise to active LEADERS. */
+export async function notifySubmittedDraft(result: DraftRpcResult, submitterId?: string) {
+  if (!result.ok || !result.project_id) return;
+  let recipients: string[] = result.reviewer_id ? [result.reviewer_id] : [];
+
+  if (!recipients.length) {
+    try {
+      const admin = createSupabaseAdmin();
+      const { data, error } = await admin.from("profiles")
+        .select("id").eq("role", "LEADER").eq("is_active", true).limit(30);
+      if (error) {
+        console.warn("[DRAFT REVIEW] No default reviewers available", error.code);
+        return;
+      }
+      recipients = (data ?? []).map(row => row.id);
+    } catch {
+      console.warn("[DRAFT REVIEW] Could not locate default reviewers");
+      return;
+    }
+  }
+
+  const title = "มี Draft รอตรวจ";
+  const message = `${result.project_title || "โปรเจกต์"} • Draft ${result.draft_number} รอ QC`;
+  const url = `/projects/${result.project_id}#draft-reviews`;
+  await Promise.all([...new Set(recipients)]
+    .filter(id => id && id !== submitterId)
+    .map(id => notifyDraftRecipient(id, title, message, url)));
+}
+
 export type { DraftRpcResult };

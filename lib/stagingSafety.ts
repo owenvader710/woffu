@@ -8,6 +8,7 @@
 export const WOFFU_STAGING_PROJECT_REF = "xofndnlyqueyuqyweqyi";
 
 export type DeploymentEnvironment = {
+  [key: string]: string | undefined;
   VERCEL_ENV?: string;
   NETLIFY?: string;
   WOFFU_DEPLOYMENT_MODE?: string;

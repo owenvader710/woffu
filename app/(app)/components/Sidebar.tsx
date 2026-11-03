@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/utils/supabase/client";
-import { BadgeCheck, ChevronRight, CircleAlert, FolderKanban, LayoutDashboard, ListTodo, LogOut, Megaphone, UsersRound } from "lucide-react";
+import { BadgeCheck, ChevronRight, CircleAlert, FolderKanban, Inbox, LayoutDashboard, ListTodo, LogOut, Megaphone, UsersRound } from "lucide-react";
 
 type MeProfile = {
   id: string;
@@ -139,6 +139,14 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
             onClick={handleNavigate}
           >
             <span className="flex items-center gap-3"><LayoutDashboard size={18} aria-hidden="true" /> ภาพรวมงาน</span>
+          </Link>
+
+          <Link
+            href="/action-center"
+            className={linkCls(pathname === "/action-center")}
+            onClick={handleNavigate}
+          >
+            <span className="flex items-center gap-3"><Inbox size={18} aria-hidden="true" /> ต้องดำเนินการ</span>
           </Link>
 
           <div className="space-y-1">

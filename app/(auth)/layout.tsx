@@ -1,18 +1,18 @@
 import React from "react";
+import { getDeploymentSafety } from "@/lib/stagingSafety";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
-  const previewReadOnly = process.env.VERCEL_ENV === "preview" &&
-    process.env.WOFFU_ENABLE_PREVIEW_MUTATIONS !== "true";
+  const state = getDeploymentSafety(process.env);
 
   return (
     <div className="min-h-screen w-full bg-[#0e1011]">
-      {previewReadOnly && (
+      {state.readOnly && (
         <aside role="status" className="mx-auto max-w-3xl px-4 pt-5">
           <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-100">
-            <strong className="block">WOFFU V2 Preview — โหมดตรวจดู</strong>
-            ฐานข้อมูลของ Preview ยังไม่ยืนยันว่าแยกจาก Production
-            ระบบจึงปิดคำสั่งส่งอีเมลรีเซ็ตและการเปลี่ยนรหัสผ่านไว้ชั่วคราว
-            กรุณาอย่าใช้บัญชีงานจริงทดสอบจนกว่าจะเชื่อม Supabase Staging
+            <strong className="block">WOFFU V2 — โหมดทดสอบ</strong>
+            {state.blockedDatabase
+              ? "Preview ยังไม่ได้เชื่อมกับ Supabase Staging ที่แยกจาก Production ระบบจึงป้องกันการเข้าสู่ระบบและการเข้าถึงข้อมูลจริงไว้ก่อน"
+              : "เชื่อม Supabase Staging แล้ว แต่ยังปิดการสร้างงานและรีเซ็ตรหัสผ่านจนกว่าจะอนุญาตให้ทดสอบการเขียนข้อมูล"}
           </div>
         </aside>
       )}

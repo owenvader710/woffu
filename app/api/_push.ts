@@ -1,55 +1,21 @@
 import admin from "firebase-admin";
+import webpush from "web-push";
 import { createSupabaseAdmin } from "./_supabaseAdmin";
 
-function normalizeEnv(value?: string | null) {
-  if (!value) return "";
-  return value.trim();
-}
-
-function normalizePrivateKey(value?: string | null) {
-  if (!value) return "";
-
-  let key = value.trim();
-
-  if (
-    (key.startsWith('"') && key.endsWith('"')) ||
-    (key.startsWith("'") && key.endsWith("'"))
-  ) {
-    key = key.slice(1, -1);
-  }
-
-  key = key.replace(/\\n/g, "\n").trim();
-
-  return key;
-}
-
-function getFirebaseAdmin() {
+/**
+ * Optional best-effort push transports. In-app notifications are persisted
+ * separately and must never depend on VAPID or Firebase being configured.
+ * Never log endpoints, Auth secrets, FCM tokens or subscription key material.
+ */
+function firebaseApp() {
+  const projectId = process.env.FIREBASE_PROJECT_ID?.trim();
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY
+    ?.replace(/\\n/g, "\n").trim();
+  if (!projectId || !clientEmail || !privateKey) return null;
   if (admin.apps.length) return admin.app();
-
-  const projectId = normalizeEnv(process.env.FIREBASE_PROJECT_ID);
-  const clientEmail = normalizeEnv(process.env.FIREBASE_CLIENT_EMAIL);
-  const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
-
-  console.log("[FIREBASE ENV CHECK]", {
-    hasProjectId: !!projectId,
-    hasClientEmail: !!clientEmail,
-    hasPrivateKey: !!privateKey,
-    startsWithBegin: privateKey.startsWith("-----BEGIN PRIVATE KEY-----"),
-    endsWithEnd: privateKey.endsWith("-----END PRIVATE KEY-----"),
-    firstChar: privateKey[0] || null,
-    lastChar: privateKey.slice(-1) || null,
-  });
-
-  if (!projectId || !clientEmail || !privateKey) {
-    throw new Error("Missing Firebase Admin env");
-  }
-
   return admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId,
-      clientEmail,
-      privateKey,
-    }),
+    credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
   });
 }
 
@@ -64,81 +30,106 @@ export async function sendPushToUser({
   message: string;
   url?: string;
 }) {
-  getFirebaseAdmin();
-
-  const supabase = createSupabaseAdmin();
-
-  console.log("[PUSH] incoming userId =", userId);
-
-  const { data, error } = await supabase
-    .from("push_tokens")
-    .select("user_id, token, platform")
-    .eq("user_id", userId);
-
-  console.log("[PUSH] query error =", error);
-  console.log("[PUSH] raw rows =", data);
-
-  if (error) throw new Error(error.message);
-
-  const tokens = (data ?? []).map((x: any) => x.token).filter(Boolean);
-
-  console.log("[PUSH] tokens =", tokens);
-  console.log("[PUSH] token count =", tokens.length);
-
-  if (tokens.length === 0) {
-    return { ok: true, sent: 0, reason: "NO_TOKEN" };
-  }
-
-  const result = await admin.messaging().sendEachForMulticast({
-    tokens,
-    notification: {
-      title,
-      body: message,
-    },
-    data: {
-      title,
-      body: message,
-      link: url || "/",
-    },
-    webpush: {
-      fcmOptions: {
-        link: url || "/",
-      },
-      notification: {
-        title,
-        body: message,
-        icon: "/icon-192.png",
-        badge: "/badge-72.png",
-      },
-    },
-  });
-
-  console.log("[PUSH] successCount =", result.successCount);
-  console.log("[PUSH] failureCount =", result.failureCount);
-  console.log(
-    "[PUSH] responses =",
-    result.responses.map((r) => ({
-      success: r.success,
-      error: (r.error as any)?.code || (r.error as any)?.message || null,
-    }))
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.trim();
+  const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
+  const vapidEnabled = Boolean(publicKey && privateKey);
+  const fcmEnabled = Boolean(
+    process.env.FIREBASE_PROJECT_ID &&
+    process.env.FIREBASE_CLIENT_EMAIL &&
+    process.env.FIREBASE_PRIVATE_KEY
   );
 
-  const invalidTokens: string[] = [];
-  result.responses.forEach((r, i) => {
-    if (!r.success) {
-      const code = (r.error as any)?.code || "";
-      if (
-        code.includes("registration-token-not-registered") ||
-        code.includes("invalid-registration-token")
-      ) {
-        invalidTokens.push(tokens[i]);
-      }
-    }
-  });
-
-  if (invalidTokens.length > 0) {
-    await supabase.from("push_tokens").delete().in("token", invalidTokens);
+  if (!vapidEnabled && !fcmEnabled) {
+    return { ok: true, sent: 0, reason: "PUSH_NOT_CONFIGURED" };
   }
 
-  return { ok: true, sent: result.successCount };
+  const db = createSupabaseAdmin();
+  let webSent = 0;
+  let firebaseSent = 0;
+
+  // This is the transport used by the Notification Center's "เปิด push"
+  // control. It does not need Firebase, SMTP or a paid provider.
+  if (vapidEnabled && publicKey && privateKey) {
+    try {
+      webpush.setVapidDetails(
+        process.env.VAPID_SUBJECT?.trim() || "mailto:admin@woffu.local",
+        publicKey,
+        privateKey
+      );
+      const { data, error } = await db
+        .from("push_subscriptions")
+        .select("id, endpoint, p256dh, auth")
+        .eq("user_id", userId)
+        .limit(30);
+      if (error) {
+        console.warn("[WEB PUSH] Subscription lookup failed", error.code);
+      } else {
+        for (const sub of data ?? []) {
+          try {
+            await webpush.sendNotification({
+              endpoint: sub.endpoint,
+              keys: { p256dh: sub.p256dh, auth: sub.auth },
+            }, JSON.stringify({
+              title, body: message, url: url || "/notifications",
+              tag: "woffu-workflow",
+            }), { TTL: 3600 });
+            webSent++;
+          } catch (failure) {
+            const status = (failure as { statusCode?: number }).statusCode;
+            if (status === 404 || status === 410) {
+              await db.from("push_subscriptions").delete()
+                .eq("id", sub.id).eq("user_id", userId);
+            } else {
+              console.warn("[WEB PUSH] Delivery failed", status || "unknown");
+            }
+          }
+        }
+      }
+    } catch {
+      console.warn("[WEB PUSH] Configuration unavailable");
+    }
+  }
+
+  // Optional legacy FCM devices. Skipped altogether if credentials are
+  // missing, rather than throwing and obscuring a successful DB action.
+  if (fcmEnabled) {
+    try {
+      const app = firebaseApp();
+      if (app) {
+        const { data, error } = await db.from("push_tokens")
+          .select("token").eq("user_id", userId).limit(500);
+        if (error) {
+          console.warn("[FCM] Token lookup failed", error.code);
+        } else {
+          const tokens = (data ?? []).map(row => row.token).filter(Boolean);
+          if (tokens.length) {
+            const result = await app.messaging().sendEachForMulticast({
+              tokens,
+              notification: { title, body: message },
+              data: { title, body: message, link: url || "/notifications" },
+              webpush: {
+                notification: { title, body: message, icon: "/icon-192.png" },
+              },
+            });
+            firebaseSent = result.successCount;
+            const invalid = result.responses.flatMap((response, i) => {
+              const code = response.error?.code || "";
+              return !response.success && (
+                code.includes("registration-token-not-registered") ||
+                code.includes("invalid-registration-token")
+              ) ? [tokens[i]] : [];
+            });
+            if (invalid.length) {
+              await db.from("push_tokens").delete()
+                .eq("user_id", userId).in("token", invalid);
+            }
+          }
+        }
+      }
+    } catch {
+      console.warn("[FCM] Optional delivery unavailable");
+    }
+  }
+
+  return { ok: true, sent: webSent + firebaseSent, webSent, firebaseSent };
 }

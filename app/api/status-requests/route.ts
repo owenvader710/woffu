@@ -1,38 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseFromRequest } from "@/app/api/_supabase";
+import { POST as submitStatusRequest } from "@/app/api/projects/[id]/request-status/route";
 
+/**
+ * Legacy compatibility route: delegate to the single authorized V2 workflow.
+ * Never offer another status-change INSERT path that bypasses current status,
+ * assignee ownership, duplicate checks or leader notifications.
+ */
 export async function POST(req: NextRequest) {
-  const { supabase } = await supabaseFromRequest(req);
-
-  // ต้อง login
-  const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
-  const user = authData?.user;
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
+  const clone = req.clone();
   const body = await req.json().catch(() => null);
-  if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-
-  const { project_id, from_status, to_status, note } = body;
-
-  if (!project_id || !from_status || !to_status) {
-    return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+  const projectId = typeof body?.project_id === "string" ? body.project_id.trim() : "";
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(projectId)) {
+    return NextResponse.json({ error: "Invalid project_id" }, { status: 400 });
   }
-
-  const { data, error } = await supabase
-    .from("status_change_requests")
-    .insert({
-      project_id,
-      from_status,
-      to_status,
-      note: note ?? null,
-      requested_by: user.id,
-      request_status: "PENDING", // ✅ สำคัญ
-    })
-    .select("id")
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  return NextResponse.json({ data }, { status: 201 });
+  return submitStatusRequest(clone, { params: { id: projectId } });
 }

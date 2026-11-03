@@ -49,11 +49,11 @@ export async function inspectStagingSite(origin, fetcher = fetch) {
   const identityBody = await identity.json();
   assert.equal(identityBody.user, null, "Unauthenticated identity must not disclose user data");
 
-  // RLS should return no project records for an unauthenticated public request.
+  // The route must reject anonymous requests before even querying project rows.
   const projects = await request("/api/projects");
-  assert.equal(projects.status, 200, "Unauthenticated project list must respond safely");
+  assert.equal(projects.status, 401, "Unauthenticated project list must be rejected");
   const projectBody = await projects.json();
-  assert.deepEqual(projectBody.data, [], "Public requests must not expose project records");
+  assert.ok(!("data" in projectBody), "Public requests must not expose project records");
 
   return { origin, stagingConnected: true, readOnly: mode.readOnly, login: "ok", publicDataIsolation: "ok" };
 }

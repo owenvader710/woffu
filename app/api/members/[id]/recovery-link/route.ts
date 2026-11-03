@@ -1,26 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/app/api/_supabaseAdmin";
 import { requireActiveManager } from "@/app/api/_authorization";
+import { getTrustedSiteOrigin } from "@/lib/stagingSafety";
 
 type RouteContext = { params: Promise<{ id: string }> };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function recoveryOrigin(request: NextRequest): string | null {
-  // A configured origin prevents forged Host headers from changing where
-  // privileged recovery links point.
-  const configured = process.env.NEXT_PUBLIC_SITE_URL;
-  if (!configured && process.env.NODE_ENV !== "development") return null;
-  try {
-    const url = new URL(configured || request.nextUrl.origin);
-    if (url.username || url.password || url.search || url.hash) return null;
-    if (url.protocol !== "https:" &&
-        !(process.env.NODE_ENV === "development" && url.hostname === "localhost" && url.protocol === "http:")) {
-      return null;
-    }
-    return url.origin;
-  } catch {
-    return null;
-  }
+  return getTrustedSiteOrigin(
+    process.env.NEXT_PUBLIC_SITE_URL,
+    request.nextUrl.origin,
+    process.env.NODE_ENV === "development"
+  );
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {

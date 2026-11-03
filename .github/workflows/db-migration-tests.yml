@@ -2,7 +2,7 @@ name: WOFFU DB Migration Tests
 
 on:
   push:
-    branches: ["v2/**"]
+    branches: [main, dev]
   pull_request:
     branches: [main]
 

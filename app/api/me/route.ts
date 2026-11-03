@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
 
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr) {
-      return NextResponse.json({ user: null, error: authErr.message }, { status: 401 });
+      return NextResponse.json({ user: null, error: "Unauthenticated" }, { status: 401 });
     }
 
     const user = authData?.user ?? null;
@@ -16,17 +16,26 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ user: null, error: "Unauthenticated" }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("id, display_name, role, department, is_active")
       .eq("id", user.id)
       .maybeSingle();
 
+    if (profileError) {
+      const res = NextResponse.json({ user: null, profile: null, error: "Unable to verify account" }, { status: 500 });
+      return applyCookies(res);
+    }
+    if (!profile || profile.is_active !== true) {
+      const res = NextResponse.json({ user: null, profile: null, error: "Account unavailable" }, { status: 403 });
+      return applyCookies(res);
+    }
+
     const res = NextResponse.json({ user, profile, error: null }, { status: 200 });
     return applyCookies(res);
-  } catch (e: any) {
+  } catch {
     return NextResponse.json(
-      { user: null, profile: null, error: e?.message ?? "Internal error" },
+      { user: null, profile: null, error: "Internal error" },
       { status: 500 }
     );
   }

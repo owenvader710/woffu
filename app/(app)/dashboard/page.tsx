@@ -691,10 +691,11 @@ export default function DashboardPage() {
           <h2 id="attention-title" className="woffu-clean-heading text-lg text-white">สิ่งที่ต้องติดตาม</h2>
           <span className="text-xs text-white/45">เลือกการ์ดเพื่อดูรายละเอียด</span>
         </div>
+        <p className="mb-3 text-xs text-white/45">ตัวเลข Draft เป็นรายการล่าสุดบางส่วน · <Link href="/action-center" className="font-semibold text-[#e5ff78] underline underline-offset-4">ดูรายการที่ต้องดำเนินการทั้งหมด</Link></p>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <QuickLink href="#qc-overview" label="Draft รอ QC" detail="รายการล่าสุด" count={reviewQueue.length} variant="attention"/>
-          <QuickLink href="/my-work" label="ส่งกลับแก้ไข" detail="รายการล่าสุด" count={revisionCount} variant="danger"/>
-          <QuickLink href="#qc-overview" label="งานเกินกำหนด" detail="งานยังไม่ปิด" count={overdueCount} variant="neutral"/>
+          <QuickLink href="/action-center" label="Draft รอ QC" detail="รายการตัวอย่าง" count={reviewQueue.length} variant="attention"/>
+          <QuickLink href="/action-center" label="ส่งกลับแก้ไข" detail="รายการล่าสุด" count={revisionCount} variant="danger"/>
+          <QuickLink href="/action-center" label="งานเกินกำหนด" detail="งานยังไม่ปิด" count={overdueCount} variant="neutral"/>
           <ChecklistProgress completed={projectCounts.completed} total={totalProjectsForDonut} label="ปิดงานแล้ว" />
         </div>
       </section>

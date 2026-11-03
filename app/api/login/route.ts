@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseFromRequest } from "@/utils/supabase/api";
+import { parseLoginCredentials } from "@/lib/loginCredentials";
 
 export async function POST(req: NextRequest) {
   let credentials: unknown;
@@ -9,26 +10,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  // Never pass unexpected JSON types to the Auth provider, and do not log passwords.
-  if (!credentials || typeof credentials !== "object" || Array.isArray(credentials)) {
+  const validated = parseLoginCredentials(credentials);
+  if (!validated) {
     return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
   }
-
-  const { email, password } = credentials as Record<string, unknown>;
-  if (
-    typeof email !== "string" ||
-    typeof password !== "string" ||
-    !email.trim() ||
-    !password ||
-    email.length > 320
-  ) {
-    return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
-  }
+  const { email, password } = validated;
 
   try {
     const { supabase, applyCookies } = supabaseFromRequest(req);
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
+      email,
       password,
     });
 

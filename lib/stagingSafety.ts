@@ -65,6 +65,30 @@ export function getDeploymentSafety(env: DeploymentEnvironment): DeploymentSafet
   };
 }
 
+/**
+ * Password reset redirects must come from an operator-controlled site URL,
+ * never from a request Host header or arbitrary input supplied to the API.
+ */
+export function getTrustedSiteOrigin(
+  configured: string | undefined,
+  fallback: string | undefined,
+  development: boolean
+): string | null {
+  const value = configured || (development ? fallback : undefined);
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.username || url.password || url.search || url.hash ||
+        (url.pathname !== "" && url.pathname !== "/")) return null;
+    if (url.protocol !== "https:" &&
+        !(development && url.protocol === "http:" &&
+          ["localhost", "127.0.0.1"].includes(url.hostname))) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
 export function isUnsafeMethod(method: string) {
   return !["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
 }

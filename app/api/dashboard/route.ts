@@ -143,8 +143,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: membersRes.error.message }, { status: 400 });
     }
 
-    if ((approvalsRes as any)?.error) {
-      return NextResponse.json({ error: (approvalsRes as any).error.message }, { status: 400 });
+    const typedApprovals = approvalsRes as unknown as {
+      data: unknown;
+      error: { message: string } | null;
+    };
+    if (typedApprovals.error) {
+      return NextResponse.json({ error: typedApprovals.error.message }, { status: 400 });
     }
 
     if (noticesRes.error) {
@@ -159,8 +163,8 @@ export async function GET(req: NextRequest) {
       ? (membersRes.data as unknown as MemberRow[])
       : [];
 
-    const approvals = Array.isArray((approvalsRes as any)?.data)
-      ? ((approvalsRes as any).data as unknown as ApprovalRow[])
+    const approvals = Array.isArray(typedApprovals.data)
+      ? (typedApprovals.data as unknown as ApprovalRow[])
       : [];
 
     const notices = Array.isArray(noticesRes.data)

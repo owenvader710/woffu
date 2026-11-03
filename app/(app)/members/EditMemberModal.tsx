@@ -188,10 +188,14 @@ export default function EditMemberModal({
               <div className="mb-2 text-xs font-bold tracking-widest text-white/45 uppercase">E-mail</div>
               <input
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none focus:border-[#e5ff78]"
+                readOnly
+                aria-describedby="member-email-guidance"
+                className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/50"
                 placeholder="อีเมล"
               />
+              <p id="member-email-guidance" className="mt-1 text-[11px] leading-5 text-white/45">
+                อีเมลผูกกับบัญชี Login และ Recovery ไม่สามารถแก้จากหน้าโปรไฟล์ได้
+              </p>
             </div>
 
             <div className="md:col-span-2">

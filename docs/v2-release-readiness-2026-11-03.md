@@ -86,11 +86,15 @@ validation error and uses 10–128-character passwords.
 1. **Dependency vulnerabilities:** patched Next.js to **16.4.3**,
    upgraded Firebase to **13.1.0**, Firebase Admin to **14.5.0**,
    and refreshed transitive package lockfile via read-only CI build validation.
-   Prior to the Firebase upgrade the audit reduced from **32 (3 critical)**
-   to **11 (0 critical, 4 high)**. Recheck the final Firebase-upgraded CI
-   audit before any release; green Build alone is not a security clearance.
-2. **Legacy lint:** the baseline whole-project report is nonblocking; targeted
-   security/feature modules are enforced. Full lint remediation remains.
+   After all upgrades the latest CI audit has **10 total advisories:
+   0 critical, 4 high, 6 moderate** (down from 32 total/3 critical). The
+   remaining high advisories concern `firebase`, `@firebase/firestore`,
+   `@firebase/firestore-compat` and `@grpc/grpc-js`; those require further
+   upstream-compatible upgrades or reviewed replacements. Green Build is
+   **not** a security clearance.
+2. **Legacy lint:** the full-repository report still contains **149 errors
+   and 13 warnings** under the patched lint rules; it is nonblocking. Targeted
+   security/feature modules all pass enforced lint. Full remediation remains.
 3. **Email delivery:** Supabase's test SMTP has recipient/rate restrictions.
    The manager-assisted one-time recovery link does not require SMTP,
    but needs manual identity verification and an authenticated manager.

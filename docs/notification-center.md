@@ -11,7 +11,8 @@
    `postgres_changes` and falls back to a **60-second refresh only while
    the tab is visible**, plus immediate refresh on tab return.
 6. Optional Web Push uses VAPID and the browser subscription in
-   `public.push_subscriptions`; optional legacy FCM can coexist.
+   `public.push_subscriptions`. V2 uses **only VAPID Web Push**; the obsolete
+   Firebase client bootstrap and SDKs are removed.
 
 ## Security and privacy
 
@@ -20,11 +21,17 @@
   These routes no longer use the privileged service-role client.
 - Web Push registration and removal use the caller's RLS-scoped client.
   An endpoint owned by another account cannot be reassigned.
-- Push subscriptions and keys are **never logged**; Firebase tokens likewise.
-  Do not expose `VAPID_PRIVATE_KEY`, `FIREBASE_PRIVATE_KEY` or any Supabase
-  service-role secret in `NEXT_PUBLIC_` variables.
-- In-app persistence is independent of Push delivery: missing VAPID/FCM
-  settings don't cause a completed Draft or approval to fail.
+- Push subscriptions and keys are **never logged**. Do not expose
+  `VAPID_PRIVATE_KEY` or any Supabase service-role secret in
+  `NEXT_PUBLIC_` variables. Only the VAPID **public** key may be public.
+- Push deep links are limited to same-origin application paths in API,
+  React notification links and `/sw.js`. V2 no longer imports any remote
+  Firebase script into the service worker.
+- In-app persistence is independent of Push delivery: missing VAPID settings
+  don't cause a completed Draft or approval to fail.
+- NotificationCenter is mounted once across desktop and mobile, eliminating
+  duplicate Realtime connections and fallback polling. Browser permission is
+  requested **only after the user opts in**, never at sign-in.
 - The popup does not claim a notification was marked as read when the
   server rejects the request.
 
@@ -49,9 +56,9 @@ For optional browser Push on a correctly isolated staging host:
 4. The Notification Center's **เปิด push** button subscribes a device
    using the existing `/sw.js` service worker. Ensure HTTPS and explicitly
    allow browser notification permission when prompted.
-5. FCM is optional; configure `FIREBASE_PROJECT_ID`,
-   `FIREBASE_CLIENT_EMAIL` and `FIREBASE_PRIVATE_KEY` only if legacy
-   Firebase-enabled devices need it.
+5. Legacy FCM registration APIs now respond with **HTTP 410**. Users of
+   earlier FCM notifications must opt in again using the VAPID button; V1
+   Production was not modified.
 6. Run manual browser checks with test accounts. Disable notifications,
    sign out, change browsers and verify no other user's messages appear.
 
@@ -69,6 +76,8 @@ and serverless functions still consume Free Tier quotas.
   endpoint cannot be taken over by a second account.
 - Tests left **zero** temporary users/subscriptions in staging.
 - PostgreSQL CI also runs `tests/db/notification_security.sql`.
+- Node CI runs `tests/security/notificationPush.test.mjs`, asserting both
+  the server and service worker reject cross-origin Push links.
 
 ## Remaining release tests
 

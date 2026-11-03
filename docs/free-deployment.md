@@ -48,7 +48,8 @@ After that, the leader invites all other users by sharing a one-time link.
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = publishable/anon key from **staging**
    - `SUPABASE_SERVICE_ROLE_KEY` = server-only secret from **staging**
    - `NEXT_PUBLIC_SITE_URL` = actual staging Netlify origin
-   - `WOFFU_ENABLE_PREVIEW_MUTATIONS` = `true` **only after checking keys**
+   - `WOFFU_DEPLOYMENT_MODE` = `staging` (required for the test site)
+   - `WOFFU_ENABLE_PREVIEW_MUTATIONS` = `true` **only after verifying staging keys**
 4. Never put the service-role key under any `NEXT_PUBLIC_` variable.
 5. Keep email provider variables empty to use free manually shared invite
    links. Optional web push can be configured later with VAPID keys.

@@ -1,25 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseFromRequest } from "@/utils/supabase/api";
+import { requireActiveUser } from "@/app/api/_authorization";
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   try {
-    const { supabase, applyCookies } = supabaseFromRequest(req);
-
-    const { data: auth, error: authErr } = await supabase.auth.getUser();
-    if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
-    if (!auth?.user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+    const access = await requireActiveUser();
+    if (access.response) return access.response;
+    const supabase = access.supabase;
 
     const { data, error } = await supabase
       .from("profiles")
       .select("id, display_name, role, department, phone, avatar_url, is_active")
-      .eq("id", auth.user.id)
+      .eq("id", access.user.id)
       .single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: "Unable to load profile" }, { status: 400 });
 
     const res = NextResponse.json({ data });
-    return applyCookies(res);
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Internal error" }, { status: 500 });
+    return res;
+  } catch {
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

@@ -158,7 +158,7 @@ node scripts/check-staging-site.mjs https://YOUR-STAGING-SITE.netlify.app
 
 It validates a clean HTTPS Netlify hostname, checks `/api/runtime-mode` for
 `preview=true`, `stagingConnected=true` and `blockedDatabase=false`,
-and confirms the WOFFU login page loads. It accepts safe read-only staging
+confirms the WOFFU login page loads, and checks that anonymous requests cannot access identity or project records. It accepts safe read-only staging
 or explicitly enabled staging writes. It **does not** validate sign-in,
 invitation links, database writes or any authenticated project workflow.
 Never pass a secret or database key to this script.

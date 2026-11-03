@@ -131,6 +131,12 @@ jobs:
       - name: Lint secured identity and project endpoints
         run: npx eslint "app/api/me/route.ts" "app/api/projects/route.ts"
 
+      - name: Verify staging dashboard schema and team directory authorization
+        run: node --test tests/security/stagingDashboardSchema.test.mjs
+
+      - name: Lint dashboard and team directory fixes
+        run: npx eslint "app/api/dashboard/route.ts" "app/api/members/route.ts"
+
       - name: Typecheck
         run: npx tsc --noEmit
 

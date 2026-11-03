@@ -11,7 +11,7 @@ Hobby for commercial production use.
 | Netlify | Free ($0) | Host full-stack Next.js App Router | 300 credits/month hard cap; site pauses when exhausted |
 | GitHub | Free | Repository and CI | Actions minutes/storage subject to quotas |
 | Email | **Optional** | Invite members | No provider needed — copy one-time invite link |
-| Browser push | Optional | Notifications | In-app notifications still work without push/FCM |
+| Browser Push (VAPID) | Optional | Notifications | User opt-in; no Firebase account needed; in-app alerts work without Push |
 | Domain | Optional | Address | Use the included `*.netlify.app` URL for $0 |
 
 Netlify publicly states that its Free plan can serve commercial projects.

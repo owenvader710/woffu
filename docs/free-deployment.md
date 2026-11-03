@@ -146,3 +146,36 @@ Manual one-time invitation links remain free, but automatic reset email
 delivery to all staff **cannot be guaranteed** until a suitable SMTP
 provider is configured. Do not advertise email recovery as fully
 operational before testing it with normal team accounts on staging.
+
+
+## Staging readiness verification (2026-11-03)
+
+Before sharing a Netlify staging URL with the team, run this **credential-free** check locally:
+
+```bash
+node scripts/check-staging-site.mjs https://YOUR-STAGING-SITE.netlify.app
+```
+
+It validates a clean HTTPS Netlify hostname, checks `/api/runtime-mode` for
+`preview=true`, `stagingConnected=true` and `blockedDatabase=false`,
+and confirms the WOFFU login page loads. It accepts safe read-only staging
+or explicitly enabled staging writes. It **does not** validate sign-in,
+invitation links, database writes or any authenticated project workflow.
+Never pass a secret or database key to this script.
+
+For complete acceptance, also run the role-based browser workflow in
+`docs/staging-isolation-and-smoke-tests.md`, using synthetic test accounts.
+
+**Security advisor review:** staging currently has all 10 public tables
+protected by RLS. Supabase's security advisor also reports 5 warnings
+for intentionally authenticated, security-definer helper/workflow functions.
+Anonymous execute is denied; authenticated execute is enabled.
+Do not blindly revoke the three Draft/Approval RPC grants: these workflow
+entry points need to enforce role and project ownership checks themselves.
+Review those function bodies and SQL regression tests before changing grants.
+See [the Supabase function advisory](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable).
+
+**Performance advisory:** 12 foreign keys lack covering indexes. Review
+actual workflow query plans and expected Free-tier data volume before
+adding indexes; unused-index warnings on a newly empty staging project
+are not evidence that indexes are safe to drop.

@@ -13,5 +13,5 @@ export async function POST(req: NextRequest) {
   if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(projectId)) {
     return NextResponse.json({ error: "Invalid project_id" }, { status: 400 });
   }
-  return submitStatusRequest(clone, { params: { id: projectId } });
+  return submitStatusRequest(new NextRequest(clone), { params: { id: projectId } });
 }

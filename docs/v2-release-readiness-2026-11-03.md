@@ -92,10 +92,11 @@ validation error and uses 10–128-character passwords.
    critical). The audit is now a required fail-closed gate for High/Critical
    findings. This does not replace infrastructure or workflow penetration
    testing, and new advisories can appear later.
-2. **Legacy lint:** the full-repository report still contains **143 errors
-   and 12 warnings** after removing the obsolete Firebase code; it is
-   nonblocking. Targeted security/feature modules pass enforced lint.
-   Full remediation remains.
+2. **Legacy lint:** the full-repository report still contains **137 errors
+   and 10 warnings** after the Notification Center clean-up; it is
+   nonblocking. The entire VAPID/Notification Center module now passes
+   **required** ESLint, along with secured endpoints. Full legacy cleanup
+   remains.
 3. **Email delivery:** Supabase's test SMTP has recipient/rate restrictions.
    The manager-assisted one-time recovery link does not require SMTP,
    but needs manual identity verification and an authenticated manager.
@@ -117,6 +118,37 @@ build, PostgreSQL integration and HTTP proxy/Push safety tests.
 `/api/my-work/[id]` legacy direct PATCH now returns 410 because the current
 UI uses the canonical controlled status approval workflow. No Production
 schema or customer records were changed.
+
+## Phase 12 — VAPID-only notifications and supply-chain control
+
+- One mounted Notification Center across mobile/desktop: no duplicate
+  Realtime subscriptions or fallback polling from two hidden components.
+- Removed automatic FCM permission prompt and browser-console token logs;
+  Push is enabled only when a member chooses **เปิด push**.
+- Removed obsolete `PushBootstrap`, Firebase client and Admin packages,
+  JavaScript SDK wrapper and Firebase-specific service worker from the
+  V2 branch. Historical token records remain untouched in the database.
+- One optional VAPID sender in `app/api/_push.ts`; required contact
+  `VAPID_SUBJECT`, server-only private key and public browser key.
+- Push messages, API-supplied URLs and notification deep links are
+  restricted to internal app paths. The Service Worker refuses external
+  navigation.
+- Duplicate realtime event IDs no longer increment unread counts or
+  spawn repeated toast messages. Web Push disable checks the server response
+  before unsubscribing the browser.
+- `tests/security/notificationPush.test.mjs` checks both server URL
+  normalization and simulated Service Worker click behavior.
+- GitHub CI blocks direct Firebase SDK references and **fails closed** if
+  `npm audit --omit=dev --audit-level=high` returns High/Critical
+  vulnerabilities or cannot complete.
+- Final production dependency audit: **0 known advisories** in the
+  installed runtime dependency tree. Whole-project lint debt remains.
+- Five Supabase Staging security advisor WARN findings are from
+  `SECURITY DEFINER` helpers/workflow RPCs intentionally executable by
+  authenticated users. Read-only inspection confirmed no `anon` execute
+  access to these functions and that their bodies check `auth.uid()`
+  and role or membership before privileged writes. Future manual
+  security review remains part of Production acceptance.
 
 ## Operational links
 

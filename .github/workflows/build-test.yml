@@ -48,6 +48,15 @@ jobs:
       - name: Lint new Action Center files (required)
         run: npx eslint "lib/actionCenter.ts" "app/api/action-center/route.ts" "app/(app)/action-center/page.tsx"
 
+      - name: Lint secured notification and push routes (required)
+        run: |
+          npx eslint "app/api/_push.ts" "app/api/_draftReview.ts" \
+            "app/api/notifications/route.ts" \
+            "app/api/notifications/read-all/route.ts" \
+            "app/api/notifications/read/[id]/route.ts" \
+            "app/api/push-subscriptions/route.ts" \
+            "app/api/push-subscriptions/delete/route.ts"
+
       - name: Typecheck
         run: npx tsc --noEmit
 

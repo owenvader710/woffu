@@ -26,7 +26,8 @@ function mockFetch(mode, overrides = {}) {
     };
     if (path === "/api/me") return { status: 401, json: async () => ({ user: null }) };
     if (path === "/api/projects") return { status: 401, json: async () => ({ error: "Unauthorized" }) };
-    if (["/api/members", "/api/dashboard", "/api/team-notices", "/api/profiles", "/api/profile"].includes(path)) return { status: 401, json: async () => ({ error: "Unauthorized" }) };
+    if (["/api/members", "/api/dashboard", "/api/team-notices", "/api/profiles", "/api/profile", "/api/my-work"].includes(path)) return { status: 401, json: async () => ({ error: "Unauthorized" }) };
+    if (path === "/api/my-work") return { status: 401, json: async () => ({ error: "Unauthenticated" }) };
     throw new Error("Unexpected request");
   };
 }

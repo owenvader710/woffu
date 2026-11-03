@@ -20,6 +20,7 @@ test("admin client is created only after role and active-account authorization",
   const authPosition = post.indexOf("if (access.response) return access.response;");
   const adminPosition = post.indexOf("createSupabaseAdmin()");
   assert.ok(authPosition >= 0 && adminPosition > authPosition);
+  assert.ok(adminPosition > post.indexOf("if (!input)"), "create admin only after validation");
   assert.match(post, /access\.profile\.role === "LEADER"/);
 });
 

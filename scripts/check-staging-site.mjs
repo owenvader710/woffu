@@ -55,7 +55,7 @@ export async function inspectStagingSite(origin, fetcher = fetch) {
   const projectBody = await projects.json();
   assert.ok(!("data" in projectBody), "Public requests must not expose project records");
 
-  for (const path of ["/api/members", "/api/dashboard", "/api/team-notices", "/api/profiles", "/api/profile"]) {
+  for (const path of ["/api/members", "/api/dashboard", "/api/team-notices", "/api/profiles", "/api/profile", "/api/my-work"]) {
     const response = await request(path);
     assert.equal(response.status, 401, `${path} must reject anonymous visitors`);
     const body = await response.json();

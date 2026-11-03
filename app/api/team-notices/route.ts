@@ -27,7 +27,6 @@ export async function POST(req: NextRequest) {
   const access = await requireActiveUser();
   if (access.response) return access.response;
   const user = access.user;
-  const admin = createSupabaseAdmin();
 
   const isLeader = access.profile.role === "LEADER" || access.profile.role === "ADMIN";
 
@@ -38,6 +37,7 @@ export async function POST(req: NextRequest) {
   }
   const { title, content } = input;
   const insertRow = { ...input, is_active: true, created_by: user.id };
+  const admin = createSupabaseAdmin();
 
   const { data, error } = await admin
     .from("team_notices")

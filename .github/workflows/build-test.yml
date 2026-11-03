@@ -152,6 +152,12 @@ jobs:
       - name: Guard project creation authorization and optional notifications
         run: node --test tests/security/projectCreateAuthorization.test.mjs
 
+      - name: Enforce active-account checks for My Work
+        run: node --test tests/security/myWorkAuthorization.test.mjs
+
+      - name: Lint secured My Work endpoint
+        run: npx eslint "app/api/my-work/route.ts"
+
       - name: Typecheck
         run: npx tsc --noEmit
 

@@ -126,3 +126,5 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/staging/free_public_attachments.sql
       - name: Test account suspension and one-time invites
         run: psql -X -v ON_ERROR_STOP=1 -f tests/db/free_security_checks.sql
+      - name: Verify notification ownership and Push subscription RLS
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/notification_security.sql

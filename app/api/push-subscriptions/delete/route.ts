@@ -1,31 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServer } from "../../_supabase";
-import { createSupabaseAdmin } from "../../_supabaseAdmin";
+import { requireActiveUser } from "@/app/api/_authorization";
 
 export async function POST(req: NextRequest) {
-  const supabase = await createSupabaseServer();
-  const admin = createSupabaseAdmin();
-
-  const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
-
-  const user = authData?.user;
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
+  const access = await requireActiveUser();
+  if (access.response) return access.response;
+  if (!access.supabase || !access.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const body = await req.json().catch(() => null);
-  const endpoint = String(body?.endpoint || "").trim();
-
-  if (!endpoint) {
-    return NextResponse.json({ error: "Missing endpoint" }, { status: 400 });
+  const endpoint = typeof body?.endpoint === "string" ? body.endpoint.trim() : "";
+  if (!endpoint.startsWith("https://") || endpoint.length > 2048) {
+    return NextResponse.json({ error: "Invalid push endpoint" }, { status: 400 });
   }
 
-  const { error } = await admin
-    .from("push_subscriptions")
-    .delete()
-    .eq("user_id", user.id)
-    .eq("endpoint", endpoint);
+  const { error } = await access.supabase.from("push_subscriptions")
+    .delete().eq("user_id", access.user.id).eq("endpoint", endpoint);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
+  if (error) {
+    console.warn("[PUSH] Unsubscribe refused", error.code);
+    return NextResponse.json({ error: "ไม่สามารถปิด Push ได้" }, { status: 500 });
+  }
   return NextResponse.json({ ok: true });
 }

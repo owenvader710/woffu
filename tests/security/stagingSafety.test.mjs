@@ -4,6 +4,7 @@ import {
   WOFFU_STAGING_PROJECT_REF,
   getDeploymentSafety,
   isVerifiedStagingUrl,
+  getTrustedSiteOrigin,
   isUnsafeMethod,
 } from "../../lib/stagingSafety.ts";
 
@@ -90,4 +91,23 @@ test("write method classification is exact", () => {
   assert.equal(isUnsafeMethod("POST"), true);
   assert.equal(isUnsafeMethod("PATCH"), true);
   assert.equal(isUnsafeMethod("DELETE"), true);
+});
+
+test("reset URLs only use configured HTTPS site, not untrusted Host", () => {
+  assert.equal(getTrustedSiteOrigin("https://woffu-staging.netlify.app", "https://attacker.example", false),
+    "https://woffu-staging.netlify.app");
+  assert.equal(getTrustedSiteOrigin(undefined, "https://attacker.example", false), null);
+  for (const url of [
+    "http://example.com",
+    "https://user:secret@example.com",
+    "https://example.com/?next=evil",
+    "https://example.com/path",
+    "https://example.com/#hash",
+    "javascript:alert(1)",
+  ]) {
+    assert.equal(getTrustedSiteOrigin(url, undefined, false), null, url);
+  }
+  assert.equal(getTrustedSiteOrigin(undefined, "http://localhost:3000", true),
+    "http://localhost:3000");
+  assert.equal(getTrustedSiteOrigin(undefined, "http://evil.example", true), null);
 });

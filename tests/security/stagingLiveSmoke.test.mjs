@@ -12,9 +12,10 @@ test("only clean HTTPS Netlify origins are accepted", () => {
   ]) assert.throws(() => parseStagingOrigin(candidate), candidate);
 });
 
-function mockFetch(mode) {
+function mockFetch(mode, overrides = {}) {
   return async (url) => {
     const path = new URL(url).pathname;
+    if (overrides[path]) return overrides[path];
     if (path === "/api/runtime-mode") return {
       status: 200,
       json: async () => mode,
@@ -23,6 +24,8 @@ function mockFetch(mode) {
       status: 200,
       text: async () => "<title>WOFFU OS</title>",
     };
+    if (path === "/api/me") return { status: 401, json: async () => ({ user: null }) };
+    if (path === "/api/projects") return { status: 200, json: async () => ({ data: [] }) };
     throw new Error("Unexpected request");
   };
 }
@@ -47,4 +50,19 @@ test("public staging smoke test rejects production or misconfigured staging", as
   ]) {
     await assert.rejects(inspectStagingSite("https://woffu-v2.netlify.app", mockFetch(mode)));
   }
+});
+
+test("staging readiness fails when public endpoints leak private data", async () => {
+  const safeMode = {
+    preview: true, stagingConnected: true, blockedDatabase: false,
+    readOnly: true, reason: "read-only",
+  };
+  await assert.rejects(inspectStagingSite(
+    "https://woffu-v2.netlify.app",
+    mockFetch(safeMode, { "/api/me": { status: 200, json: async () => ({ user: { id: "leak" } }) } })
+  ));
+  await assert.rejects(inspectStagingSite(
+    "https://woffu-v2.netlify.app",
+    mockFetch(safeMode, { "/api/projects": { status: 200, json: async () => ({ data: [{ id: "leak" }] }) } })
+  ));
 });

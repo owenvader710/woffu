@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/utils/supabase/server";
+import { requireActiveUser } from "@/app/api/_authorization";
 
 export async function GET(_req: NextRequest) {
-  const supabase = await createSupabaseServerClient();
+  const access = await requireActiveUser();
+  if (access.response) return access.response;
+  const supabase = access.supabase;
 
   const { data, error } = await supabase
     .from("profiles")
@@ -10,7 +12,7 @@ export async function GET(_req: NextRequest) {
     .order("display_name", { ascending: true });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Unable to load team members" }, { status: 500 });
   }
 
   return NextResponse.json({ data });

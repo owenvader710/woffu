@@ -137,6 +137,9 @@ jobs:
       - name: Lint dashboard and team directory fixes
         run: npx eslint "app/api/dashboard/route.ts" "app/api/members/route.ts"
 
+      - name: Lint secured team directory, profiles and announcements
+        run: npx eslint "app/api/profile/route.ts" "app/api/profiles/route.ts" "app/api/team-notices/route.ts"
+
       - name: Typecheck
         run: npx tsc --noEmit
 

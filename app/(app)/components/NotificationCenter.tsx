@@ -450,10 +450,13 @@ export default function NotificationCenter() {
   });
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => setHiddenIds(readHiddenIds()));
-    loadMe();
-    loadInitial();
-    checkPushStatus();
+    // Defer all initial stateful reads until after the first paint.
+    const frame = window.requestAnimationFrame(() => {
+      setHiddenIds(readHiddenIds());
+      void loadMe();
+      void loadInitial();
+      void checkPushStatus();
+    });
     return () => window.cancelAnimationFrame(frame);
   }, []);
 

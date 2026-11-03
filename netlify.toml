@@ -1,7 +1,7 @@
 # Netlify Free supports commercial projects. OpenNext auto-detects Next.js.
 # Never commit keys; configure staging/production env values in Netlify UI.
 [build]
-  command = "npm run build"
+  command = "node scripts/check-staging-env.mjs && npm run build"
 
 [build.environment]
   NODE_VERSION = "24"

@@ -45,6 +45,9 @@ jobs:
       - name: Test Action Center role and priority logic
         run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/action-center/actionCenter.test.mjs
 
+      - name: Lint new Action Center files (required)
+        run: npx eslint "lib/actionCenter.ts" "app/api/action-center/route.ts" "app/(app)/action-center/page.tsx"
+
       - name: Typecheck
         run: npx tsc --noEmit
 

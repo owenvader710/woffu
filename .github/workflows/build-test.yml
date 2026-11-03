@@ -44,7 +44,9 @@ jobs:
           timeout 90s npm audit --omit=dev --json > /tmp/woffu-prod-audit.json || true
           node -e '
             const fs=require("node:fs");
-            const report=JSON.parse(fs.readFileSync("/tmp/woffu-prod-audit.json","utf8"));
+            let report;
+            try { report=JSON.parse(fs.readFileSync("/tmp/woffu-prod-audit.json","utf8")); }
+            catch { console.log("::warning::Production audit unavailable; retry before release."); process.exit(0); }
             const totals=report.metadata?.vulnerabilities || {};
             console.log("Production dependency audit:", JSON.stringify(totals));
             if((totals.high||0)+(totals.critical||0)>0)

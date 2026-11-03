@@ -9,6 +9,7 @@ export const WOFFU_STAGING_PROJECT_REF = "xofndnlyqueyuqyweqyi";
 
 export type DeploymentEnvironment = {
   VERCEL_ENV?: string;
+  NETLIFY?: string;
   WOFFU_DEPLOYMENT_MODE?: string;
   WOFFU_ENABLE_PREVIEW_MUTATIONS?: string;
   NEXT_PUBLIC_SUPABASE_URL?: string;
@@ -40,7 +41,12 @@ export function isVerifiedStagingUrl(value: string | undefined): boolean {
 }
 
 export function getDeploymentSafety(env: DeploymentEnvironment): DeploymentSafetyState {
-  const preview = env.VERCEL_ENV === "preview" || env.WOFFU_DEPLOYMENT_MODE === "staging";
+  // Netlify defaults to the staging-safe mode unless an eventual reviewed
+  // production rollout opts in explicitly. This protects new Free-tier sites
+  // even when their maintainer forgets to configure WOFFU_DEPLOYMENT_MODE.
+  const preview = env.VERCEL_ENV === "preview" ||
+    env.WOFFU_DEPLOYMENT_MODE === "staging" ||
+    (env.NETLIFY === "true" && env.WOFFU_DEPLOYMENT_MODE !== "production");
   if (!preview) {
     return {
       preview: false, stagingConnected: false, readOnly: false,

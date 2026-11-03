@@ -26,6 +26,7 @@ function mockFetch(mode, overrides = {}) {
     };
     if (path === "/api/me") return { status: 401, json: async () => ({ user: null }) };
     if (path === "/api/projects") return { status: 401, json: async () => ({ error: "Unauthorized" }) };
+    if (path === "/api/members" || path === "/api/dashboard") return { status: 401, json: async () => ({ error: "Unauthorized" }) };
     throw new Error("Unexpected request");
   };
 }
@@ -65,4 +66,10 @@ test("staging readiness fails when public endpoints leak private data", async ()
     "https://woffu-v2.netlify.app",
     mockFetch(safeMode, { "/api/projects": { status: 200, json: async () => ({ data: [{ id: "leak" }] }) } })
   ));
+  for (const path of ["/api/members", "/api/dashboard"]) {
+    await assert.rejects(inspectStagingSite(
+      "https://woffu-v2.netlify.app",
+      mockFetch(safeMode, { [path]: { status: 200, json: async () => ({ data: [{ id: "leak" }] }) } })
+    ));
+  }
 });

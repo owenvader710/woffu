@@ -128,3 +128,7 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f tests/db/free_security_checks.sql
       - name: Verify notification ownership and Push subscription RLS
         run: psql -X -v ON_ERROR_STOP=1 -f tests/db/notification_security.sql
+      - name: Harden workflow RLS and column privileges
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/staging/free_workflow_guardrails.sql
+      - name: Verify no forged status requests, logs or notification updates
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/workflow_guardrails.sql

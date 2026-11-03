@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireActiveUser } from "../_authorization";
 import { createSupabaseAdmin } from "../_supabaseAdmin";
-import { requireActiveUser } from "../_authorization";
 import { sendPushToUser } from "../_push";
 
 function normalizeNoticeType(value: unknown) {

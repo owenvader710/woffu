@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { supabaseBrowser } from "@/utils/supabase/client";
 import { urlBase64ToUint8Array } from "./push";
+import { normalizeInternalNotificationPath } from "@/lib/notificationUrl";
 
 type AppNotification = {
   id: string;
@@ -78,7 +79,7 @@ function writeHiddenIds(ids: string[]) {
 
 function getProjectIdFromLink(link?: string | null) {
   if (!link) return null;
-  const m = link.match(/\/projects\/([a-zA-Z0-9-]+)/);
+  const m = normalizeInternalNotificationPath(link).match(/\/projects\/([a-zA-Z0-9-]+)/);
   return m?.[1] || null;
 }
 
@@ -97,7 +98,7 @@ async function showDesktopNotification(n: AppNotification) {
   icon: "/icon-192.png",
   badge: "/badge-72.png",
   data: {
-    link: n.link || "/",
+    link: normalizeInternalNotificationPath(n.link),
   },
 });
         return;
@@ -112,7 +113,7 @@ async function showDesktopNotification(n: AppNotification) {
 
     notice.onclick = () => {
       window.focus();
-      if (n.link) window.location.href = n.link;
+      if (n.link) window.location.href = normalizeInternalNotificationPath(n.link);
       notice.close();
     };
   } catch {}
@@ -433,18 +434,18 @@ export default function NotificationCenter() {
   }
 
   useEffect(() => {
-    setHiddenIds(readHiddenIds());
+    const frame = window.requestAnimationFrame(() => setHiddenIds(readHiddenIds()));
     loadMe();
     loadInitial();
     checkPushStatus();
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
-    if (!("Notification" in window)) {
-      setDesktopPermission("unsupported");
-      return;
-    }
-    setDesktopPermission(Notification.permission);
+    const frame = window.requestAnimationFrame(() =>
+      setDesktopPermission("Notification" in window ? Notification.permission : "unsupported")
+    );
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
@@ -525,10 +526,7 @@ export default function NotificationCenter() {
     return () => window.clearTimeout(timer);
   }, [toasts]);
 
-  const visibleItems = useMemo(
-    () => items.filter((x) => !hiddenIds.includes(x.id)).slice(0, 10),
-    [items, hiddenIds]
-  );
+  const visibleItems = items.filter(x => !hiddenIds.includes(x.id)).slice(0, 10);
 
   return (
     <>
@@ -665,7 +663,7 @@ export default function NotificationCenter() {
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                           {n.link ? (
                             <Link
-                              href={n.link}
+                              href={normalizeInternalNotificationPath(n.link)}
                               onClick={() => readOne(n.id)}
                               className="inline-flex rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
                             >

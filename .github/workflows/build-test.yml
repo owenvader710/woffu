@@ -65,6 +65,16 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: HTTP smoke test - Preview must deny production-linked data
+        env:
+          WOFFU_DEPLOYMENT_MODE: "staging"
+          WOFFU_ENABLE_PREVIEW_MUTATIONS: "true"
+        run: |
+          PORT=3187 npm run start > /tmp/woffu-preview-smoke.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          node tests/security/preview-http-smoke.mjs
+
       - name: Lint report (legacy issues do not block build yet)
         continue-on-error: true
         run: npm run lint

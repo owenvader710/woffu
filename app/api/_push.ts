@@ -1,4 +1,5 @@
-import admin from "firebase-admin";
+import { cert, getApp, getApps, initializeApp } from "firebase-admin/app";
+import { getMessaging } from "firebase-admin/messaging";
 import webpush from "web-push";
 import { createSupabaseAdmin } from "./_supabaseAdmin";
 
@@ -13,9 +14,9 @@ function firebaseApp() {
   const privateKey = process.env.FIREBASE_PRIVATE_KEY
     ?.replace(/\\n/g, "\n").trim();
   if (!projectId || !clientEmail || !privateKey) return null;
-  if (admin.apps.length) return admin.app();
-  return admin.initializeApp({
-    credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
+  if (getApps().length) return getApp();
+  return initializeApp({
+    credential: cert({ projectId, clientEmail, privateKey }),
   });
 }
 
@@ -103,7 +104,7 @@ export async function sendPushToUser({
         } else {
           const tokens = (data ?? []).map(row => row.token).filter(Boolean);
           if (tokens.length) {
-            const result = await admin.messaging(app).sendEachForMulticast({
+            const result = await getMessaging(app).sendEachForMulticast({
               tokens,
               notification: { title, body: message },
               data: { title, body: message, link: url || "/notifications" },

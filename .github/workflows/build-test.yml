@@ -73,6 +73,15 @@ jobs:
             "app/api/push/register/route.ts" \
             "app/api/push/unregister/route.ts"
 
+      - name: Lint final onboarding and workflow compatibility (required)
+        run: |
+          npx eslint "app/invite/[token]/page.tsx" "app/api/_approvalCounts.ts" \
+            "app/api/approvals-count/route.ts" \
+            "app/api/approvals/count/route.ts" \
+            "app/api/approvals/pending-count/route.ts" \
+            "app/api/status-requests/route.ts" "app/api/my-work/[id]/route.ts" \
+            "app/api/notifications/ack-assignment/route.ts"
+
       - name: Typecheck
         run: npx tsc --noEmit
 

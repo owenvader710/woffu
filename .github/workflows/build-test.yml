@@ -42,6 +42,9 @@ jobs:
       - name: Test staging deployment guards
         run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/security/stagingSafety.test.mjs
 
+      - name: Test Action Center role and priority logic
+        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/action-center/actionCenter.test.mjs
+
       - name: Typecheck
         run: npx tsc --noEmit
 

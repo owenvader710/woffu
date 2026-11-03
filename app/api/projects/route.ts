@@ -1,9 +1,8 @@
 // app/api/projects/route.ts
 import { NextResponse } from "next/server";
-import { createSupabaseServer } from "../_supabase";
 import { createSupabaseAdmin } from "../_supabaseAdmin";
 import { sendPushToUser } from "../_push";
-import { requireActiveManager } from "../_authorization";
+import { requireActiveManager, requireActiveUser } from "../_authorization";
 
 const SELECT_FIELDS = [
   "id",
@@ -63,7 +62,9 @@ function getInitialStatus(startDate?: string | null) {
 }
 
 export async function GET() {
-  const supabase = await createSupabaseServer();
+  const access = await requireActiveUser();
+  if (access.response) return access.response;
+  const supabase = access.supabase;
 
   const { data: rawData, error } = await supabase
     .from("projects")

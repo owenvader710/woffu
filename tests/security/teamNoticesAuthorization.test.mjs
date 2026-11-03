@@ -23,8 +23,8 @@ test("admin client is created only after role and active-account authorization",
   assert.match(post, /access\.profile\.role === "LEADER"/);
 });
 
-test("notice creation rejects non-object and non-string text fields", () => {
-  assert.match(source, /typeof body !== "object" \|\| Array\.isArray\(body\)/);
-  assert.match(source, /typeof body\.title !== "string"/);
-  assert.match(source, /typeof body\.content !== "string"/);
+test("notice creation validates input before privileged insert", () => {
+  const post = source.slice(source.indexOf("export async function POST("));
+  assert.match(post, /parseNoticeInput\(body, isLeader\)/);
+  assert.ok(post.indexOf("parseNoticeInput(body, isLeader)") < post.indexOf('.from("team_notices")'));
 });

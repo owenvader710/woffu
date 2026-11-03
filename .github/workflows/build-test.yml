@@ -63,7 +63,7 @@ jobs:
       - name: Enforce VAPID-only browser Push
         run: |
           node -e 'const p=require("./package.json"); if(p.dependencies?.firebase||p.dependencies?.["firebase-admin"]) process.exit(1)'
-          if grep -RInE 'from ["\x27]firebase(/|-admin)|from ["\x27]@/lib/push|getFcmToken|subscribeForegroundMessages' app lib utils --include='*.ts' --include='*.tsx'; then
+          if grep -RInE 'firebase/messaging|firebase-admin|@/lib/push|getFcmToken|subscribeForegroundMessages' app lib utils --include='*.ts' --include='*.tsx'; then
             echo "::error::Legacy FCM code is not allowed in WOFFU V2"
             exit 1
           fi

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServer } from "../_supabase";
 import { requireActiveUser } from "../_authorization";
 import { createSupabaseAdmin } from "../_supabaseAdmin";
+import { requireActiveUser } from "../_authorization";
 import { sendPushToUser } from "../_push";
 
 function normalizeNoticeType(value: unknown) {
@@ -31,33 +31,24 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createSupabaseServer();
+  const access = await requireActiveUser();
+  if (access.response) return access.response;
+  const user = access.user;
   const admin = createSupabaseAdmin();
 
-  const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
-
-  const user = authData?.user;
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: me, error: meErr } = await supabase
-    .from("profiles")
-    .select("id, role, is_active")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (meErr) return NextResponse.json({ error: meErr.message }, { status: 500 });
-  if (!me || me.is_active === false) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const isLeader = me.role === "LEADER" || me.role === "ADMIN";
+  const isLeader = access.profile.role === "LEADER" || access.profile.role === "ADMIN";
 
   const body = await req.json().catch(() => null);
-  if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
 
-  const title = String(body.title || "").trim();
-  const content = String(body.content || "").trim();
+  if (typeof body.title !== "string" ||
+      (body.content != null && typeof body.content !== "string")) {
+    return NextResponse.json({ error: "Invalid title/content" }, { status: 400 });
+  }
+  const title = body.title.trim();
+  const content = (body.content ?? "").trim();
 
   if (!title) {
     return NextResponse.json({ error: "กรุณาระบุหัวข้อประกาศ" }, { status: 400 });

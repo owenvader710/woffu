@@ -161,6 +161,9 @@ jobs:
       - name: Guard Netlify staging build configuration
         run: node --test tests/security/netlifyBuildGate.test.mjs
 
+      - name: Exercise staging command-line tools on CI
+        run: node --test tests/security/stagingCli.test.mjs
+
       - name: Typecheck
         run: npx tsc --noEmit
 

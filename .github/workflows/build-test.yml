@@ -143,6 +143,12 @@ jobs:
       - name: Verify privileged team notices authorization
         run: node --test tests/security/teamNoticesAuthorization.test.mjs
 
+      - name: Test notice validation and safe attachments
+        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/security/teamNoticeInput.test.mjs
+
+      - name: Lint shared notice parser
+        run: npx eslint "lib/teamNoticeInput.ts"
+
       - name: Typecheck
         run: npx tsc --noEmit
 

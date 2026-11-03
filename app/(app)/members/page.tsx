@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { createBrowserClient } from "@supabase/ssr";
 import dynamic from "next/dynamic";
 import MemberRecoveryModal from "./MemberRecoveryModal";
 
@@ -382,49 +381,28 @@ export default function MembersPage() {
 
   async function applyCroppedAvatar(blob: Blob) {
     setError("");
-
     if (!me?.id) {
-      setError("ไม่พบผู้ใช้งาน (me) กรุณารีเฟรช");
+      setError("ไม่พบผู้ใช้งาน กรุณาเข้าสู่ระบบใหม่");
       return;
     }
-
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !anon) {
-      setError("Missing Supabase env (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)");
+    if (!blob.size || blob.size > 2 * 1024 * 1024) {
+      setError("รูปโปรไฟล์ต้องไม่เกิน 2 MB");
       return;
     }
 
     setSavingAvatar(true);
     try {
-      const supabase = createBrowserClient(url, anon);
-      const fileName = `avatar-${me.id}-${Date.now()}.png`;
-
-      const up = await supabase.storage.from("avatars").upload(fileName, blob, {
-        contentType: "image/png",
-        upsert: true,
+      const form = new FormData();
+      form.append("file", blob, "avatar.png");
+      const res = await fetch("/api/profile/avatar", {
+        method: "POST", body: form,
       });
-
-      if (up.error) {
-        setError(up.error.message);
-        return;
+      const result = await safeJson(res);
+      if (!res.ok) {
+        throw new Error(result?.error || "อัปโหลดรูปโปรไฟล์ไม่สำเร็จ");
       }
-
-      const pub = supabase.storage.from("avatars").getPublicUrl(fileName);
-      const publicUrl = pub?.data?.publicUrl || null;
-
-      if (!publicUrl) {
-        setError("ไม่สามารถสร้าง public url ได้");
-        return;
-      }
-
-      const upd = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", me.id);
-      if (upd.error) {
-        setError(upd.error.message);
-        return;
-      }
-    } catch (e: any) {
-      setError(e?.message || "อัปโหลดรูปไม่สำเร็จ");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "อัปโหลดรูปโปรไฟล์ไม่สำเร็จ");
     } finally {
       setSavingAvatar(false);
     }

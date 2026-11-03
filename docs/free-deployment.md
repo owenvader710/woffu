@@ -200,3 +200,20 @@ check does **not** confirm credentials are valid or prove end-to-end readiness.
 
 Never put a service-role key into a `NEXT_PUBLIC_` variable, GitHub Actions
 logs, a public issue, or a chat message.
+
+## Build-time staging isolation gate (November 3, 2026)
+
+Netlify now runs `node scripts/check-staging-env.mjs` before `npm run build`.
+This deliberately **blocks deployment** until the site is configured with
+the isolated V2 staging database, staging-only credentials, the actual HTTPS
+Netlify site origin, and an explicit preview-write mode.
+
+Configure environment values in Netlify settings before the first deployment;
+never commit credentials or share them in chat. Keep
+`WOFFU_ENABLE_PREVIEW_MUTATIONS=false` until staging credentials and Auth
+redirects have been verified, then enable staging writes for acceptance tests.
+
+The preflight confirms presence and environment isolation, but cannot verify
+the cryptographic provenance of API keys or substitute for authenticated
+end-to-end testing. The gate is staging-specific; a future production rollout
+requires a separate reviewed deployment configuration.

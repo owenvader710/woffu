@@ -1,0 +1,82 @@
+name: Patch security dependencies on isolated V2 branch
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/prepare-patched-lockfile.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'v2/stability-hardening-20261102'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: "https://ci-placeholder.supabase.co"
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "ci-placeholder-public-key"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Generate patched Next.js 16 LTS lockfile
+        run: |
+          npm install --package-lock-only --ignore-scripts --save-exact next@16.4.3 eslint-config-next@16.4.3
+          npm ci
+      - name: Validate patched dependencies against V2
+        run: |
+          npx tsc --noEmit
+          npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v2-security-patched-manifests
+          path: |
+            package.json
+            package-lock.json
+          retention-days: 1
+
+  commit:
+    needs: prepare
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'v2/stability-hardening-20261102'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v2/stability-hardening-20261102
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: v2-security-patched-manifests
+      - name: Commit only validated dependency manifests to the V2 branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git add -- package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "No dependency changes needed"
+            exit 0
+          fi
+          git config user.name "woffu-v2-ci"
+          git config user.email "woffu-v2-ci@users.noreply.github.com"
+          git commit -m "security(deps): upgrade Next.js and ESLint peer config to patched 16.4.3"
+          cat > /tmp/woffu-askpass <<'ASKPASS'
+          #!/bin/sh
+          case "$1" in
+            *Username*) echo "x-access-token" ;;
+            *Password*) printf '%s' "$GH_TOKEN" ;;
+          esac
+          ASKPASS
+          chmod 700 /tmp/woffu-askpass
+          GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/tmp/woffu-askpass \
+            git push "https://github.com/${{ github.repository }}.git" HEAD:refs/heads/v2/stability-hardening-20261102

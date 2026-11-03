@@ -20,7 +20,8 @@ export async function proxy(request: NextRequest) {
   // project is a visual-only shell. Never authenticate, query production
   // records or use recovery tokens from a mismatched environment.
   if (safety.blockedDatabase) {
-    if (pathname.startsWith("/api/") && pathname !== "/api/runtime-mode") {
+    if (pathname === "/api/runtime-mode") return NextResponse.next();
+    if (pathname.startsWith("/api/")) {
       return NextResponse.json({
         code: "STAGING_REQUIRED",
         error: "Preview ยังไม่ได้เชื่อมต่อ Supabase Staging กรุณาตรวจ Environment Variables",

@@ -39,14 +39,17 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Report production dependency advisories
+      - name: Audit production dependencies (required: no High/Critical)
         run: |
-          timeout 90s npm audit --omit=dev --json > /tmp/woffu-prod-audit.json || true
+          set +e
+          timeout 90s npm audit --omit=dev --audit-level=high --json > /tmp/woffu-prod-audit.json
+          audit_status=$?
+          set -e
           node -e '
             const fs=require("node:fs");
             let report;
             try { report=JSON.parse(fs.readFileSync("/tmp/woffu-prod-audit.json","utf8")); }
-            catch { console.log("::warning::Production audit unavailable; retry before release."); process.exit(0); }
+            catch { console.log("::error::Production audit output unavailable; cannot verify release safety."); process.exit(1); }
             const totals=report.metadata?.vulnerabilities || {};
             console.log("Production dependency audit:", JSON.stringify(totals));
             for(const [name,record] of Object.entries(report.vulnerabilities||{})) {
@@ -57,8 +60,12 @@ jobs:
                 record.isDirect?"direct":"transitive", fix);
             }
             if((totals.high||0)+(totals.critical||0)>0)
-              console.log("::warning::Production dependencies have high/critical advisories; review before release.");
+              console.log("::error::Production dependencies have high/critical advisories; release blocked.");
           '
+          if [ "$audit_status" -ne 0 ]; then
+            echo "::error::npm audit failed, or High/Critical dependencies remain."
+            exit "$audit_status"
+          fi
 
       - name: Enforce VAPID-only browser Push
         run: |

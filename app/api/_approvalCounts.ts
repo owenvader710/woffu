@@ -1,3 +1,4 @@
+import type { NextResponse } from "next/server";
 import { requireActiveUser } from "@/app/api/_authorization";
 
 export type ApprovalCounters = {
@@ -8,7 +9,7 @@ export type ApprovalCounters = {
   history: number;
 };
 
-export async function getApprovalCounters() {
+export async function getApprovalCounters(): Promise<{ response?: NextResponse; counts?: ApprovalCounters }> {
   const access = await requireActiveUser();
   if (access.response) return { response: access.response };
   if (!access.supabase || !access.profile) throw new Error("Authorization unavailable");

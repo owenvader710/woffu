@@ -60,16 +60,23 @@ jobs:
               console.log("::warning::Production dependencies have high/critical advisories; review before release.");
           '
 
-      - name: Inventory legacy Firebase consumers
+      - name: Enforce VAPID-only browser Push
         run: |
-          echo "Firebase references in current application sources:"
-          grep -RInE 'firebase(/|-admin|App|Messaging)|getFcmToken|subscribeForegroundMessages|FCM_VAPID_KEY|/api/push/register' app lib utils --include='*.ts' --include='*.tsx' || true
+          node -e 'const p=require("./package.json"); if(p.dependencies?.firebase||p.dependencies?.["firebase-admin"]) process.exit(1)'
+          if grep -RInE 'from ["\x27]firebase(/|-admin)|from ["\x27]@/lib/push|getFcmToken|subscribeForegroundMessages' app lib utils --include='*.ts' --include='*.tsx'; then
+            echo "::error::Legacy FCM code is not allowed in WOFFU V2"
+            exit 1
+          fi
+          test ! -e public/firebase-messaging-sw.js
 
       - name: Test staging deployment guards
         run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/security/stagingSafety.test.mjs
 
       - name: Test Action Center role and priority logic
         run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/action-center/actionCenter.test.mjs
+
+      - name: Test notification link safety and Service Worker
+        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/security/notificationPush.test.mjs
 
       - name: Lint new Action Center files (required)
         run: npx eslint "lib/actionCenter.ts" "app/api/action-center/route.ts" "app/(app)/action-center/page.tsx"
@@ -84,6 +91,12 @@ jobs:
             "app/api/push-subscriptions/delete/route.ts" \
             "app/api/push/register/route.ts" \
             "app/api/push/unregister/route.ts"
+
+      - name: Lint VAPID-only transport and link safety (required)
+        run: |
+          npx eslint "lib/notificationUrl.ts" "app/api/_push.ts" \
+            "app/api/push/send/route.ts" "app/api/push/test/route.ts" \
+            "app/api/push/register/route.ts" "app/api/push/unregister/route.ts"
 
       - name: Lint final onboarding and workflow compatibility (required)
         run: |

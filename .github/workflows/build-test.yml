@@ -149,6 +149,9 @@ jobs:
       - name: Lint shared notice parser
         run: npx eslint "lib/teamNoticeInput.ts"
 
+      - name: Guard project creation authorization and optional notifications
+        run: node --test tests/security/projectCreateAuthorization.test.mjs
+
       - name: Typecheck
         run: npx tsc --noEmit
 

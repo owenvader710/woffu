@@ -179,3 +179,24 @@ See [the Supabase function advisory](https://supabase.com/docs/guides/database/d
 actual workflow query plans and expected Free-tier data volume before
 adding indexes; unused-index warnings on a newly empty staging project
 are not evidence that indexes are safe to drop.
+
+## Netlify environment preflight (2026-11-03)
+
+Before enabling staging writes in Netlify, configure staging-only environment
+variables in the Netlify project UI. Verify their **presence and project
+isolation** in a trusted local shell or Netlify build environment:
+
+```bash
+node scripts/check-staging-env.mjs
+```
+
+This check only prints variable names and safety errors; it never prints API keys
+or passwords. It requires an explicit `WOFFU_DEPLOYMENT_MODE=staging`, the
+isolated Supabase staging URL, staging publishable key and server-only
+service-role key, an HTTPS `*.netlify.app` site origin, and an explicit
+`WOFFU_ENABLE_PREVIEW_MUTATIONS=true|false`. Use `false` until the account,
+Auth URL callbacks and staging connectivity have been reviewed. Passing this
+check does **not** confirm credentials are valid or prove end-to-end readiness.
+
+Never put a service-role key into a `NEXT_PUBLIC_` variable, GitHub Actions
+logs, a public issue, or a chat message.

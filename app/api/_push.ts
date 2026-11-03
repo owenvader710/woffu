@@ -1,30 +1,14 @@
-import { cert, getApp, getApps, initializeApp } from "firebase-admin/app";
-import { getMessaging } from "firebase-admin/messaging";
 import webpush from "web-push";
 import { createSupabaseAdmin } from "./_supabaseAdmin";
+import { normalizeInternalNotificationPath } from "@/lib/notificationUrl";
 
 /**
- * Optional best-effort push transports. In-app notifications are persisted
- * separately and must never depend on VAPID or Firebase being configured.
- * Never log endpoints, Auth secrets, FCM tokens or subscription key material.
+ * One no-cost Browser Push transport (VAPID), matching the explicit opt-in
+ * button on NotificationCenter. DB notifications work without these keys.
+ * Historical FCM tokens are deliberately not used in WOFFU OS V2.
  */
-function firebaseApp() {
-  const projectId = process.env.FIREBASE_PROJECT_ID?.trim();
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY
-    ?.replace(/\\n/g, "\n").trim();
-  if (!projectId || !clientEmail || !privateKey) return null;
-  if (getApps().length) return getApp();
-  return initializeApp({
-    credential: cert({ projectId, clientEmail, privateKey }),
-  });
-}
-
 export async function sendPushToUser({
-  userId,
-  title,
-  message,
-  url,
+  userId, title, message, url,
 }: {
   userId: string;
   title: string;
@@ -33,104 +17,62 @@ export async function sendPushToUser({
 }) {
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.trim();
   const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
-  const vapidEnabled = Boolean(publicKey && privateKey);
-  const fcmEnabled = Boolean(
-    process.env.FIREBASE_PROJECT_ID &&
-    process.env.FIREBASE_CLIENT_EMAIL &&
-    process.env.FIREBASE_PRIVATE_KEY
-  );
+  const subject = process.env.VAPID_SUBJECT?.trim();
 
-  if (!vapidEnabled && !fcmEnabled) {
+  if (!publicKey || !privateKey || !subject ||
+      !(subject.startsWith("mailto:") || subject.startsWith("https://"))) {
     return { ok: true, sent: 0, reason: "PUSH_NOT_CONFIGURED" };
   }
 
+  try {
+    webpush.setVapidDetails(subject, publicKey, privateKey);
+  } catch {
+    console.warn("[WEB PUSH] Invalid VAPID configuration");
+    return { ok: false, sent: 0, reason: "INVALID_VAPID_CONFIG" };
+  }
+
   const db = createSupabaseAdmin();
-  let webSent = 0;
-  let firebaseSent = 0;
-
-  // This is the transport used by the Notification Center's "เปิด push"
-  // control. It does not need Firebase, SMTP or a paid provider.
-  if (vapidEnabled && publicKey && privateKey) {
-    try {
-      webpush.setVapidDetails(
-        process.env.VAPID_SUBJECT?.trim() || "mailto:admin@woffu.local",
-        publicKey,
-        privateKey
-      );
-      const { data, error } = await db
-        .from("push_subscriptions")
-        .select("id, endpoint, p256dh, auth")
-        .eq("user_id", userId)
-        .limit(30);
-      if (error) {
-        console.warn("[WEB PUSH] Subscription lookup failed", error.code);
-      } else {
-        for (const sub of data ?? []) {
-          try {
-            await webpush.sendNotification({
-              endpoint: sub.endpoint,
-              keys: { p256dh: sub.p256dh, auth: sub.auth },
-            }, JSON.stringify({
-              title, body: message, url: url || "/notifications",
-              tag: "woffu-workflow",
-            }), { TTL: 3600 });
-            webSent++;
-          } catch (failure) {
-            const status = (failure as { statusCode?: number }).statusCode;
-            if (status === 404 || status === 410) {
-              await db.from("push_subscriptions").delete()
-                .eq("id", sub.id).eq("user_id", userId);
-            } else {
-              console.warn("[WEB PUSH] Delivery failed", status || "unknown");
-            }
-          }
-        }
-      }
-    } catch {
-      console.warn("[WEB PUSH] Configuration unavailable");
-    }
+  const { data: subscriptions, error } = await db.from("push_subscriptions")
+    .select("id, endpoint, p256dh, auth")
+    .eq("user_id", userId)
+    .limit(30);
+  if (error) {
+    console.warn("[WEB PUSH] Subscription lookup failed", error.code);
+    return { ok: false, sent: 0, reason: "SUBSCRIPTION_LOOKUP_FAILED" };
   }
 
-  // Optional legacy FCM devices. Skipped altogether if credentials are
-  // missing, rather than throwing and obscuring a successful DB action.
-  if (fcmEnabled) {
-    try {
-      const app = firebaseApp();
-      if (app) {
-        const { data, error } = await db.from("push_tokens")
-          .select("token").eq("user_id", userId).limit(500);
-        if (error) {
-          console.warn("[FCM] Token lookup failed", error.code);
+  const payload = JSON.stringify({
+    title: title.slice(0, 120),
+    body: message.slice(0, 500),
+    url: normalizeInternalNotificationPath(url),
+    tag: "woffu-workflow",
+  });
+
+  let sent = 0;
+  // Bounded concurrency avoids a slow or broken endpoint delaying an entire
+  // approval workflow. Never print subscriptions, tokens or VAPID keys.
+  const rows = subscriptions ?? [];
+  for (let i = 0; i < rows.length; i += 5) {
+    await Promise.all(rows.slice(i, i + 5).map(async sub => {
+      try {
+        await webpush.sendNotification({
+          endpoint: sub.endpoint,
+          keys: { p256dh: sub.p256dh, auth: sub.auth },
+        }, payload, { TTL: 3600 });
+        sent++;
+      } catch (failure) {
+        const status = (failure as { statusCode?: number }).statusCode;
+        if (status === 404 || status === 410) {
+          const { error: cleanupError } = await db.from("push_subscriptions")
+            .delete().eq("id", sub.id).eq("user_id", userId);
+          if (cleanupError) {
+            console.warn("[WEB PUSH] Expired endpoint cleanup failed", cleanupError.code);
+          }
         } else {
-          const tokens = (data ?? []).map(row => row.token).filter(Boolean);
-          if (tokens.length) {
-            const result = await getMessaging(app).sendEachForMulticast({
-              tokens,
-              notification: { title, body: message },
-              data: { title, body: message, link: url || "/notifications" },
-              webpush: {
-                notification: { title, body: message, icon: "/icon-192.png" },
-              },
-            });
-            firebaseSent = result.successCount;
-            const invalid = result.responses.flatMap((response, i) => {
-              const code = response.error?.code || "";
-              return !response.success && (
-                code.includes("registration-token-not-registered") ||
-                code.includes("invalid-registration-token")
-              ) ? [tokens[i]] : [];
-            });
-            if (invalid.length) {
-              await db.from("push_tokens").delete()
-                .eq("user_id", userId).in("token", invalid);
-            }
-          }
+          console.warn("[WEB PUSH] Delivery unavailable", status || "unknown");
         }
       }
-    } catch {
-      console.warn("[FCM] Optional delivery unavailable");
-    }
+    }));
   }
-
-  return { ok: true, sent: webSent + firebaseSent, webSent, firebaseSent };
+  return { ok: true, sent };
 }

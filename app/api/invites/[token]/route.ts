@@ -7,7 +7,7 @@ function hashToken(token: string) {
 }
 
 function isStrongPassword(password: string) {
-  return password.length >= 8;
+  return password.length >= 10 && password.length <= 128;
 }
 
 async function getTokenFromContext(
@@ -74,7 +74,7 @@ export async function POST(
     const confirmPassword = String(body?.confirmPassword || "");
 
     if (!isStrongPassword(password)) {
-      return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
+      return NextResponse.json({ error: "รหัสผ่านต้องมี 10–128 ตัวอักษร" }, { status: 400 });
     }
 
     if (password !== confirmPassword) {

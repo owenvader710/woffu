@@ -25,7 +25,7 @@ function mockFetch(mode, overrides = {}) {
       text: async () => "<title>WOFFU OS</title>",
     };
     if (path === "/api/me") return { status: 401, json: async () => ({ user: null }) };
-    if (path === "/api/projects") return { status: 200, json: async () => ({ data: [] }) };
+    if (path === "/api/projects") return { status: 401, json: async () => ({ error: "Unauthorized" }) };
     throw new Error("Unexpected request");
   };
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServer } from "../_supabase";
+import { requireActiveUser } from "../_authorization";
 import { createSupabaseAdmin } from "../_supabaseAdmin";
 import { sendPushToUser } from "../_push";
 
@@ -11,7 +12,9 @@ function normalizeNoticeType(value: unknown) {
 }
 
 export async function GET() {
-  const supabase = await createSupabaseServer();
+  const access = await requireActiveUser();
+  if (access.response) return access.response;
+  const supabase = access.supabase;
 
   const { data, error } = await supabase
     .from("team_notices")

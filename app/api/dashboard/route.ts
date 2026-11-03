@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
 
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr) {
-      return NextResponse.json({ error: authErr.message }, { status: 401 });
+      return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
     }
 
     const user = authData?.user;
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
       .single();
 
     if (meErr) {
-      return NextResponse.json({ error: meErr.message }, { status: 400 });
+      return NextResponse.json({ error: "Unable to load account" }, { status: 500 });
     }
 
     if (!me?.is_active) {
@@ -102,7 +102,7 @@ export async function GET(req: NextRequest) {
         .order("created_at", { ascending: false }),
 
       supabase
-        .from("members")
+        .from("profiles")
         .select("id, display_name, department, role, is_active")
         .eq("is_active", true),
 
@@ -296,7 +296,7 @@ export async function GET(req: NextRequest) {
 
     const res = NextResponse.json({ data: payload }, { status: 200 });
     return applyCookies(res);
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Internal error" }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

@@ -131,6 +131,7 @@ export default function NotificationCenter() {
   const [ackBusyId, setAckBusyId] = useState<string | null>(null);
 
   const initializedRef = useRef(false);
+  const pollingRef = useRef(false);
   const channelRef = useRef<any>(null);
   const seenIdsRef = useRef<Set<string>>(new Set());
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -199,40 +200,51 @@ export default function NotificationCenter() {
   }
 
   async function pollNotifications() {
+    if (!initializedRef.current || pollingRef.current) return;
+    pollingRef.current = true;
     try {
       const res = await fetch("/api/notifications?limit=30", { cache: "no-store" });
+      if (!res.ok) return; // Never treat an auth/server error as an empty inbox.
       const json = await safeJson(res);
-      const rows = Array.isArray(json?.data) ? (json.data as AppNotification[]) : [];
+      if (!Array.isArray(json?.data)) return;
+      const rows = json.data as AppNotification[];
       const nextUnread = Number(json?.unread || 0);
-
       const fresh = rows.filter((x) => !seenIdsRef.current.has(x.id));
 
-      if (fresh.length > 0 && initializedRef.current) {
-        fresh
-          .slice()
-          .reverse()
-          .forEach((n) => pushIncoming(n));
+      if (fresh.length > 0) {
+        fresh.slice().reverse().forEach((n) => pushIncoming(n));
       }
-
-      const nextSet = new Set<string>();
-      rows.forEach((x) => nextSet.add(x.id));
-      seenIdsRef.current = nextSet;
-
+      seenIdsRef.current = new Set(rows.map(x => x.id));
       setItems(rows);
       setUnread(nextUnread);
-    } catch {}
+    } catch {
+      // Realtime and the next visible refresh remain available.
+    } finally {
+      pollingRef.current = false;
+    }
   }
 
   async function readAll() {
-    await fetch("/api/notifications/read-all", { method: "POST" });
-    setUnread(0);
-    setItems((prev) => prev.map((x) => ({ ...x, is_read: true })));
+    try {
+      const res = await fetch("/api/notifications/read-all", { method: "POST" });
+      if (!res.ok) throw new Error("Mark all read failed");
+      setUnread(0);
+      setItems(prev => prev.map(x => ({ ...x, is_read: true })));
+    } catch {
+      alert("ไม่สามารถทำเครื่องหมายอ่านทั้งหมดได้ กรุณาลองใหม่");
+    }
   }
 
   async function readOne(id: string) {
-    await fetch(`/api/notifications/read/${id}`, { method: "POST" });
-    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, is_read: true } : x)));
-    setUnread((prev) => Math.max(prev - 1, 0));
+    try {
+      const res = await fetch(`/api/notifications/read/${id}`, { method: "POST" });
+      if (!res.ok) throw new Error("Mark read failed");
+      const wasUnread = items.some(x => x.id === id && !x.is_read);
+      setItems(prev => prev.map(x => x.id === id ? { ...x, is_read: true } : x));
+      if (wasUnread) setUnread(prev => Math.max(prev - 1, 0));
+    } catch {
+      alert("ไม่สามารถทำเครื่องหมายอ่านได้ กรุณาลองใหม่");
+    }
   }
 
   function clearVisibleList() {
@@ -451,12 +463,20 @@ export default function NotificationCenter() {
   }, []);
 
   useEffect(() => {
-    const t = window.setInterval(() => {
-      pollNotifications();
-    }, 5000);
-
-    return () => window.clearInterval(t);
-  }, []);
+    // Realtime is the primary channel; 60-second polling is only a fallback.
+    // Do not consume hosting or Supabase reads from background tabs.
+    const whenVisible = () => {
+      if (document.visibilityState === "visible") void pollNotifications();
+    };
+    const t = window.setInterval(whenVisible, 60000);
+    document.addEventListener("visibilitychange", whenVisible);
+    window.addEventListener("focus", whenVisible);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", whenVisible);
+      window.removeEventListener("focus", whenVisible);
+    };
+  }, [desktopPermission, soundEnabled]);
 
   useEffect(() => {
     if (!me?.id) return;

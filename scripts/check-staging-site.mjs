@@ -43,7 +43,19 @@ export async function inspectStagingSite(origin, fetcher = fetch) {
   assert.equal(login.status, 200, "Login page must be reachable");
   const html = await login.text();
   assert.match(html, /WOFFU/i, "Login page must render WOFFU branding");
-  return { origin, stagingConnected: true, readOnly: mode.readOnly, login: "ok" };
+  // The public site must not expose an authenticated user without cookies.
+  const identity = await request("/api/me");
+  assert.equal(identity.status, 401, "Unauthenticated identity must return 401");
+  const identityBody = await identity.json();
+  assert.equal(identityBody.user, null, "Unauthenticated identity must not disclose user data");
+
+  // RLS should return no project records for an unauthenticated public request.
+  const projects = await request("/api/projects");
+  assert.equal(projects.status, 200, "Unauthenticated project list must respond safely");
+  const projectBody = await projects.json();
+  assert.deepEqual(projectBody.data, [], "Public requests must not expose project records");
+
+  return { origin, stagingConnected: true, readOnly: mode.readOnly, login: "ok", publicDataIsolation: "ok" };
 }
 
 if (process.argv[1] && import.meta.url === new URL("file://" + process.argv[1]).href) {

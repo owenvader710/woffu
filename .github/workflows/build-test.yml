@@ -140,6 +140,9 @@ jobs:
       - name: Lint secured team directory, profiles and announcements
         run: npx eslint "app/api/profile/route.ts" "app/api/profiles/route.ts" "app/api/team-notices/route.ts"
 
+      - name: Verify privileged team notices authorization
+        run: node --test tests/security/teamNoticesAuthorization.test.mjs
+
       - name: Typecheck
         run: npx tsc --noEmit
 

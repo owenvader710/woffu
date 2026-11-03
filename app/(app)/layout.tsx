@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import NotificationCenter from "./components/NotificationCenter";
 import Sidebar from "./components/Sidebar";
-import PushBootstrap from "../components/PushBootstrap";
 import PreviewSafetyBanner from "./components/PreviewSafetyBanner";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -81,19 +80,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center">
-              <NotificationCenter />
-            </div>
+            <div aria-hidden="true" className="h-11 w-11 shrink-0" />
           </div>
         </header>
 
-        <div className="hidden lg:block">
+        {/* Exactly one mounted NotificationCenter for every viewport.
+            The button is top-right on mobile, bottom-right on desktop. */}
+        <div className="fixed right-4 top-3 z-[70] lg:static lg:z-auto">
           <NotificationCenter />
         </div>
 
         <PreviewSafetyBanner />
         <main className="px-4 pb-8 pt-5 md:px-6 lg:px-0 lg:pb-0 lg:pt-8">
-          <PushBootstrap />
           {children}
         </main>
       </div>

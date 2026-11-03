@@ -36,7 +36,10 @@ one-time invitations are publicly navigable without a preexisting login.
 Use the **staging Supabase project only** while developing.
 
 1. Deploy a trusted staging site on Netlify with correct, separate Supabase
-   environment variables.
+   environment variables. Configure `WOFFU_DEPLOYMENT_MODE=staging`, verify
+   the project URL `https://xofndnlyqueyuqyweqyi.supabase.co`, and enable
+   `WOFFU_ENABLE_PREVIEW_MUTATIONS=true` only on the trusted staging site.
+   A Vercel Preview still pointing at Production will block Auth/data access.
 2. Open **Supabase Dashboard → Authentication → URL Configuration**.
 3. Set the **Site URL** to the staging website's HTTPS origin.
 4. Add exact redirect URL:

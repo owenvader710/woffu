@@ -49,6 +49,13 @@ jobs:
             catch { console.log("::warning::Production audit unavailable; retry before release."); process.exit(0); }
             const totals=report.metadata?.vulnerabilities || {};
             console.log("Production dependency audit:", JSON.stringify(totals));
+            for(const [name,record] of Object.entries(report.vulnerabilities||{})) {
+              if(!["high","critical"].includes(record.severity)) continue;
+              const fix=record.fixAvailable===false?"not-available":typeof record.fixAvailable==="object"?
+                "upgrade-required":"fix-available";
+              console.log("Affected package:", name, record.severity,
+                record.isDirect?"direct":"transitive", fix);
+            }
             if((totals.high||0)+(totals.critical||0)>0)
               console.log("::warning::Production dependencies have high/critical advisories; review before release.");
           '

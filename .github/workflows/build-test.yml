@@ -152,6 +152,9 @@ jobs:
       - name: Enforce status transition rules at API and atomic approval levels
         run: node --test tests/security/statusTransition.test.mjs
 
+      - name: Guard invitation origin and privileged client ordering
+        run: node --test tests/security/inviteOrigin.test.mjs
+
       - name: Guard active-user project detail access
         run: node --test tests/security/projectDetailsAuthorization.test.mjs
 

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServer } from "../_supabase";
 import { createSupabaseAdmin } from "../_supabaseAdmin";
 import { sendInviteEmail } from "../_mailer";
+import { getTrustedSiteOrigin } from "@/lib/stagingSafety";
 
 function hashToken(token: string) {
   return crypto.createHash("sha256").update(token).digest("hex");
@@ -15,7 +16,6 @@ function isValidEmail(email: string) {
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createSupabaseServer();
-    const admin = createSupabaseAdmin();
 
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr) {
@@ -66,6 +66,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid department" }, { status: 400 });
     }
 
+    const siteOrigin = getTrustedSiteOrigin(
+      process.env.NEXT_PUBLIC_SITE_URL,
+      req.nextUrl.origin,
+      process.env.NODE_ENV === "development"
+    );
+    if (!siteOrigin) {
+      return NextResponse.json({ error: "Invite origin is not configured" }, { status: 503 });
+    }
+
+    // Only create the privileged client after manager authorization and input validation.
+    const admin = createSupabaseAdmin();
     const { data: existingProfile, error: profileErr } = await admin
       .from("profiles")
       .select("id, email")
@@ -125,11 +136,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: inviteErr.message }, { status: 400 });
     }
 
-    const configuredUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-    const baseUrl = configuredUrl && /^https?:\/\//i.test(configuredUrl)
-      ? configuredUrl.replace(/\/$/, "")
-      : req.nextUrl.origin;
-    const inviteLink = `${baseUrl}/invite/${rawToken}`;
+    const inviteLink = `${siteOrigin}/invite/${rawToken}`;
 
     // Email is optional on the Free deployment: share the invitation link
     // from the authenticated leader's screen when no email provider exists.

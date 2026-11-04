@@ -155,6 +155,9 @@ jobs:
       - name: Verify manager permissions and password recovery lifecycle
         run: node --test tests/security/releaseAccessRecovery.test.mjs
 
+      - name: Verify invitation display names flow into member profiles
+        run: node --test tests/security/inviteDisplayName.test.mjs
+
       - name: Guard invitation origin and privileged client ordering
         run: node --test tests/security/inviteOrigin.test.mjs
 

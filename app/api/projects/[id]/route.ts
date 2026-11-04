@@ -1,6 +1,5 @@
 // app/api/projects/[id]/route.ts
 import { NextResponse } from "next/server";
-import { createSupabaseServer } from "../../_supabase";
 import { requireActiveManager, requireActiveUser } from "../../_authorization";
 
 function badId(id?: string) {

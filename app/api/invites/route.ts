@@ -51,8 +51,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null);
 
     const email = String(body?.email || "").trim().toLowerCase();
+    const displayName = typeof body?.display_name === "string" ? body.display_name.trim() : "";
     const role = String(body?.role || "MEMBER").trim().toUpperCase();
     const department = String(body?.department || "ALL").trim().toUpperCase();
+
+    if (!displayName || displayName.length > 120) {
+      return NextResponse.json({ error: "กรุณาระบุชื่อสมาชิก (ไม่เกิน 120 ตัวอักษร)" }, { status: 400 });
+    }
 
     if (!email || !isValidEmail(email)) {
       return NextResponse.json({ error: "Invalid email" }, { status: 400 });
@@ -125,6 +130,7 @@ export async function POST(req: NextRequest) {
 
     const { error: inviteErr } = await admin.from("invites").insert({
       email,
+      display_name: displayName,
       role,
       department,
       invited_by: user.id,

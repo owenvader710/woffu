@@ -33,7 +33,7 @@ export async function GET(
 
     const { data: invite, error } = await admin
       .from("invites")
-      .select("id, email, role, department, expires_at, used_at")
+      .select("id, email, display_name, role, department, expires_at, used_at")
       .eq("token_hash", tokenHash)
       .maybeSingle();
 
@@ -48,6 +48,7 @@ export async function GET(
       ok: true,
       data: {
         email: invite.email,
+        display_name: invite.display_name,
         role: invite.role,
         department: invite.department,
       },
@@ -96,7 +97,7 @@ export async function POST(
       .eq("token_hash", tokenHash)
       .is("used_at", null)
       .gt("expires_at", claimedAt)
-      .select("id, email, role, department")
+      .select("id, email, display_name, role, department")
       .maybeSingle();
 
     if (claimError) {
@@ -128,6 +129,7 @@ export async function POST(
         email: invite.email,
         password,
         email_confirm: true,
+        user_metadata: { display_name: invite.display_name || invite.email },
       });
     } catch (error) {
       await releaseClaim();
@@ -148,7 +150,7 @@ export async function POST(
     const authUserId = created.data.user.id;
     const { error: profileError } = await admin.from("profiles").upsert({
       id: authUserId,
-      display_name: null,
+      display_name: invite.display_name || invite.email,
       role: invite.role,
       department: invite.department,
       email: invite.email,

@@ -152,6 +152,9 @@ jobs:
       - name: Enforce status transition rules at API and atomic approval levels
         run: node --test tests/security/statusTransition.test.mjs
 
+      - name: Verify staging-only MEMBER HTTP release check is safe
+        run: node --test tests/security/memberReleaseCheck.test.mjs
+
       - name: Verify manager permissions and password recovery lifecycle
         run: node --test tests/security/releaseAccessRecovery.test.mjs
 

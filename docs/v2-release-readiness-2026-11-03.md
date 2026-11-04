@@ -1,0 +1,164 @@
+# WOFFU OS V2 — Release readiness | 2026-11-03
+
+**Verdict: NOT READY FOR PRODUCTION.** The V2 feature branch is implemented
+and continuously tested, but a no-cost commercial hosting environment is
+not yet connected to the isolated Supabase Staging project. No complete
+browser E2E with authenticated users has been executed. Production data and
+the GitHub main branch are intentionally untouched.
+
+## Implemented on the Draft V2 branch
+
+| Module | Code and automated tests | Browser on isolated staging |
+| --- | --- | --- |
+| Login, invitation, account recovery | Build and security checks | Pending |
+| Profiles and manager/member permissions | RLS + database integration | Pending |
+| Project assignment, My Work, deadline status | API, Build and SQL contracts | Pending |
+| Atomic status approvals/rejection | Transactional SQL and role tests | Pending |
+| Draft 1–4 submission/reviewer QC | SQL workflow test + alerts | Pending |
+| Action Center and Dashboard | Unit tests + Next.js production build | Pending |
+| In-app Notifications/Realtime | Staging publication + owner-only SQL | Pending |
+| Optional Web Push (VAPID) | Server + Service Worker security tests | Pending device test |
+| Small-file attachments | Staging buckets and MIME/size test | Pending |
+| Preview/Production isolation | Unit tests and actual Next.js HTTP smoke | Pending |
+
+**Latest fixes:** Legacy status-request route delegates to the secure
+V2 endpoint; old My Work direct PATCH retired (HTTP 410), since current UI
+uses the canonical status-request flow. Manager approval-count endpoints
+share authorization and use bounded database count queries. Failed
+activity-log inserts after an accepted request no longer misreport the
+request as failed. Assignment-acknowledgement retries do not send repeated
+manager notifications. Invitation form stays visible after a recoverable
+validation error and uses 10–128-character passwords.
+
+## Verified safety architecture
+
+- **Supabase staging reference:** `xofndnlyqueyuqyweqyi`.
+- Preview/Netlify staging detection validates the *exact* Supabase project URL;
+  a write override alone cannot use a production database.
+- Real staging queries/RLS tests used rollback-only temporary accounts;
+  authorization and draft workflow tests left no test users behind.
+- Status approvals and Draft QC use DB functions, not two independent writes.
+- In-app notifications use per-user RLS; Browser Push uses one optional
+  VAPID transport with same-origin link validation. Legacy FCM APIs are
+  intentionally retired in V2 (HTTP 410); the historical token table is
+  retained but not read by the new application.
+- GitHub Node 24 CI: TypeScript, Next.js Build, targeted new-module lint,
+  security tests, PostgreSQL 16+17 integration, and Preview HTTP smoke.
+- Existing ESLint baseline is reported separately, currently nonblocking.
+
+## BLOCKING release gates
+
+- [ ] **Host:** Connect a real Netlify Free website (commercial use permitted
+      within its free quota) to the GitHub V2 branch. Netlify plugin/credentials
+      are not linked to this ChatGPT environment, so the deployment could not
+      be created here.
+- [ ] **Isolation:** Configure **staging-only** Supabase URL, publishable/anon
+      key and server-only Service Role Key through Netlify Settings → Environment
+      Variables. Do not paste secrets in a chat or Git repository. Set
+      `WOFFU_DEPLOYMENT_MODE=staging`. Confirm `/api/runtime-mode` reports
+      `stagingConnected=true`, `blockedDatabase=false`.
+- [ ] **Staging writes:** Only after verifying credentials, set
+      `WOFFU_ENABLE_PREVIEW_MUTATIONS=true` for the staging host. Keep the
+      original Vercel Preview production-linked environment **blocked**.
+- [ ] **Auth:** Set Supabase staging Site URL and exact redirect allowlist
+      `https://<staging-domain>/auth/confirm`. Test both manual manager-assisted
+      recovery and automatic recovery (requires working SMTP).
+- [ ] **Accounts:** Create test LEADER, video MEMBER and QC reviewer in
+      isolated Staging. No real staff accounts or customer files required.
+- [ ] **Workflow:** Invite → Login → Create/Assign → My Work → Status Request
+      → Leader Approve/Reject → Draft 1 → QC Request Changes → Draft 2 →
+      QC Approve → Final. Verify notification recipients and deep links.
+- [ ] **Push:** Test optional VAPID Web Push only if real keys and browser
+      notification permission are configured. Push should never block the
+      underlying workflow if absent.
+- [ ] **Security & performance:** Audit release dependencies and legacy
+      lint, verify 390px mobile layouts, keyboard navigation, sign-out,
+      expired invites, expired recovery links, no cross-user reads, and
+      background-tab quota consumption.
+- [ ] **Production migration & backup:** After user approves a release,
+      backup the current production database; review the migration order and
+      compatibility on a restored copy; plan rollback and communicate to
+      affected staff. Never apply the fresh-free-staging baseline to existing
+      production data.
+- [ ] **Merge/deploy:** Require a reviewed PR and green checks on the final
+      commit; only then merge and publish Production.
+
+## Known unresolved release risks
+
+1. **Dependency audit:** patched Next.js to **16.4.3**, refreshed transitive
+   dependencies and removed the redundant Firebase client/Admin SDKs after
+   consolidating Browser Push on VAPID. Latest GitHub CI reports
+   **zero production dependency advisories** (down from 32, including three
+   critical). The audit is now a required fail-closed gate for High/Critical
+   findings. This does not replace infrastructure or workflow penetration
+   testing, and new advisories can appear later.
+2. **Legacy lint:** the full-repository report still contains **137 errors
+   and 10 warnings** after the Notification Center clean-up; it is
+   nonblocking. The entire VAPID/Notification Center module now passes
+   **required** ESLint, along with secured endpoints. Full legacy cleanup
+   remains.
+3. **Email delivery:** Supabase's test SMTP has recipient/rate restrictions.
+   The manager-assisted one-time recovery link does not require SMTP,
+   but needs manual identity verification and an authenticated manager.
+4. **Hosting quotas:** Free-tier sites and databases have limits. Monitor
+   storage and build/compute consumption to avoid interruptions.
+5. **No real browser E2E:** a successful build, SQL fixture test or
+   READY Vercel Preview does not prove full user workflows.
+
+## Completed patch verification
+
+The disposable GitHub Actions jobs generated lockfiles with **read-only**
+GitHub access, verified `npm ci`, TypeScript and Next.js production build
+before a separate minimal write job committed only `package.json` and
+`package-lock.json` to the V2 branch. All temporary elevated-write
+workflows were deleted after success. The permanent CI now **requires**
+a zero-High/Critical production audit and repeats typecheck, targeted lint,
+build, PostgreSQL integration and HTTP proxy/Push safety tests.
+
+`/api/my-work/[id]` legacy direct PATCH now returns 410 because the current
+UI uses the canonical controlled status approval workflow. No Production
+schema or customer records were changed.
+
+## Phase 12 — VAPID-only notifications and supply-chain control
+
+- One mounted Notification Center across mobile/desktop: no duplicate
+  Realtime subscriptions or fallback polling from two hidden components.
+- Removed automatic FCM permission prompt and browser-console token logs;
+  Push is enabled only when a member chooses **เปิด push**.
+- Removed obsolete `PushBootstrap`, Firebase client and Admin packages,
+  JavaScript SDK wrapper and Firebase-specific service worker from the
+  V2 branch. Historical token records remain untouched in the database.
+- One optional VAPID sender in `app/api/_push.ts`; required contact
+  `VAPID_SUBJECT`, server-only private key and public browser key.
+- Push messages, API-supplied URLs and notification deep links are
+  restricted to internal app paths. The Service Worker refuses external
+  navigation.
+- Duplicate realtime event IDs no longer increment unread counts or
+  spawn repeated toast messages. Web Push disable checks the server response
+  before unsubscribing the browser.
+- `tests/security/notificationPush.test.mjs` checks both server URL
+  normalization and simulated Service Worker click behavior.
+- GitHub CI blocks direct Firebase SDK references and **fails closed** if
+  `npm audit --omit=dev --audit-level=high` returns High/Critical
+  vulnerabilities or cannot complete.
+- Final production dependency audit: **0 known advisories** in the
+  installed runtime dependency tree. Whole-project lint debt remains.
+- Five Supabase Staging security advisor WARN findings are from
+  `SECURITY DEFINER` helpers/workflow RPCs intentionally executable by
+  authenticated users. Read-only inspection confirmed no `anon` execute
+  access to these functions and that their bodies check `auth.uid()`
+  and role or membership before privileged writes. Future manual
+  security review remains part of Production acceptance.
+
+## Operational links
+
+- Draft PR: https://github.com/owenvader710/woffu/pull/1
+- Free hosting: `docs/free-deployment.md`
+- Password recovery: `docs/password-recovery-setup.md`
+- Notifications: `docs/notification-center.md`
+- Action Center: `docs/action-center.md`
+- Supabase isolation: `docs/staging-isolation-and-smoke-tests.md`
+
+The project should remain a **Draft Pull Request** until all blocking
+gates are checked with evidence. No background work or automatic
+production deployment has been scheduled.

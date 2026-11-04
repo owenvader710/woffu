@@ -51,11 +51,31 @@ function toneClass(type: string) {
   if (type === "TEAM_NOTICE") {
     return "border-violet-400/20 bg-violet-400/10 text-violet-200";
   }
+  if (type === "DRAFT_REVIEW") {
+    return "border-amber-400/25 bg-amber-400/10 text-amber-200";
+  }
+  if (type === "STATUS_CHANGE_REQUESTED") {
+    return "border-cyan-400/20 bg-cyan-400/10 text-cyan-200";
+  }
+  if (type === "JOB_STATUS_REJECTED") {
+    return "border-red-400/20 bg-red-400/10 text-red-200";
+  }
   return "border-white/10 bg-white/5 text-white/80";
 }
 
-const FILTERS = ["ALL", "UNREAD", "JOB_ASSIGNED", "JOB_STATUS_CHANGED", "TEAM_NOTICE"] as const;
+const FILTERS = ["ALL", "UNREAD", "DRAFT_REVIEW", "STATUS_CHANGE_REQUESTED",
+  "JOB_ASSIGNED", "JOB_STATUS_CHANGED", "JOB_STATUS_REJECTED", "TEAM_NOTICE"] as const;
 type FilterType = (typeof FILTERS)[number];
+const FILTER_LABELS: Record<FilterType, string> = {
+  ALL: "ทั้งหมด",
+  UNREAD: "ยังไม่อ่าน",
+  DRAFT_REVIEW: "Draft / QC",
+  STATUS_CHANGE_REQUESTED: "รออนุมัติ",
+  JOB_ASSIGNED: "มอบหมายงาน",
+  JOB_STATUS_CHANGED: "สถานะเปลี่ยน",
+  JOB_STATUS_REJECTED: "ไม่อนุมัติ",
+  TEAM_NOTICE: "ประกาศทีม",
+};
 
 export default function NotificationsPage() {
   const [items, setItems] = useState<AppNotification[]>([]);
@@ -139,10 +159,13 @@ export default function NotificationsPage() {
   const counts = useMemo(() => {
     return {
       ALL: items.length,
-      UNREAD: items.filter((x) => !x.is_read).length,
-      JOB_ASSIGNED: items.filter((x) => x.type === "JOB_ASSIGNED").length,
-      JOB_STATUS_CHANGED: items.filter((x) => x.type === "JOB_STATUS_CHANGED").length,
-      TEAM_NOTICE: items.filter((x) => x.type === "TEAM_NOTICE").length,
+      UNREAD: items.filter(x => !x.is_read).length,
+      DRAFT_REVIEW: items.filter(x => x.type === "DRAFT_REVIEW").length,
+      STATUS_CHANGE_REQUESTED: items.filter(x => x.type === "STATUS_CHANGE_REQUESTED").length,
+      JOB_ASSIGNED: items.filter(x => x.type === "JOB_ASSIGNED").length,
+      JOB_STATUS_CHANGED: items.filter(x => x.type === "JOB_STATUS_CHANGED").length,
+      JOB_STATUS_REJECTED: items.filter(x => x.type === "JOB_STATUS_REJECTED").length,
+      TEAM_NOTICE: items.filter(x => x.type === "TEAM_NOTICE").length,
     };
   }, [items]);
 
@@ -170,8 +193,8 @@ export default function NotificationsPage() {
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
-          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-white">Notifications</h1>
-          <div className="mt-2 text-sm text-white/50">ทั้งหมด: {filtered.length}</div>
+          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-white">การแจ้งเตือน</h1>
+          <div className="mt-2 text-sm text-white/50">แสดง {filtered.length} จาก 50 รายการล่าสุด</div>
         </div>
 
         <div className="flex gap-2">
@@ -210,7 +233,7 @@ export default function NotificationsPage() {
                     : "border-white/10 bg-transparent text-white/70 hover:bg-white/10 hover:text-white"
                 )}
               >
-                {f} ({count})
+                {FILTER_LABELS[f]} ({count})
               </button>
             );
           })}
@@ -258,7 +281,7 @@ export default function NotificationsPage() {
                             toneClass(n.type)
                           )}
                         >
-                          {n.type}
+                          {FILTER_LABELS[n.type as FilterType] ?? n.type}
                         </span>
 
                         {!n.is_read ? (

@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
 
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr) {
-      return NextResponse.json({ error: authErr.message }, { status: 401 });
+      return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
     }
 
     const user = authData?.user;
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
       .single();
 
     if (meErr) {
-      return NextResponse.json({ error: meErr.message }, { status: 400 });
+      return NextResponse.json({ error: "Unable to load account" }, { status: 500 });
     }
 
     if (!me?.is_active) {
@@ -102,7 +102,7 @@ export async function GET(req: NextRequest) {
         .order("created_at", { ascending: false }),
 
       supabase
-        .from("members")
+        .from("profiles")
         .select("id, display_name, department, role, is_active")
         .eq("is_active", true),
 
@@ -143,8 +143,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: membersRes.error.message }, { status: 400 });
     }
 
-    if ((approvalsRes as any)?.error) {
-      return NextResponse.json({ error: (approvalsRes as any).error.message }, { status: 400 });
+    const typedApprovals = approvalsRes as unknown as {
+      data: unknown;
+      error: { message: string } | null;
+    };
+    if (typedApprovals.error) {
+      return NextResponse.json({ error: typedApprovals.error.message }, { status: 400 });
     }
 
     if (noticesRes.error) {
@@ -159,15 +163,52 @@ export async function GET(req: NextRequest) {
       ? (membersRes.data as unknown as MemberRow[])
       : [];
 
-    const approvals = Array.isArray((approvalsRes as any)?.data)
-      ? ((approvalsRes as any).data as unknown as ApprovalRow[])
+    const approvals = Array.isArray(typedApprovals.data)
+      ? (typedApprovals.data as unknown as ApprovalRow[])
       : [];
 
     const notices = Array.isArray(noticesRes.data)
       ? (noticesRes.data as unknown as NoticeRow[])
       : [];
 
-    const activeProjects = projects.filter((p) => p.status !== "COMPLETED");
+    const activeProjects = projects.filter((p) => p.status !== "COMPLETED" && p.status !== "CANCELLED");
+
+    // Read-only QC overview. Older databases remain available before Phase 3 migration.
+    const reviewResult = await supabase
+      .from("project_draft_reviews")
+      .select("project_id, draft_number, review_status, created_at")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (reviewResult.error && !["42P01", "PGRST205", "42703"].includes(reviewResult.error.code || "")) {
+      return NextResponse.json({ error: "Unable to load QC dashboard" }, { status: 500 });
+    }
+    const latestDrafts = new Map<string, { project_id: string; draft_number: number; review_status: string; created_at: string }>();
+    for (const row of reviewResult.data ?? []) {
+      if (!latestDrafts.has(row.project_id)) latestDrafts.set(row.project_id, row);
+    }
+    const projectMap = new Map(projects.map(p => [p.id, p]));
+    const reviewQueue = Array.from(latestDrafts.values())
+      .filter(d => d.review_status === "SUBMITTED")
+      .map(d => ({
+        projectId: d.project_id,
+        title: projectMap.get(d.project_id)?.title || "โปรเจกต์",
+        draftNumber: d.draft_number,
+        submittedAt: d.created_at,
+      })).slice(0, 8);
+    const revisionCount = Array.from(latestDrafts.values()).filter(d => d.review_status === "CHANGES_REQUESTED").length;
+
+    const now = Date.now();
+    const deadlineCandidates = activeProjects.filter(p => isLeader || p.assignee_id === user.id);
+    const sortedByDue = deadlineCandidates
+      .filter(p => p.due_date && Number.isFinite(new Date(p.due_date).getTime()))
+      .sort((a, b) => new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime());
+    const overdueAll = sortedByDue.filter(p => new Date(p.due_date!).getTime() < now);
+    const overdueCount = overdueAll.length;
+    const overdue = overdueAll.slice(0, 5);
+    const deadlineSoon = sortedByDue.filter(p => {
+      const when = new Date(p.due_date!).getTime();
+      return when >= now && when <= now + 3 * 24 * 60 * 60 * 1000;
+    }).slice(0, 5);
 
     const projectCounts = {
       total: activeProjects.length,
@@ -249,12 +290,17 @@ export async function GET(req: NextRequest) {
         latestGraphic,
         latestVideo,
         workload,
+        reviewQueue,
+        revisionCount,
+        overdueCount,
+        overdue,
+        deadlineSoon,
       },
     };
 
     const res = NextResponse.json({ data: payload }, { status: 200 });
     return applyCookies(res);
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Internal error" }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

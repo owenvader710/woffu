@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import StatusDropdown, { Status } from "./StatusDropdown";
+import { ChecklistProgress, WorkspaceHeader } from "../components/WorkspaceKit";
+import { Search } from "lucide-react";
 
 type PendingReq = {
   id: string;
@@ -30,6 +32,7 @@ type WorkItem = {
   video_purpose?: string | null;
   graphic_job_type?: string | null;
   pending_request?: PendingReq | null;
+  review_summary?: { draft_number: number; review_status: "SUBMITTED" | "APPROVED" | "CHANGES_REQUESTED" } | null;
 };
 
 async function safeJson(res: Response) {
@@ -279,6 +282,13 @@ type BlockedModalState = {
   projectTitle: string;
 };
 
+function reviewLabel(w: WorkItem) {
+  const review = w.review_summary;
+  if (!review) return "ยังไม่ส่ง Draft";
+  const label = review.review_status === "SUBMITTED" ? "รอ QC" : review.review_status === "APPROVED" ? "ผ่าน QC" : "ต้องแก้ไข";
+  return `Draft ${review.draft_number} · ${label}`;
+}
+
 function MobileWorkCard({
   w,
   pending,
@@ -325,6 +335,9 @@ function MobileWorkCard({
       <div className="mt-4 flex flex-wrap gap-2">
         <DeptPill dept={w.department} />
         <StatusPill s={w.status} />
+        <Link href={`/projects/${w.id}#draft-reviews`} className="rounded-full border border-[#e5ff78]/30 bg-[#e5ff78]/10 px-3 py-1 text-xs font-semibold text-[#e5ff78]">
+          {reviewLabel(w)}
+        </Link>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -376,8 +389,13 @@ export default function MyWorkPage() {
     }, 2500);
   }, []);
 
-  const FILTERS = ["ALL", "PRE_ORDER", "TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"] as const;
+  const FILTERS = ["ALL", "PRE_ORDER", "TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED", "WAITING_QC", "CHANGES_REQUESTED"] as const;
+  const FILTER_LABELS: Record<(typeof FILTERS)[number], string> = {
+    ALL: "ทั้งหมด", PRE_ORDER: "งานล่วงหน้า", TODO: "รอเริ่ม", IN_PROGRESS: "กำลังทำ",
+    COMPLETED: "เสร็จแล้ว", BLOCKED: "ติดปัญหา", WAITING_QC: "รอตรวจ QC", CHANGES_REQUESTED: "ต้องแก้ไข",
+  };
   const [statusFilter, setStatusFilter] = useState<(typeof FILTERS)[number]>("ALL");
+  const [query, setQuery] = useState("");
 
   const [blockedModal, setBlockedModal] = useState<BlockedModalState>({
     open: false,
@@ -387,9 +405,8 @@ export default function MyWorkPage() {
   const [blockedNote, setBlockedNote] = useState("");
   const [blockedSubmitting, setBlockedSubmitting] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setErr("");
+  const load = useCallback(async (silent = false) => {
+    if (!silent) { setLoading(true); setErr(""); }
 
     try {
       const r = await fetch("/api/my-work", { cache: "no-store" });
@@ -444,7 +461,7 @@ export default function MyWorkPage() {
       setItems([]);
       setErr(e?.message || "Load failed");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -554,12 +571,17 @@ export default function MyWorkPage() {
   useEffect(() => {
     void load();
 
-    const interval = window.setInterval(() => {
-      void load();
-    }, 15000);
+    // Free hosting: refresh only while this tab is active, not every 30 s
+    // in background tabs. Returning users get a quiet refresh immediately.
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible") void load(true);
+    };
+    const interval = window.setInterval(refreshVisible, 120000);
+    document.addEventListener("visibilitychange", refreshVisible);
 
     return () => {
       window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshVisible);
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, [load]);
@@ -572,15 +594,31 @@ export default function MyWorkPage() {
       IN_PROGRESS: 0,
       COMPLETED: 0,
       BLOCKED: 0,
+      WAITING_QC: 0,
+      CHANGES_REQUESTED: 0,
     };
-    for (const x of items) c[x.status] = (c[x.status] || 0) + 1;
+    for (const x of items) {
+      c[x.status] = (c[x.status] || 0) + 1;
+      if (x.review_summary?.review_status === "SUBMITTED") c.WAITING_QC++;
+      if (x.review_summary?.review_status === "CHANGES_REQUESTED") c.CHANGES_REQUESTED++;
+    }
     return c;
   }, [items]);
 
   const filtered = useMemo(() => {
-    if (statusFilter === "ALL") return items;
-    return items.filter((x) => x.status === statusFilter);
-  }, [items, statusFilter]);
+    let list = items;
+    if (statusFilter === "WAITING_QC") {
+      list = list.filter(x => x.review_summary?.review_status === "SUBMITTED");
+    } else if (statusFilter === "CHANGES_REQUESTED") {
+      list = list.filter(x => x.review_summary?.review_status === "CHANGES_REQUESTED");
+    } else if (statusFilter !== "ALL") {
+      list = list.filter(x => x.status === statusFilter);
+    }
+    const search = query.trim().toLocaleLowerCase();
+    if (search) list = list.filter(x => [x.title, x.code, x.brand, x.department, x.type]
+      .some(value => String(value ?? "").toLocaleLowerCase().includes(search)));
+    return list;
+  }, [items, statusFilter, query]);
 
   return (
     <div className="w-full bg-black text-white">
@@ -651,34 +689,47 @@ export default function MyWorkPage() {
           </div>
         ) : null}
 
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="min-w-0">
-            <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
-            <h1 className="mt-2 break-words text-3xl font-extrabold tracking-tight md:text-4xl">งานของฉัน</h1>
-            <div className="mt-2 text-sm text-white/50">รายการทั้งหมด: {filtered.length}</div>
-          </div>
-
-          <button
-            onClick={() => void load()}
-            disabled={loading}
-            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50"
-          >
-            รีเฟรช
-          </button>
+        <WorkspaceHeader
+          title="งานของฉัน"
+          description="เลือกสถานะ ค้นหาชื่องาน และติดตาม Draft หรือ Feedback ของแต่ละโปรเจกต์ได้ในหน้าเดียว"
+          onRefresh={() => void load()}
+          refreshing={loading}
+        />
+        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <ChecklistProgress completed={counts.COMPLETED || 0} total={counts.ALL || 0} label="งานที่ปิดแล้ว" />
+          {([
+            { label: "กำลังทำ", value: counts.IN_PROGRESS || 0, filter: "IN_PROGRESS" as const, tone: "text-white" },
+            { label: "รอตรวจ QC", value: counts.WAITING_QC || 0, filter: "WAITING_QC" as const, tone: "text-amber-200" },
+            { label: "ต้องแก้ไข", value: counts.CHANGES_REQUESTED || 0, filter: "CHANGES_REQUESTED" as const, tone: "text-red-200" },
+          ]).map(item => (
+            <button type="button" key={item.filter} onClick={() => setStatusFilter(item.filter)}
+              className="woffu-clean-panel woffu-focus-ring flex flex-col justify-between gap-3 p-4 text-left transition hover:border-white/25 hover:bg-white/[0.07]">
+              <span className="text-sm font-semibold text-white/70">{item.label}</span>
+              <span className={`text-[30px] font-bold leading-none tabular-nums ${item.tone}`}>{item.value}</span>
+              <span className="text-xs text-white/45">คลิกเพื่อกรองรายการ</span>
+            </button>
+          ))}
         </div>
 
-        <div className="mt-6 rounded-[24px] border border-white/10 bg-white/5 p-4 md:rounded-[30px]">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="woffu-clean-panel mt-5 space-y-4 p-4">
+          <div className="relative">
+            <Search size={18} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/40"/>
+            <input value={query} onChange={event => setQuery(event.target.value)}
+              type="search" aria-label="ค้นหาชื่องานหรือแบรนด์"
+              placeholder="ค้นหาชื่องาน รหัสงาน หรือแบรนด์..."
+              className="woffu-input-simple pl-10"/>
+          </div>
+          <div role="group" aria-label="กรองสถานะงาน" className="flex flex-wrap items-center gap-2">
             {FILTERS.map((s) => {
               const active = statusFilter === s;
-              const label = s === "ALL" ? `ALL (${counts.ALL || 0})` : `${s} (${counts[s] || 0})`;
+              const label = `${FILTER_LABELS[s]} (${counts[s] || 0})`;
 
               return (
                 <button
                   key={s}
                   onClick={() => setStatusFilter(s)}
                   className={cn(
-                    "rounded-2xl border px-3 py-2 text-xs font-extrabold transition",
+                    "woffu-focus-ring rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
                     active
                       ? "border-white/10 bg-white text-black"
                       : "border-white/10 bg-transparent text-white/70 hover:bg-white/10 hover:text-white"
@@ -690,6 +741,8 @@ export default function MyWorkPage() {
             })}
           </div>
         </div>
+
+        <p className="mt-3 text-xs text-white/50">แสดง {filtered.length} จาก {items.length} งาน · รายการ Draft จะอัปเดตอัตโนมัติ</p>
 
         {loading ? (
           <div className="mt-6 rounded-[24px] border border-white/10 bg-white/5 p-5 text-sm text-white/60 md:rounded-[30px]">
@@ -768,6 +821,9 @@ export default function MyWorkPage() {
                                   {secondLine(w) ? (
                                     <div className="mt-1 truncate text-xs text-white/45">{secondLine(w)}</div>
                                   ) : null}
+                                  <Link href={`/projects/${w.id}#draft-reviews`} className="mt-2 inline-flex rounded-lg border border-[#e5ff78]/25 bg-[#e5ff78]/10 px-2 py-1 text-xs font-semibold text-[#e5ff78] hover:bg-[#e5ff78]/20">
+                                    {reviewLabel(w)}
+                                  </Link>
 
                                   {pending ? (
                                     <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-lime-400/20 bg-lime-400/10 px-4 py-1 text-xs font-extrabold text-lime-200">

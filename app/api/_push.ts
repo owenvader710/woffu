@@ -1,144 +1,78 @@
-import admin from "firebase-admin";
+import webpush from "web-push";
 import { createSupabaseAdmin } from "./_supabaseAdmin";
+import { normalizeInternalNotificationPath } from "@/lib/notificationUrl";
 
-function normalizeEnv(value?: string | null) {
-  if (!value) return "";
-  return value.trim();
-}
-
-function normalizePrivateKey(value?: string | null) {
-  if (!value) return "";
-
-  let key = value.trim();
-
-  if (
-    (key.startsWith('"') && key.endsWith('"')) ||
-    (key.startsWith("'") && key.endsWith("'"))
-  ) {
-    key = key.slice(1, -1);
-  }
-
-  key = key.replace(/\\n/g, "\n").trim();
-
-  return key;
-}
-
-function getFirebaseAdmin() {
-  if (admin.apps.length) return admin.app();
-
-  const projectId = normalizeEnv(process.env.FIREBASE_PROJECT_ID);
-  const clientEmail = normalizeEnv(process.env.FIREBASE_CLIENT_EMAIL);
-  const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
-
-  console.log("[FIREBASE ENV CHECK]", {
-    hasProjectId: !!projectId,
-    hasClientEmail: !!clientEmail,
-    hasPrivateKey: !!privateKey,
-    startsWithBegin: privateKey.startsWith("-----BEGIN PRIVATE KEY-----"),
-    endsWithEnd: privateKey.endsWith("-----END PRIVATE KEY-----"),
-    firstChar: privateKey[0] || null,
-    lastChar: privateKey.slice(-1) || null,
-  });
-
-  if (!projectId || !clientEmail || !privateKey) {
-    throw new Error("Missing Firebase Admin env");
-  }
-
-  return admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId,
-      clientEmail,
-      privateKey,
-    }),
-  });
-}
-
+/**
+ * One no-cost Browser Push transport (VAPID), matching the explicit opt-in
+ * button on NotificationCenter. DB notifications work without these keys.
+ * Historical FCM tokens are deliberately not used in WOFFU OS V2.
+ */
 export async function sendPushToUser({
-  userId,
-  title,
-  message,
-  url,
+  userId, title, message, url,
 }: {
   userId: string;
   title: string;
   message: string;
   url?: string;
 }) {
-  getFirebaseAdmin();
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.trim();
+  const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
+  const subject = process.env.VAPID_SUBJECT?.trim();
 
-  const supabase = createSupabaseAdmin();
-
-  console.log("[PUSH] incoming userId =", userId);
-
-  const { data, error } = await supabase
-    .from("push_tokens")
-    .select("user_id, token, platform")
-    .eq("user_id", userId);
-
-  console.log("[PUSH] query error =", error);
-  console.log("[PUSH] raw rows =", data);
-
-  if (error) throw new Error(error.message);
-
-  const tokens = (data ?? []).map((x: any) => x.token).filter(Boolean);
-
-  console.log("[PUSH] tokens =", tokens);
-  console.log("[PUSH] token count =", tokens.length);
-
-  if (tokens.length === 0) {
-    return { ok: true, sent: 0, reason: "NO_TOKEN" };
+  if (!publicKey || !privateKey || !subject ||
+      !(subject.startsWith("mailto:") || subject.startsWith("https://"))) {
+    return { ok: true, sent: 0, reason: "PUSH_NOT_CONFIGURED" };
   }
 
-  const result = await admin.messaging().sendEachForMulticast({
-    tokens,
-    notification: {
-      title,
-      body: message,
-    },
-    data: {
-      title,
-      body: message,
-      link: url || "/",
-    },
-    webpush: {
-      fcmOptions: {
-        link: url || "/",
-      },
-      notification: {
-        title,
-        body: message,
-        icon: "/icon-192.png",
-        badge: "/badge-72.png",
-      },
-    },
+  try {
+    webpush.setVapidDetails(subject, publicKey, privateKey);
+  } catch {
+    console.warn("[WEB PUSH] Invalid VAPID configuration");
+    return { ok: false, sent: 0, reason: "INVALID_VAPID_CONFIG" };
+  }
+
+  const db = createSupabaseAdmin();
+  const { data: subscriptions, error } = await db.from("push_subscriptions")
+    .select("id, endpoint, p256dh, auth")
+    .eq("user_id", userId)
+    .limit(30);
+  if (error) {
+    console.warn("[WEB PUSH] Subscription lookup failed", error.code);
+    return { ok: false, sent: 0, reason: "SUBSCRIPTION_LOOKUP_FAILED" };
+  }
+
+  const payload = JSON.stringify({
+    title: title.slice(0, 120),
+    body: message.slice(0, 500),
+    url: normalizeInternalNotificationPath(url),
+    tag: "woffu-workflow",
   });
 
-  console.log("[PUSH] successCount =", result.successCount);
-  console.log("[PUSH] failureCount =", result.failureCount);
-  console.log(
-    "[PUSH] responses =",
-    result.responses.map((r) => ({
-      success: r.success,
-      error: (r.error as any)?.code || (r.error as any)?.message || null,
-    }))
-  );
-
-  const invalidTokens: string[] = [];
-  result.responses.forEach((r, i) => {
-    if (!r.success) {
-      const code = (r.error as any)?.code || "";
-      if (
-        code.includes("registration-token-not-registered") ||
-        code.includes("invalid-registration-token")
-      ) {
-        invalidTokens.push(tokens[i]);
+  let sent = 0;
+  // Bounded concurrency avoids a slow or broken endpoint delaying an entire
+  // approval workflow. Never print subscriptions, tokens or VAPID keys.
+  const rows = subscriptions ?? [];
+  for (let i = 0; i < rows.length; i += 5) {
+    await Promise.all(rows.slice(i, i + 5).map(async sub => {
+      try {
+        await webpush.sendNotification({
+          endpoint: sub.endpoint,
+          keys: { p256dh: sub.p256dh, auth: sub.auth },
+        }, payload, { TTL: 3600 });
+        sent++;
+      } catch (failure) {
+        const status = (failure as { statusCode?: number }).statusCode;
+        if (status === 404 || status === 410) {
+          const { error: cleanupError } = await db.from("push_subscriptions")
+            .delete().eq("id", sub.id).eq("user_id", userId);
+          if (cleanupError) {
+            console.warn("[WEB PUSH] Expired endpoint cleanup failed", cleanupError.code);
+          }
+        } else {
+          console.warn("[WEB PUSH] Delivery unavailable", status || "unknown");
+        }
       }
-    }
-  });
-
-  if (invalidTokens.length > 0) {
-    await supabase.from("push_tokens").delete().in("token", invalidTokens);
+    }));
   }
-
-  return { ok: true, sent: result.successCount };
+  return { ok: true, sent };
 }

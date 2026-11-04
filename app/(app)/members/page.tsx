@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { createBrowserClient } from "@supabase/ssr";
 import dynamic from "next/dynamic";
+import MemberRecoveryModal from "./MemberRecoveryModal";
 
 const AvatarCropModal = dynamic(() => import("./AvatarCropModal"), {
   loading: () => null,
@@ -279,11 +279,14 @@ function EditMyProfileModal({
 
 export default function MembersPage() {
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<"MEMBER" | "LEADER">("MEMBER");
   const [inviteDepartment, setInviteDepartment] = useState<"VIDEO" | "GRAPHIC" | "ALL">("ALL");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMsg, setInviteMsg] = useState("");
   const [inviteErr, setInviteErr] = useState("");
+  const [inviteLink, setInviteLink] = useState("");
+  const [recoveryTarget, setRecoveryTarget] = useState<Member | null>(null);
 
   const [me, setMe] = useState<MeProfile | null>(null);
   const isLeader = me?.role === "LEADER" && me?.is_active === true;
@@ -345,6 +348,7 @@ export default function MembersPage() {
     setInviteBusy(true);
     setInviteMsg("");
     setInviteErr("");
+    setInviteLink("");
 
     try {
       const res = await fetch("/api/invites", {
@@ -352,6 +356,7 @@ export default function MembersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: inviteEmail,
+          display_name: inviteName.trim(),
           role: inviteRole,
           department: inviteDepartment,
         }),
@@ -364,8 +369,10 @@ export default function MembersPage() {
         return;
       }
 
-      setInviteMsg("ส่งคำเชิญสำเร็จแล้ว");
+      setInviteLink(typeof json?.inviteLink === "string" ? json.inviteLink : "");
+      setInviteMsg(json?.message || "สร้างคำเชิญสำเร็จแล้ว");
       setInviteEmail("");
+      setInviteName("");
       setInviteRole("MEMBER");
       setInviteDepartment("ALL");
     } catch (e: any) {
@@ -377,49 +384,28 @@ export default function MembersPage() {
 
   async function applyCroppedAvatar(blob: Blob) {
     setError("");
-
     if (!me?.id) {
-      setError("ไม่พบผู้ใช้งาน (me) กรุณารีเฟรช");
+      setError("ไม่พบผู้ใช้งาน กรุณาเข้าสู่ระบบใหม่");
       return;
     }
-
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !anon) {
-      setError("Missing Supabase env (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)");
+    if (!blob.size || blob.size > 2 * 1024 * 1024) {
+      setError("รูปโปรไฟล์ต้องไม่เกิน 2 MB");
       return;
     }
 
     setSavingAvatar(true);
     try {
-      const supabase = createBrowserClient(url, anon);
-      const fileName = `avatar-${me.id}-${Date.now()}.png`;
-
-      const up = await supabase.storage.from("avatars").upload(fileName, blob, {
-        contentType: "image/png",
-        upsert: true,
+      const form = new FormData();
+      form.append("file", blob, "avatar.png");
+      const res = await fetch("/api/profile/avatar", {
+        method: "POST", body: form,
       });
-
-      if (up.error) {
-        setError(up.error.message);
-        return;
+      const result = await safeJson(res);
+      if (!res.ok) {
+        throw new Error(result?.error || "อัปโหลดรูปโปรไฟล์ไม่สำเร็จ");
       }
-
-      const pub = supabase.storage.from("avatars").getPublicUrl(fileName);
-      const publicUrl = pub?.data?.publicUrl || null;
-
-      if (!publicUrl) {
-        setError("ไม่สามารถสร้าง public url ได้");
-        return;
-      }
-
-      const upd = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", me.id);
-      if (upd.error) {
-        setError(upd.error.message);
-        return;
-      }
-    } catch (e: any) {
-      setError(e?.message || "อัปโหลดรูปไม่สำเร็จ");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "อัปโหลดรูปโปรไฟล์ไม่สำเร็จ");
     } finally {
       setSavingAvatar(false);
     }
@@ -476,13 +462,20 @@ export default function MembersPage() {
         </div>
 
         {isLeader ? (
-          <button
-            onClick={() => openEdit(m)}
-            className="w-fit rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
-            title="แก้ไขสมาชิก"
-          >
-            แก้ไข
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button"
+              onClick={() => openEdit(m)}
+              className="woffu-focus-ring w-fit rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
+              title="แก้ไขสมาชิก">
+              แก้ไข
+            </button>
+            {m.role === "MEMBER" && m.is_active && m.id !== me?.id && m.email && (
+              <button type="button" onClick={() => setRecoveryTarget(m)}
+                className="woffu-focus-ring w-fit rounded-xl border border-[#e5ff78]/30 bg-[#e5ff78]/10 px-3 py-2 text-xs font-semibold text-[#e5ff78] hover:bg-[#e5ff78]/20">
+                ช่วยรีเซ็ตรหัสผ่าน
+              </button>
+            )}
+          </div>
         ) : null}
       </div>
 
@@ -608,12 +601,21 @@ export default function MembersPage() {
 
         {isLeader ? (
           <div className="mt-6 rounded-[28px] border border-white/10 bg-white/5 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.35)] md:rounded-[34px] md:p-6">
-            <div className="text-lg font-extrabold text-white md:text-xl">Invite Member</div>
+            <div className="text-lg font-bold text-white md:text-xl">เชิญสมาชิกเข้าร่วมทีม</div>
             <div className="mt-1 text-sm leading-6 text-white/45">
-              เชิญสมาชิกผ่านอีเมล เพื่อให้ผู้ถูกเชิญตั้งรหัสผ่านเองและเข้าใช้งานระบบได้
+              สร้างลิงก์เชิญสมาชิกแล้วแชร์ผ่านแชตได้ฟรี ไม่จำเป็นต้องใช้บริการส่งอีเมล
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+              <input
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                placeholder="ชื่อที่แสดง เช่น โอเว่น / บูม"
+                aria-label="ชื่อสมาชิก"
+                required
+                maxLength={120}
+                className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm outline-none focus:border-[#e5ff78] md:col-span-2"
+              />
               <input
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
@@ -644,15 +646,27 @@ export default function MembersPage() {
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <button
                 onClick={sendInvite}
-                disabled={inviteBusy}
+                disabled={inviteBusy || !inviteName.trim() || !inviteEmail.trim()}
                 className="rounded-2xl bg-[#e5ff78] px-5 py-2.5 text-sm font-bold text-black hover:opacity-90 disabled:opacity-60"
               >
-                {inviteBusy ? "กำลังส่ง..." : "Send Invite"}
+                {inviteBusy ? "กำลังสร้างลิงก์..." : "สร้างคำเชิญ"}
               </button>
 
               {inviteMsg ? <div className="text-sm text-lime-300">{inviteMsg}</div> : null}
               {inviteErr ? <div className="text-sm text-red-300">{inviteErr}</div> : null}
             </div>
+            {inviteLink && (
+              <div className="mt-4 rounded-xl border border-[#e5ff78]/30 bg-[#e5ff78]/10 p-4">
+                <label htmlFor="new-invite-link" className="mb-2 block text-xs font-semibold text-[#e5ff78]">ลิงก์คำเชิญ (หมดอายุภายใน 48 ชั่วโมง)</label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input id="new-invite-link" readOnly value={inviteLink}
+                    className="woffu-input-simple min-w-0 flex-1" onFocus={e => e.target.select()}/>
+                  <button type="button" onClick={() => void navigator.clipboard.writeText(inviteLink)}
+                    className="rounded-xl bg-[#e5ff78] px-4 py-2 text-sm font-semibold text-black">คัดลอกลิงก์</button>
+                </div>
+                <p className="mt-2 text-xs text-white/60">ลิงก์นี้ใช้ตั้งรหัสผ่านได้ครั้งเดียว ส่งให้ผู้รับโดยตรงเท่านั้น</p>
+              </div>
+            )}
           </div>
         ) : null}
 
@@ -670,6 +684,12 @@ export default function MembersPage() {
             <Section title="GRAPHIC" list={group.GRAPHIC} />
             <Section title="ALL" list={group.ALL} />
           </>
+        )}
+
+        {recoveryTarget && (
+          <MemberRecoveryModal key={recoveryTarget.id}
+            member={recoveryTarget}
+            onClose={() => setRecoveryTarget(null)} />
         )}
 
         <AvatarCropModal

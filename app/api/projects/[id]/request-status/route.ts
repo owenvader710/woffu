@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseFromRequest } from "@/utils/supabase/api";
 import { createSupabaseAdmin } from "@/app/api/_supabaseAdmin";
 import { sendPushToUser } from "@/app/api/_push";
+import { requireActiveUser } from "@/app/api/_authorization";
 
 async function getParamId(
   req: NextRequest,
@@ -56,14 +56,14 @@ export async function POST(
       return NextResponse.json({ error: "Invalid project id" }, { status: 400 });
     }
 
-    const { supabase, applyCookies } = await supabaseFromRequest(req);
+    const access = await requireActiveUser();
+    if (access.response) return access.response;
+    if (!access.user || !access.supabase) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { supabase, user } = access;
+    const applyCookies = <T extends NextResponse>(response: T) => response;
     const admin = createSupabaseAdmin();
-
-    const { data: authData, error: authErr } = await supabase.auth.getUser();
-    if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
-
-    const user = authData?.user;
-    if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
     const body = await req.json().catch(() => ({}));
     const from_status = body?.from_status;
@@ -101,12 +101,30 @@ export async function POST(
 
     const { data: projectRow, error: projectErr } = await supabase
       .from("projects")
-      .select("id, title, department")
+      .select("id, title, department, status, assignee_id")
       .eq("id", projectId)
       .single();
 
     if (projectErr) {
       return NextResponse.json({ error: projectErr.message }, { status: 400 });
+    }
+
+    if (!projectRow || projectRow.assignee_id !== user.id) {
+      return NextResponse.json({ error: "Not assigned to this project" }, { status: 403 });
+    }
+    if (projectRow.status !== from_status || from_status === to_status) {
+      return NextResponse.json({ error: "Stale or invalid status transition" }, { status: 409 });
+    }
+    // Completion must follow a started task; keep this aligned with the DB approval RPC.
+    if (from_status === "TODO" && to_status === "COMPLETED") {
+      return NextResponse.json(
+        { error: "Start the task before requesting completion", code: "INVALID_TRANSITION" },
+        { status: 409 }
+      );
+    }
+    const allowedStatuses = ["TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"];
+    if (!allowedStatuses.includes(String(to_status))) {
+      return NextResponse.json({ error: "Invalid target status" }, { status: 400 });
     }
 
     const insertPayload: Record<string, any> = {
@@ -149,8 +167,10 @@ export async function POST(
 
     const { error: logErr } = await supabase.from("project_logs").insert(logPayload);
 
+    // The status request is already committed. A secondary activity-log error
+    // must never report the *entire* request as failed or encourage a retry.
     if (logErr) {
-      return NextResponse.json({ error: `Log insert failed: ${logErr.message}` }, { status: 400 });
+      console.warn("[STATUS REQUEST] Activity log unavailable", logErr.code);
     }
 
     try {
@@ -160,16 +180,12 @@ export async function POST(
         .eq("role", "LEADER")
         .eq("is_active", true);
 
-      console.log("[STATUS REQUEST] leaderErr =", leaderErr);
-      console.log("[STATUS REQUEST] leaders =", leaders);
 
       if (!leaderErr && leaders && leaders.length > 0) {
         const targetLeaderIds = leaders
           .map((x: any) => x.id)
           .filter((id: string) => !!id);
 
-        console.log("[STATUS REQUEST] requester =", user.id);
-        console.log("[STATUS REQUEST] targetLeaderIds =", targetLeaderIds);
 
         if (targetLeaderIds.length > 0) {
           const projectTitle = projectRow?.title || "โปรเจกต์ไม่มีชื่อ";
@@ -198,8 +214,6 @@ export async function POST(
             )
             .select("id, user_id, type, title");
 
-          console.log("[STATUS REQUEST] notifErr =", notifErr);
-          console.log("[STATUS REQUEST] notifRows =", notifRows);
 
           const pushResults = await Promise.allSettled(
             targetLeaderIds.map((leaderId: string) =>
@@ -212,11 +226,10 @@ export async function POST(
             )
           );
 
-          console.log("[STATUS REQUEST] pushResults =", pushResults);
         }
       }
     } catch (e) {
-      console.log("[STATUS REQUEST] notify catch =", e);
+      console.warn("[STATUS REQUEST] Notification fallback failed", e instanceof Error ? e.name : "unknown");
     }
 
     const res = NextResponse.json(

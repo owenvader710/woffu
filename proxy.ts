@@ -1,6 +1,7 @@
 // proxy.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { getDeploymentSafety, isUnsafeMethod } from "@/lib/stagingSafety";
 
 type SameSite = "lax" | "strict" | "none";
 function normalizeSameSite(v: unknown): SameSite | undefined {
@@ -12,6 +13,61 @@ function normalizeSameSite(v: unknown): SameSite | undefined {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  const safety = getDeploymentSafety(process.env);
+
+  // A preview linked to ANY database other than our dedicated free staging
+  // project is a visual-only shell. Never authenticate, query production
+  // records or use recovery tokens from a mismatched environment.
+  if (safety.blockedDatabase) {
+    if (pathname === "/api/runtime-mode") return NextResponse.next();
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({
+        code: "STAGING_REQUIRED",
+        error: "Preview ยังไม่ได้เชื่อมต่อ Supabase Staging กรุณาตรวจ Environment Variables",
+      }, { status: 423, headers: { "Cache-Control": "no-store" } });
+    }
+    if (pathname === "/auth/confirm") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/forgot-password";
+      url.search = "?error=preview_unavailable";
+      return NextResponse.redirect(url);
+    }
+    const previewPages = ["/", "/login", "/forgot-password", "/reset-password"];
+    if (!previewPages.includes(pathname) && !pathname.startsWith("/_next/")) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.search = "?preview=staging_required";
+      return NextResponse.redirect(url);
+    }
+    // Skip the Supabase Auth network call, including session refresh.
+    return NextResponse.next({ request: { headers: request.headers } });
+  }
+
+  // Even when the staging database matches exactly, API writes require an
+  // explicit opt-in. Sign-in/out can be used in read-only staging, but all
+  // other mutations (including password reset and admin token generation)
+  // remain disabled until a reviewer enables trusted staging writes.
+  if (
+    safety.readOnly &&
+    pathname.startsWith("/api/") &&
+    isUnsafeMethod(request.method) &&
+    !["/api/login", "/api/logout"].includes(pathname)
+  ) {
+    return NextResponse.json({
+      code: "PREVIEW_READ_ONLY",
+      error: "Staging ยังอยู่ในโหมดอ่านอย่างเดียว",
+    }, { status: 423, headers: { "Cache-Control": "no-store" } });
+  }
+
+  // GET recovery callbacks consume bearer tokens and establish sessions;
+  // block them until staging write workflows are intentionally enabled.
+  if (safety.readOnly && pathname === "/auth/confirm") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/forgot-password";
+    url.search = "?error=preview_unavailable";
+    return NextResponse.redirect(url);
+  }
 
   // root → /login
   if (pathname === "/") {
@@ -49,9 +105,13 @@ export async function proxy(request: NextRequest) {
   const user = data?.user;
 
   const isPublic =
-    pathname.startsWith("/login") ||
-    pathname.startsWith("/api") ||
-    pathname.startsWith("/_next") ||
+    pathname === "/login" ||
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password" ||
+    pathname === "/auth/confirm" ||
+    pathname.startsWith("/invite/") ||
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico";
 
   if (user && pathname.startsWith("/login")) {

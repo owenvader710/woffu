@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServer } from "../_supabase";
+import { requireActiveUser } from "../_authorization";
 import { createSupabaseAdmin } from "../_supabaseAdmin";
 import { sendPushToUser } from "../_push";
-
-function normalizeNoticeType(value: unknown) {
-  const raw = String(value || "").trim().toUpperCase();
-  if (raw === "URGENT") return "URGENT";
-  if (raw === "EVENT") return "EVENT";
-  return "GENERAL";
-}
+import { parseNoticeInput } from "@/lib/teamNoticeInput";
 
 export async function GET() {
-  const supabase = await createSupabaseServer();
+  const access = await requireActiveUser();
+  if (access.response) return access.response;
+  const supabase = access.supabase;
 
   const { data, error } = await supabase
     .from("team_notices")
@@ -28,48 +24,20 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createSupabaseServer();
-  const admin = createSupabaseAdmin();
+  const access = await requireActiveUser();
+  if (access.response) return access.response;
+  const user = access.user;
 
-  const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
-
-  const user = authData?.user;
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: me, error: meErr } = await supabase
-    .from("profiles")
-    .select("id, role, is_active")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (meErr) return NextResponse.json({ error: meErr.message }, { status: 500 });
-  if (!me || me.is_active === false) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const isLeader = me.role === "LEADER" || me.role === "ADMIN";
+  const isLeader = access.profile.role === "LEADER" || access.profile.role === "ADMIN";
 
   const body = await req.json().catch(() => null);
-  if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-
-  const title = String(body.title || "").trim();
-  const content = String(body.content || "").trim();
-
-  if (!title) {
-    return NextResponse.json({ error: "กรุณาระบุหัวข้อประกาศ" }, { status: 400 });
+  const input = parseNoticeInput(body, isLeader);
+  if (!input) {
+    return NextResponse.json({ error: "ข้อมูลประกาศหรือไฟล์แนบไม่ถูกต้อง" }, { status: 400 });
   }
-
-  const insertRow = {
-    title,
-    content: content || null,
-    notice_type: normalizeNoticeType(body.notice_type),
-    attachment_url: body.attachment_url ? String(body.attachment_url) : null,
-    attachment_name: body.attachment_name ? String(body.attachment_name) : null,
-    is_pinned: isLeader ? !!body.is_pinned : false,
-    is_active: true,
-    created_by: user.id,
-  };
+  const { title, content } = input;
+  const insertRow = { ...input, is_active: true, created_by: user.id };
+  const admin = createSupabaseAdmin();
 
   const { data, error } = await admin
     .from("team_notices")

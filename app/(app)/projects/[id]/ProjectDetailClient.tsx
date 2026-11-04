@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import ProjectDraftReviewPanel from "./ProjectDraftReviewPanel";
 
 const EditProjectModal = dynamic(() => import("../EditProjectModal"), {
   loading: () => null,
@@ -42,6 +43,7 @@ type Project = {
   type: "VIDEO" | "GRAPHIC";
   department: "VIDEO" | "GRAPHIC" | "ALL";
   status: "PRE_ORDER" | "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
+  reviewer_id?: string | null;
 
   created_at: string;
   start_date: string | null;
@@ -554,6 +556,15 @@ export default function ProjectDetailClient({ projectId }: { projectId: string }
           )}
         </div>
       </Card>
+
+      <ProjectDraftReviewPanel
+        projectId={project.id}
+        assigneeId={project.assignee_id}
+        reviewerId={project.reviewer_id}
+        viewerId={me?.id}
+        isManager={isLeader}
+        people={people}
+      />
 
       {isLeader && (
         <EditProjectModal

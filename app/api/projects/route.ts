@@ -1,8 +1,8 @@
 // app/api/projects/route.ts
 import { NextResponse } from "next/server";
-import { createSupabaseServer } from "../_supabase";
 import { createSupabaseAdmin } from "../_supabaseAdmin";
 import { sendPushToUser } from "../_push";
+import { requireActiveManager, requireActiveUser } from "../_authorization";
 
 const SELECT_FIELDS = [
   "id",
@@ -42,6 +42,7 @@ type ProjectRow = {
   description?: string | null;
   department?: string | null;
   created_by?: string | null;
+  review_summary?: { draft_number: number; review_status: string } | null;
 };
 
 function startOfToday() {
@@ -60,18 +61,10 @@ function getInitialStatus(startDate?: string | null) {
   return start.getTime() > startOfToday().getTime() ? "PRE_ORDER" : "TODO";
 }
 
-function shouldMovePreOrderToTodo(startDate?: string | null) {
-  if (!startDate) return false;
-
-  const start = new Date(startDate);
-  if (Number.isNaN(start.getTime())) return false;
-
-  start.setHours(0, 0, 0, 0);
-  return start.getTime() <= startOfToday().getTime();
-}
-
 export async function GET() {
-  const supabase = await createSupabaseServer();
+  const access = await requireActiveUser();
+  if (access.response) return access.response;
+  const supabase = access.supabase;
 
   const { data: rawData, error } = await supabase
     .from("projects")
@@ -86,58 +79,47 @@ export async function GET() {
     ? (rawData as unknown as ProjectRow[])
     : [];
 
-  const preOrderIdsToActivate = data
-    .filter((item) => item.status === "PRE_ORDER" && shouldMovePreOrderToTodo(item.start_date))
-    .map((item) => item.id)
-    .filter(Boolean);
-
-  if (preOrderIdsToActivate.length > 0) {
-    const { error: updateErr } = await supabase
-      .from("projects")
-      .update({ status: "TODO" })
-      .in("id", preOrderIdsToActivate)
-      .eq("status", "PRE_ORDER");
-
-    if (updateErr) {
-      return NextResponse.json({ error: updateErr.message }, { status: 500 });
-    }
-
-    const refreshed: ProjectRow[] = data.map((item) => {
-      if (preOrderIdsToActivate.includes(item.id) && item.status === "PRE_ORDER") {
-        return { ...item, status: "TODO" };
-      }
-      return item;
-    });
-
-    return NextResponse.json({ data: refreshed });
+  // Attach QC state without altering the project status or requiring a migration on legacy builds.
+  const projectIds = data.map(item => item.id);
+  const reviewsRes = projectIds.length
+    ? await supabase.from("project_draft_reviews")
+        .select("project_id, draft_number, review_status")
+        .in("project_id", projectIds)
+        .order("draft_number", { ascending: false })
+    : { data: [], error: null };
+  if (reviewsRes.error && !["42P01", "PGRST205", "42703"].includes(reviewsRes.error.code || "")) {
+    return NextResponse.json({ error: "Unable to load draft review summaries" }, { status: 500 });
   }
+  const qcMap = new Map<string, { draft_number: number; review_status: string }>();
+  for (const review of reviewsRes.data ?? []) {
+    if (!qcMap.has(review.project_id)) qcMap.set(review.project_id, review);
+  }
+  const enriched = data.map(item => ({ ...item, review_summary: qcMap.get(item.id) ?? null }));
 
-  return NextResponse.json({ data });
+  // GET must remain read-only. Status activation uses a separately authenticated POST.
+  return NextResponse.json({ data: enriched });
 }
 
 export async function POST(req: Request) {
-  const supabase = await createSupabaseServer();
-  const admin = createSupabaseAdmin();
+  const access = await requireActiveManager();
+  if (access.response) return access.response;
+  const supabase = access.supabase;
+  const user = access.user;
 
-  const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) {
-    return NextResponse.json({ error: authErr.message }, { status: 401 });
-  }
-
-  const user = authData?.user;
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const body = await req.json().catch(() => null);
-  if (!body) {
+  const body: unknown = await req.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const insertRow: Record<string, any> = {
-    ...body,
-    created_by: user.id,
-  };
+  const permitted = ["code", "title", "type", "start_date", "due_date", "product_group", "brand", "video_priority", "video_purpose", "graphic_job_type", "assignee_id", "description", "department"] as const;
+  const insertRow: Record<string, unknown> = { created_by: user.id };
+  const fields = body as Record<string, unknown>;
+  for (const key of permitted) {
+    if (Object.prototype.hasOwnProperty.call(fields, key)) insertRow[key] = fields[key];
+  }
+  if (typeof insertRow.title !== "string" || !insertRow.title.trim() || !["VIDEO", "GRAPHIC"].includes(String(insertRow.type))) {
+    return NextResponse.json({ error: "Invalid title/type" }, { status: 400 });
+  }
 
   for (const k of Object.keys(insertRow)) {
     if (insertRow[k] === "") insertRow[k] = null;
@@ -147,7 +129,7 @@ export async function POST(req: Request) {
     insertRow.department = insertRow.type;
   }
 
-  insertRow.status = getInitialStatus(insertRow.start_date);
+  insertRow.status = getInitialStatus(typeof insertRow.start_date === "string" ? insertRow.start_date : null);
 
   const { data: insertedRaw, error } = await supabase
     .from("projects")
@@ -176,6 +158,7 @@ export async function POST(req: Request) {
     const notifLink = `/projects/${insertedData.id}`;
 
     try {
+      const admin = createSupabaseAdmin();
       await admin.from("notifications").insert({
         user_id: insertedData.assignee_id,
         type: "JOB_ASSIGNED",

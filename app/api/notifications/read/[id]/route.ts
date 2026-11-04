@@ -1,29 +1,25 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServer } from "../../../_supabase";
-import { createSupabaseAdmin } from "../../../_supabaseAdmin";
+import { NextResponse } from "next/server";
+import { requireActiveUser } from "@/app/api/_authorization";
 
 export async function POST(
-  _req: NextRequest,
-  ctx: { params: Promise<{ id: string }> }
+  _request: Request,
+  context: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await ctx.params;
+  const { id } = await context.params;
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(id)) {
+    return NextResponse.json({ error: "Invalid notification ID" }, { status: 400 });
+  }
+  const access = await requireActiveUser();
+  if (access.response) return access.response;
+  if (!access.supabase || !access.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  const supabase = await createSupabaseServer();
-  const admin = createSupabaseAdmin();
-
-  const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
-
-  const user = authData?.user;
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { error } = await admin
-    .from("notifications")
-    .update({ is_read: true })
-    .eq("id", id)
-    .eq("user_id", user.id);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
+  const { error } = await access.supabase.from("notifications")
+    .update({ is_read: true }).eq("id", id).eq("user_id", access.user.id);
+  if (error) {
+    console.error("[NOTIFICATIONS] Mark read failed", error.code);
+    return NextResponse.json({ error: "อัปเดตการแจ้งเตือนไม่สำเร็จ" }, { status: 500 });
+  }
   return NextResponse.json({ ok: true });
 }

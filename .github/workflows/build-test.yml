@@ -1,32 +1,203 @@
-name: Node.js Build Test
+name: WOFFU OS CI
 
 on:
   push:
-    branches: [ main, dev ] # รันเมื่อ push ลง branch เหล่านี้
+    branches: [main, dev]
   pull_request:
-    branches: [ main ]      # รันเมื่อมีการสร้าง Pull Request
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Save CI minutes on the Free plan: keep only the newest run per branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+      # Public CI-only placeholders. No real Supabase credentials are required
+      # for compilation, and these are never used for production deployment.
+      NEXT_PUBLIC_SUPABASE_URL: "https://ci-placeholder.supabase.co"
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "ci-placeholder-public-key"
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # ระบุเวอร์ชัน Node ที่คุณใช้
-          cache: 'npm'
+          node-version: "24"
+          cache: npm
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install locked dependencies
+        run: npm ci
 
-      - name: Build project
+      - name: Audit production dependencies - High/Critical release gate
+        run: |
+          set +e
+          timeout 90s npm audit --omit=dev --audit-level=high --json > /tmp/woffu-prod-audit.json
+          audit_status=$?
+          set -e
+          node -e '
+            const fs=require("node:fs");
+            let report;
+            try { report=JSON.parse(fs.readFileSync("/tmp/woffu-prod-audit.json","utf8")); }
+            catch { console.log("::error::Production audit output unavailable; cannot verify release safety."); process.exit(1); }
+            const totals=report.metadata?.vulnerabilities || {};
+            console.log("Production dependency audit:", JSON.stringify(totals));
+            for(const [name,record] of Object.entries(report.vulnerabilities||{})) {
+              if(!["high","critical"].includes(record.severity)) continue;
+              const fix=record.fixAvailable===false?"not-available":typeof record.fixAvailable==="object"?
+                "upgrade-required":"fix-available";
+              console.log("Affected package:", name, record.severity,
+                record.isDirect?"direct":"transitive", fix);
+            }
+            if((totals.high||0)+(totals.critical||0)>0)
+              console.log("::error::Production dependencies have high/critical advisories; release blocked.");
+          '
+          if [ "$audit_status" -ne 0 ]; then
+            echo "::error::npm audit failed, or High/Critical dependencies remain."
+            exit "$audit_status"
+          fi
+
+      - name: Enforce VAPID-only browser Push
+        run: |
+          node -e 'const p=require("./package.json"); if(p.dependencies?.firebase||p.dependencies?.["firebase-admin"]) process.exit(1)'
+          if grep -RInE 'firebase/messaging|firebase-admin|@/lib/push|getFcmToken|subscribeForegroundMessages' app lib utils --include='*.ts' --include='*.tsx'; then
+            echo "::error::Legacy FCM code is not allowed in WOFFU V2"
+            exit 1
+          fi
+          test ! -e public/firebase-messaging-sw.js
+
+      - name: Test staging deployment guards
+        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/security/stagingSafety.test.mjs
+
+      - name: Test login payload validation
+        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/security/loginCredentials.test.mjs
+
+      - name: Lint login API and credential parser
+        run: npx eslint "app/api/login/route.ts" "lib/loginCredentials.ts"
+
+      - name: Test safe Netlify staging environment preflight
+        run: node --test tests/security/stagingEnv.test.mjs
+
+      - name: Test public Staging readiness checker
+        run: node --test tests/security/stagingLiveSmoke.test.mjs
+
+      - name: Test Action Center role and priority logic
+        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/action-center/actionCenter.test.mjs
+
+      - name: Test notification link safety and Service Worker
+        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/security/notificationPush.test.mjs
+
+      - name: Lint new Action Center files (required)
+        run: npx eslint "lib/actionCenter.ts" "app/api/action-center/route.ts" "app/(app)/action-center/page.tsx"
+
+      - name: Lint secured notification and push routes (required)
+        run: |
+          npx eslint "app/api/_push.ts" "app/api/_draftReview.ts" \
+            "app/api/notifications/route.ts" \
+            "app/api/notifications/read-all/route.ts" \
+            "app/api/notifications/read/[id]/route.ts" \
+            "app/api/push-subscriptions/route.ts" \
+            "app/api/push-subscriptions/delete/route.ts" \
+            "app/api/push/register/route.ts" \
+            "app/api/push/unregister/route.ts"
+
+      - name: Lint VAPID-only transport and link safety (required)
+        run: |
+          npx eslint "lib/notificationUrl.ts" "app/api/_push.ts" \
+            "app/api/push/send/route.ts" "app/api/push/test/route.ts" \
+            "app/api/push/register/route.ts" "app/api/push/unregister/route.ts" \
+            "app/(app)/components/NotificationCenter.tsx" "app/(app)/layout.tsx" \
+            "public/sw.js"
+
+      - name: Lint final onboarding and workflow compatibility (required)
+        run: |
+          npx eslint "app/invite/[token]/page.tsx" "app/api/_approvalCounts.ts" \
+            "app/api/approvals-count/route.ts" \
+            "app/api/approvals/count/route.ts" \
+            "app/api/approvals/pending-count/route.ts" \
+            "app/api/status-requests/route.ts" "app/api/my-work/[id]/route.ts" \
+            "app/api/notifications/ack-assignment/route.ts"
+
+      - name: Lint secured identity and project endpoints
+        run: npx eslint "app/api/me/route.ts" "app/api/projects/route.ts"
+
+      - name: Verify staging dashboard schema and team directory authorization
+        run: node --test tests/security/stagingDashboardSchema.test.mjs
+
+      - name: Lint dashboard and team directory fixes
+        run: npx eslint "app/api/dashboard/route.ts" "app/api/members/route.ts"
+
+      - name: Lint secured team directory, profiles and announcements
+        run: npx eslint "app/api/profile/route.ts" "app/api/profiles/route.ts" "app/api/team-notices/route.ts"
+
+      - name: Verify privileged team notices authorization
+        run: node --test tests/security/teamNoticesAuthorization.test.mjs
+
+      - name: Test notice validation and safe attachments
+        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/security/teamNoticeInput.test.mjs
+
+      - name: Lint shared notice parser
+        run: npx eslint "lib/teamNoticeInput.ts"
+
+      - name: Enforce status transition rules at API and atomic approval levels
+        run: node --test tests/security/statusTransition.test.mjs
+
+      - name: Verify staging-only MEMBER HTTP release check is safe
+        run: node --test tests/security/memberReleaseCheck.test.mjs
+
+      - name: Verify manager permissions and password recovery lifecycle
+        run: node --test tests/security/releaseAccessRecovery.test.mjs
+
+      - name: Verify invitation display names flow into member profiles
+        run: node --test tests/security/inviteDisplayName.test.mjs
+
+      - name: Guard invitation origin and privileged client ordering
+        run: node --test tests/security/inviteOrigin.test.mjs
+
+      - name: Guard active-user project detail access
+        run: node --test tests/security/projectDetailsAuthorization.test.mjs
+
+      - name: Guard project creation authorization and optional notifications
+        run: node --test tests/security/projectCreateAuthorization.test.mjs
+
+      - name: Enforce active-account checks for My Work
+        run: node --test tests/security/myWorkAuthorization.test.mjs
+
+      - name: Lint secured My Work endpoint
+        run: npx eslint "app/api/my-work/route.ts"
+
+      - name: Guard Netlify staging build configuration
+        run: node --test tests/security/netlifyBuildGate.test.mjs
+
+      - name: Exercise staging command-line tools on CI
+        run: node --test tests/security/stagingCli.test.mjs
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build
         run: npm run build
+
+      - name: HTTP smoke test - Preview must deny production-linked data
         env:
-          # ใส่ Environment Variables ที่จำเป็นต่อการ Build (ถ้ามี)
-          # ถ้า Build ของคุณต้องต่อ Database ให้ใส่คีย์จำลองไว้ตรงนี้
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          WOFFU_DEPLOYMENT_MODE: "staging"
+          WOFFU_ENABLE_PREVIEW_MUTATIONS: "true"
+        run: |
+          PORT=3187 npm run start > /tmp/woffu-preview-smoke.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          node tests/security/preview-http-smoke.mjs
+
+      - name: Lint report (legacy issues do not block build yet)
+        continue-on-error: true
+        run: npm run lint

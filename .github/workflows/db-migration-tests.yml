@@ -1,0 +1,144 @@
+name: WOFFU DB Migration Tests
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Save CI minutes on the Free plan: keep only the newest run per branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  postgres-integration:
+    name: PostgreSQL schema and workflow integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: woffu_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d woffu_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGDATABASE: woffu_ci
+      PGUSER: postgres
+      PGPASSWORD: local_ci_only
+
+    steps:
+      - name: Check out reviewed SQL
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install PostgreSQL client if missing
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+
+      - name: Set up isolated schema fixture
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/fixture.sql
+
+      - name: Apply Phase 2 atomic approval migration
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611020001_atomic_status_approvals.sql
+
+      - name: Apply Phase 3 Draft QC migration
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611020002_project_draft_reviews.sql
+      - name: Apply forward-compatible Draft enum repair
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611020003_fix_draft_closed_status.sql
+
+      - name: Test roles, approval and Draft QC workflow
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/workflow.sql
+
+      - name: Verify schema-audit script (read-only)
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/audit-readonly.sql > /dev/null
+
+  fresh-free-staging:
+    name: Free Supabase staging schema, Auth and RLS
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: woffu_free_staging
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d woffu_free_staging"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGDATABASE: woffu_free_staging
+      PGUSER: postgres
+      PGPASSWORD: local_ci_only
+    steps:
+      - name: Check out reviewed SQL
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install PostgreSQL client if missing
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+      - name: Create isolated Supabase Auth and Storage stand-ins
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/free_staging_fixture.sql
+      - name: Build fresh schema on Free tier
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/staging/free_baseline.sql
+      - name: Apply V2 approval migration
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611020001_atomic_status_approvals.sql
+      - name: Apply V2 Draft QC migration
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611020002_project_draft_reviews.sql
+      - name: Apply forward-compatible Draft enum repair
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611020003_fix_draft_closed_status.sql
+      - name: Harden free staging
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/staging/free_security_tightening.sql
+      - name: Assert role and RLS behavior
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/free_staging_checks.sql
+      - name: Harden RLS for disabled accounts
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/staging/free_active_member_rls.sql
+      - name: Configure small public preview buckets
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/staging/free_public_attachments.sql
+      - name: Test account suspension and one-time invites
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/free_security_checks.sql
+      - name: Verify notification ownership and Push subscription RLS
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/notification_security.sql
+      - name: Harden workflow RLS and column privileges
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/staging/free_workflow_guardrails.sql
+      - name: Verify no forged status requests, logs or notification updates
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/workflow_guardrails.sql
+      - name: Verify API query schema contract (read only)
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/staging_api_contract.sql
+      - name: Apply current transition and invitation migrations
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611040001_prevent_skipping_in_progress.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611040002_restrict_direct_completion_requests.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611040003_invitation_display_names.sql
+      - name: Verify MEMBER RPC boundaries, transition constraints and invitation names
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/release_security.sql
+

@@ -1,50 +1,41 @@
+import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServer } from "../../_supabase";
-import { createSupabaseAdmin } from "../../_supabaseAdmin";
-
-function safeName(name: string) {
-  return name.replace(/[^a-zA-Z0-9._-]/g, "_");
-}
+import { requireActiveUser } from "@/app/api/_authorization";
+import { createSupabaseAdmin } from "@/app/api/_supabaseAdmin";
+import { validatePublicAttachment } from "@/app/api/_uploadValidation";
 
 export async function POST(req: NextRequest) {
-  const supabase = await createSupabaseServer();
-  const admin = createSupabaseAdmin();
+  const access = await requireActiveUser();
+  if (access.response) return access.response;
+  if (!access.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
-
-  const user = authData?.user;
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const form = await req.formData();
-  const file = form.get("file");
-
+  const form = await req.formData().catch(() => null);
+  const file = form?.get("file");
   if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Missing file" }, { status: 400 });
+    return NextResponse.json({ error: "กรุณาเลือกไฟล์แนบ" }, { status: 400 });
   }
 
-  const bytes = await file.arrayBuffer();
-  const buffer = Buffer.from(bytes);
+  const validated = await validatePublicAttachment(file);
+  if ("error" in validated) return validated.error;
 
-  const filePath = `${user.id}/${Date.now()}-${safeName(file.name)}`;
-
-  const { error } = await admin.storage
-    .from("team-notices")
-    .upload(filePath, buffer, {
-      contentType: file.type || "application/octet-stream",
-      upsert: false,
-    });
-
+  // Only small public preview assets belong in Storage. Store large or
+  // confidential source footage in Drive and attach its access-controlled link.
+  const filePath = `${access.user.id}/${randomUUID()}-${validated.safeFilename}`;
+  const admin = createSupabaseAdmin();
+  const { error } = await admin.storage.from("team-notices").upload(filePath, validated.buffer, {
+    contentType: validated.mime,
+    upsert: false,
+  });
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[UPLOAD] Storage failed", error.message);
+    return NextResponse.json({ error: "ไม่สามารถอัปโหลดไฟล์ได้" }, { status: 500 });
   }
 
   const { data } = admin.storage.from("team-notices").getPublicUrl(filePath);
-
   return NextResponse.json({
     data: {
       url: data.publicUrl,
-      name: file.name,
+      name: file.name.slice(0, 160),
       path: filePath,
     },
   });

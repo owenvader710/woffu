@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServer } from "../_supabase";
 import { createSupabaseAdmin } from "../_supabaseAdmin";
 import { sendInviteEmail } from "../_mailer";
+import { getTrustedSiteOrigin } from "@/lib/stagingSafety";
 
 function hashToken(token: string) {
   return crypto.createHash("sha256").update(token).digest("hex");
@@ -15,7 +16,6 @@ function isValidEmail(email: string) {
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createSupabaseServer();
-    const admin = createSupabaseAdmin();
 
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr) {
@@ -51,8 +51,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null);
 
     const email = String(body?.email || "").trim().toLowerCase();
+    const displayName = typeof body?.display_name === "string" ? body.display_name.trim() : "";
     const role = String(body?.role || "MEMBER").trim().toUpperCase();
     const department = String(body?.department || "ALL").trim().toUpperCase();
+
+    if (!displayName || displayName.length > 120) {
+      return NextResponse.json({ error: "กรุณาระบุชื่อสมาชิก (ไม่เกิน 120 ตัวอักษร)" }, { status: 400 });
+    }
 
     if (!email || !isValidEmail(email)) {
       return NextResponse.json({ error: "Invalid email" }, { status: 400 });
@@ -66,6 +71,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid department" }, { status: 400 });
     }
 
+    const siteOrigin = getTrustedSiteOrigin(
+      process.env.NEXT_PUBLIC_SITE_URL,
+      req.nextUrl.origin,
+      process.env.NODE_ENV === "development"
+    );
+    if (!siteOrigin) {
+      return NextResponse.json({ error: "Invite origin is not configured" }, { status: 503 });
+    }
+
+    // Only create the privileged client after manager authorization and input validation.
+    const admin = createSupabaseAdmin();
     const { data: existingProfile, error: profileErr } = await admin
       .from("profiles")
       .select("id, email")
@@ -114,6 +130,7 @@ export async function POST(req: NextRequest) {
 
     const { error: inviteErr } = await admin.from("invites").insert({
       email,
+      display_name: displayName,
       role,
       department,
       invited_by: user.id,
@@ -125,17 +142,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: inviteErr.message }, { status: 400 });
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-    const inviteLink = `${siteUrl}/invite/${rawToken}`;
+    const inviteLink = `${siteOrigin}/invite/${rawToken}`;
 
-    await sendInviteEmail({
-      to: email,
-      inviteLink,
-    });
+    // Email is optional on the Free deployment: share the invitation link
+    // from the authenticated leader's screen when no email provider exists.
+    let delivery: "email" | "manual" = "manual";
+    if (process.env.RESEND_API_KEY && process.env.INVITE_FROM_EMAIL) {
+      try {
+        await sendInviteEmail({ to: email, inviteLink });
+        delivery = "email";
+      } catch (error) {
+        console.error("[INVITES] Email delivery failed; returning a private share link", error instanceof Error ? error.message : "unknown");
+      }
+    }
 
     return NextResponse.json({
       ok: true,
-      message: "Invite sent successfully",
+      delivery,
+      ...(delivery === "manual" ? { inviteLink } : {}),
+      message: delivery === "email"
+        ? "ส่งคำเชิญทางอีเมลแล้ว"
+        : "สร้างลิงก์คำเชิญแล้ว คัดลอกและส่งให้สมาชิกด้วยตัวเอง",
     });
   } catch (e: any) {
     return NextResponse.json(

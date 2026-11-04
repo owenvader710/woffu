@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { supabaseBrowser } from "@/utils/supabase/client";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { urlBase64ToUint8Array } from "./push";
+import { normalizeInternalNotificationPath } from "@/lib/notificationUrl";
 
 type AppNotification = {
   id: string;
@@ -48,6 +50,8 @@ function formatDateTimeTH(iso?: string | null) {
 function toneClass(type: string) {
   if (type === "JOB_ASSIGNED") return "border-lime-400/20 bg-lime-400/10 text-lime-200";
   if (type === "JOB_STATUS_CHANGED") return "border-blue-400/20 bg-blue-400/10 text-blue-200";
+  if (type === "DRAFT_REVIEW") return "border-amber-400/20 bg-amber-400/10 text-amber-200";
+  if (type === "JOB_STATUS_REJECTED") return "border-red-400/20 bg-red-400/10 text-red-200";
   if (type === "STATUS_CHANGE_REQUESTED") return "border-cyan-400/20 bg-cyan-400/10 text-cyan-200";
   if (type === "STATUS_CHANGE_APPROVED") return "border-emerald-400/20 bg-emerald-400/10 text-emerald-200";
   if (type === "STATUS_CHANGE_REJECTED") return "border-red-400/20 bg-red-400/10 text-red-200";
@@ -76,7 +80,7 @@ function writeHiddenIds(ids: string[]) {
 
 function getProjectIdFromLink(link?: string | null) {
   if (!link) return null;
-  const m = link.match(/\/projects\/([a-zA-Z0-9-]+)/);
+  const m = normalizeInternalNotificationPath(link).match(/\/projects\/([a-zA-Z0-9-]+)/);
   return m?.[1] || null;
 }
 
@@ -95,7 +99,7 @@ async function showDesktopNotification(n: AppNotification) {
   icon: "/icon-192.png",
   badge: "/badge-72.png",
   data: {
-    link: n.link || "/",
+    link: normalizeInternalNotificationPath(n.link),
   },
 });
         return;
@@ -110,7 +114,7 @@ async function showDesktopNotification(n: AppNotification) {
 
     notice.onclick = () => {
       window.focus();
-      if (n.link) window.location.href = n.link;
+      if (n.link) window.location.href = normalizeInternalNotificationPath(n.link);
       notice.close();
     };
   } catch {}
@@ -131,7 +135,10 @@ export default function NotificationCenter() {
   const [ackBusyId, setAckBusyId] = useState<string | null>(null);
 
   const initializedRef = useRef(false);
-  const channelRef = useRef<any>(null);
+  const pollingRef = useRef(false);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const pollingLatestRef = useRef<() => Promise<void>>(async () => {});
+  const incomingLatestRef = useRef<(n: AppNotification) => void>(() => {});
   const seenIdsRef = useRef<Set<string>>(new Set());
   const audioCtxRef = useRef<AudioContext | null>(null);
 
@@ -149,7 +156,8 @@ export default function NotificationCenter() {
   function playBeep() {
     try {
       if (!audioCtxRef.current) {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        const AudioCtx = window.AudioContext ||
+          (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (!AudioCtx) return;
         audioCtxRef.current = new AudioCtx();
       }
@@ -199,40 +207,51 @@ export default function NotificationCenter() {
   }
 
   async function pollNotifications() {
+    if (!initializedRef.current || pollingRef.current) return;
+    pollingRef.current = true;
     try {
       const res = await fetch("/api/notifications?limit=30", { cache: "no-store" });
+      if (!res.ok) return; // Never treat an auth/server error as an empty inbox.
       const json = await safeJson(res);
-      const rows = Array.isArray(json?.data) ? (json.data as AppNotification[]) : [];
+      if (!Array.isArray(json?.data)) return;
+      const rows = json.data as AppNotification[];
       const nextUnread = Number(json?.unread || 0);
-
       const fresh = rows.filter((x) => !seenIdsRef.current.has(x.id));
 
-      if (fresh.length > 0 && initializedRef.current) {
-        fresh
-          .slice()
-          .reverse()
-          .forEach((n) => pushIncoming(n));
+      if (fresh.length > 0) {
+        fresh.slice().reverse().forEach((n) => pushIncoming(n));
       }
-
-      const nextSet = new Set<string>();
-      rows.forEach((x) => nextSet.add(x.id));
-      seenIdsRef.current = nextSet;
-
+      seenIdsRef.current = new Set(rows.map(x => x.id));
       setItems(rows);
       setUnread(nextUnread);
-    } catch {}
+    } catch {
+      // Realtime and the next visible refresh remain available.
+    } finally {
+      pollingRef.current = false;
+    }
   }
 
   async function readAll() {
-    await fetch("/api/notifications/read-all", { method: "POST" });
-    setUnread(0);
-    setItems((prev) => prev.map((x) => ({ ...x, is_read: true })));
+    try {
+      const res = await fetch("/api/notifications/read-all", { method: "POST" });
+      if (!res.ok) throw new Error("Mark all read failed");
+      setUnread(0);
+      setItems(prev => prev.map(x => ({ ...x, is_read: true })));
+    } catch {
+      alert("ไม่สามารถทำเครื่องหมายอ่านทั้งหมดได้ กรุณาลองใหม่");
+    }
   }
 
   async function readOne(id: string) {
-    await fetch(`/api/notifications/read/${id}`, { method: "POST" });
-    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, is_read: true } : x)));
-    setUnread((prev) => Math.max(prev - 1, 0));
+    try {
+      const res = await fetch(`/api/notifications/read/${id}`, { method: "POST" });
+      if (!res.ok) throw new Error("Mark read failed");
+      const wasUnread = items.some(x => x.id === id && !x.is_read);
+      setItems(prev => prev.map(x => x.id === id ? { ...x, is_read: true } : x));
+      if (wasUnread) setUnread(prev => Math.max(prev - 1, 0));
+    } catch {
+      alert("ไม่สามารถทำเครื่องหมายอ่านได้ กรุณาลองใหม่");
+    }
   }
 
   function clearVisibleList() {
@@ -329,8 +348,8 @@ export default function NotificationCenter() {
       }
 
       setPushEnabled(true);
-    } catch (e: any) {
-      alert(e?.message || "Push subscribe failed");
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Push subscribe failed");
     } finally {
       setPushBusy(false);
     }
@@ -352,16 +371,20 @@ export default function NotificationCenter() {
         return;
       }
 
-      await fetch("/api/push-subscriptions/delete", {
+      const response = await fetch("/api/push-subscriptions/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ endpoint: sub.endpoint }),
       });
+      if (!response.ok) {
+        throw new Error("ไม่สามารถยกเลิก Push บนเซิร์ฟเวอร์ กรุณาลองอีกครั้ง");
+      }
 
-      await sub.unsubscribe();
+      const removed = await sub.unsubscribe();
+      if (!removed) throw new Error("เบราว์เซอร์ไม่สามารถยกเลิก Push ได้");
       setPushEnabled(false);
-    } catch (e: any) {
-      alert(e?.message || "Push unsubscribe failed");
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Push unsubscribe failed");
     } finally {
       setPushBusy(false);
     }
@@ -386,14 +409,16 @@ export default function NotificationCenter() {
       }
 
       await readOne(n.id);
-    } catch (e: any) {
-      alert(e?.message || "Acknowledge failed");
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Acknowledge failed");
     } finally {
       setAckBusyId(null);
     }
   }
 
   function pushIncoming(n: AppNotification) {
+    if (seenIdsRef.current.has(n.id)) return;
+    seenIdsRef.current.add(n.id);
     setItems((prev) => {
       const exists = prev.some((x) => x.id === n.id);
       if (exists) return prev;
@@ -402,7 +427,6 @@ export default function NotificationCenter() {
       );
     });
 
-    seenIdsRef.current.add(n.id);
     setUnread((prev) => prev + (n.is_read ? 0 : 1));
 
     if (initializedRef.current) {
@@ -418,19 +442,29 @@ export default function NotificationCenter() {
     }
   }
 
+  // Realtime and polling listeners remain stable across sound/permission changes.
+  // Only their current callbacks update in an effect after each render.
   useEffect(() => {
-    setHiddenIds(readHiddenIds());
-    loadMe();
-    loadInitial();
-    checkPushStatus();
+    pollingLatestRef.current = pollNotifications;
+    incomingLatestRef.current = pushIncoming;
+  });
+
+  useEffect(() => {
+    // Defer all initial stateful reads until after the first paint.
+    const frame = window.requestAnimationFrame(() => {
+      setHiddenIds(readHiddenIds());
+      void loadMe();
+      void loadInitial();
+      void checkPushStatus();
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
-    if (!("Notification" in window)) {
-      setDesktopPermission("unsupported");
-      return;
-    }
-    setDesktopPermission(Notification.permission);
+    const frame = window.requestAnimationFrame(() =>
+      setDesktopPermission("Notification" in window ? Notification.permission : "unsupported")
+    );
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
@@ -451,11 +485,19 @@ export default function NotificationCenter() {
   }, []);
 
   useEffect(() => {
-    const t = window.setInterval(() => {
-      pollNotifications();
-    }, 5000);
-
-    return () => window.clearInterval(t);
+    // Realtime is the primary channel; 60-second polling is only a fallback.
+    // Do not consume hosting or Supabase reads from background tabs.
+    const whenVisible = () => {
+      if (document.visibilityState === "visible") void pollingLatestRef.current();
+    };
+    const t = window.setInterval(whenVisible, 60000);
+    document.addEventListener("visibilitychange", whenVisible);
+    window.addEventListener("focus", whenVisible);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", whenVisible);
+      window.removeEventListener("focus", whenVisible);
+    };
   }, []);
 
   useEffect(() => {
@@ -480,7 +522,7 @@ export default function NotificationCenter() {
         },
         (payload) => {
           const row = payload.new as AppNotification;
-          pushIncoming(row);
+          incomingLatestRef.current(row);
         }
       )
       .subscribe();
@@ -493,7 +535,7 @@ export default function NotificationCenter() {
         channelRef.current = null;
       }
     };
-  }, [me?.id, desktopPermission, soundEnabled]);
+  }, [me?.id]);
 
   useEffect(() => {
     if (toasts.length === 0) return;
@@ -503,10 +545,7 @@ export default function NotificationCenter() {
     return () => window.clearTimeout(timer);
   }, [toasts]);
 
-  const visibleItems = useMemo(
-    () => items.filter((x) => !hiddenIds.includes(x.id)).slice(0, 10),
-    [items, hiddenIds]
-  );
+  const visibleItems = items.filter(x => !hiddenIds.includes(x.id)).slice(0, 10);
 
   return (
     <>
@@ -643,7 +682,7 @@ export default function NotificationCenter() {
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                           {n.link ? (
                             <Link
-                              href={n.link}
+                              href={normalizeInternalNotificationPath(n.link)}
                               onClick={() => readOne(n.id)}
                               className="inline-flex rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
                             >

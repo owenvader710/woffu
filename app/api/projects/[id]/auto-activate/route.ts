@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/app/api/_supabaseAdmin";
+import { requireActiveUser } from "@/app/api/_authorization";
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
@@ -10,6 +11,8 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
+    const access = await requireActiveUser();
+    if (access.response) return access.response;
     const { id } = await ctx.params;
 
     if (!id || !isUuid(id)) {
@@ -20,7 +23,7 @@ export async function POST(
 
     const { data: project, error: projErr } = await admin
       .from("projects")
-      .select("id, status, start_date")
+      .select("id, status, start_date, assignee_id")
       .eq("id", id)
       .single();
 
@@ -30,6 +33,10 @@ export async function POST(
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+    const isManager = ["LEADER", "ADMIN"].includes(access.profile?.role ?? "");
+    if (!isManager && project.assignee_id !== access.user?.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     if (project.status !== "PRE_ORDER") {
@@ -45,12 +52,16 @@ export async function POST(
       return NextResponse.json({ ok: true, skipped: true });
     }
 
-    start.setHours(0, 0, 0, 0);
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    if (start.getTime() > today.getTime()) {
+    // Compare calendar dates in the team's business timezone, not UTC.
+    const dateKey = (date: Date) => {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Bangkok",
+        year: "numeric", month: "2-digit", day: "2-digit",
+      }).formatToParts(date);
+      const value = (type: string) => parts.find(p => p.type === type)?.value || "";
+      return `${value("year")}-${value("month")}-${value("day")}`;
+    };
+    if (dateKey(start) > dateKey(new Date())) {
       return NextResponse.json({ ok: true, skipped: true });
     }
 
@@ -66,9 +77,10 @@ export async function POST(
 
     await admin.from("project_logs").insert({
       project_id: id,
+      actor_id: access.user?.id,
       action: "STATUS_AUTO_CHANGED",
       message: "Auto changed status: PRE_ORDER -> TODO",
-      detail: {
+      meta: {
         from_status: "PRE_ORDER",
         to_status: "TODO",
         mode: "AUTO",

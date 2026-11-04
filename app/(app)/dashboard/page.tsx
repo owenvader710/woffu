@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ChecklistProgress, QuickLink, WorkspaceHeader } from "../components/WorkspaceKit";
 
 type MeProfile = {
   id: string;
@@ -79,6 +80,11 @@ type DashboardPayload = {
     latestGraphic: Project[];
     latestVideo: Project[];
     workload: WorkloadItem[];
+    reviewQueue?: { projectId: string; title: string; draftNumber: number; submittedAt: string }[];
+    revisionCount?: number;
+    overdueCount?: number;
+    overdue?: Project[];
+    deadlineSoon?: Project[];
   };
 };
 
@@ -200,7 +206,7 @@ function DashboardCard({
     <section
       onClick={onClick}
       className={cn(
-        "min-w-0 overflow-hidden rounded-[24px] border border-white/10 bg-white/5 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.18)] md:rounded-[28px] md:p-5",
+        "woffu-clean-panel min-w-0 overflow-hidden p-4 md:p-5",
         onClick && "cursor-pointer transition hover:bg-white/[0.07] hover:border-white/15",
         className
       )}
@@ -229,13 +235,13 @@ function SummaryStat({
     <button
       type="button"
       onClick={onClick}
-      className="min-h-[86px] min-w-0 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-left transition hover:bg-white/10 md:min-h-[116px] md:px-4 md:py-4"
+      className="woffu-focus-ring min-h-[90px] min-w-0 rounded-xl border border-white/10 bg-[#121416] px-4 py-3 text-left transition hover:border-white/25 hover:bg-white/[0.07]"
     >
-      <div className="text-[10px] font-semibold tracking-[0.18em] text-white/45 md:text-[11px] md:tracking-widest">
+      <div className="text-[11px] font-semibold text-white/55">
         {label}
       </div>
-      <div className="mt-2 text-2xl font-extrabold leading-none text-white md:mt-3 md:text-3xl">{value}</div>
-      <div className="mt-2 break-words text-[11px] leading-5 text-white/45 md:mt-3 md:text-xs">{hint || "-"}</div>
+      <div className="mt-2 text-[27px] font-bold leading-none tabular-nums text-white">{value}</div>
+      <div className="mt-2 break-words text-xs leading-5 text-white/45">{hint || "-"}</div>
     </button>
   );
 }
@@ -638,6 +644,11 @@ export default function DashboardPage() {
   const latestGraphic = dashboard?.sections.latestGraphic ?? [];
   const latestVideo = dashboard?.sections.latestVideo ?? [];
   const workload = dashboard?.sections.workload ?? [];
+  const reviewQueue = dashboard?.sections.reviewQueue ?? [];
+  const revisionCount = dashboard?.sections.revisionCount ?? 0;
+  const overdue = dashboard?.sections.overdue ?? [];
+  const overdueCount = dashboard?.sections.overdueCount ?? overdue.length;
+  const deadlineSoon = dashboard?.sections.deadlineSoon ?? [];
 
   const totalProjectsForDonut =
     projectCounts.total + projectCounts.completed;
@@ -663,33 +674,35 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="px-4 py-6 md:px-6 md:py-8 lg:px-10">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0">
-          <div className="text-xs font-semibold tracking-widest text-white/50">WOFFU</div>
-          <h1 className="mt-2 break-words text-3xl font-extrabold tracking-tight text-white md:text-4xl">
-            Dashboard
-          </h1>
-        </div>
+    <div className="mx-auto max-w-[1600px] px-4 py-6 md:px-6 md:py-8 lg:px-8">
+      <WorkspaceHeader
+        title="ภาพรวมงาน"
+        description={`สวัสดี ${me?.display_name || "ทีมงาน"} · ${isLeader ? "หัวหน้าทีม" : "สมาชิกทีม"} / ${me?.department || "-"} · ข้อมูลงานและการตรวจล่าสุด`}
+        onRefresh={() => void loadAll()}
+        refreshing={loading}
+      >
+        <Link href="/my-work" className="woffu-focus-ring flex min-h-10 items-center rounded-xl bg-[#e5ff78] px-4 py-2 text-sm font-semibold text-black hover:bg-[#d9f36c]">
+          เปิดงานของฉัน
+        </Link>
+      </WorkspaceHeader>
 
-        <button
-          onClick={() => void loadAll()}
-          className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
-        >
-          รีเฟรช
-        </button>
-      </div>
-
-      <div className="mt-4 max-w-xl rounded-2xl border border-white/10 bg-white/5 px-4 py-4 md:px-5">
-        <div className="text-sm font-semibold text-white">{me?.display_name || "-"}</div>
-        <div className="mt-1 text-sm text-white/45">
-          {isLeader ? "หัวหน้าทีม" : "สมาชิกทีม"} · {me?.department || "-"}
+      <section className="mt-7" aria-labelledby="attention-title">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 id="attention-title" className="woffu-clean-heading text-lg text-white">สิ่งที่ต้องติดตาม</h2>
+          <span className="text-xs text-white/45">เลือกการ์ดเพื่อดูรายละเอียด</span>
         </div>
-      </div>
+        <p className="mb-3 text-xs text-white/45">ตัวเลข Draft เป็นรายการล่าสุดบางส่วน · <Link href="/action-center" className="font-semibold text-[#e5ff78] underline underline-offset-4">ดูรายการที่ต้องดำเนินการทั้งหมด</Link></p>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <QuickLink href="/action-center" label="Draft รอ QC" detail="รายการตัวอย่าง" count={reviewQueue.length} variant="attention"/>
+          <QuickLink href="/action-center" label="ส่งกลับแก้ไข" detail="รายการล่าสุด" count={revisionCount} variant="danger"/>
+          <QuickLink href="/action-center" label="งานเกินกำหนด" detail="งานยังไม่ปิด" count={overdueCount} variant="neutral"/>
+          <ChecklistProgress completed={projectCounts.completed} total={totalProjectsForDonut} label="ปิดงานแล้ว" />
+        </div>
+      </section>
 
       <DashboardCard
-        title="ภาพรวมงาน"
-        desc="จำนวนงานทั้งหมด จำนวนของแต่ละสถานะ และเปอร์เซ็นต์งานที่ทำเสร็จแล้ว"
+        title="สถานะงานทั้งหมด"
+        desc="แยกสถานะงานหลักออกจากรอบตรวจ Draft เพื่อให้เห็นภาพรวมได้ง่ายขึ้น"
         className="mt-6"
       >
         <div className="grid min-w-0 gap-6 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)] xl:gap-8">
@@ -735,42 +748,42 @@ export default function DashboardPage() {
 
           <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-3 md:gap-4">
             <SummaryStat
-              label="ALL ACTIVE"
+              label="กำลังเปิด"
               value={projectCounts.total}
               hint="งานที่ยังไม่ปิด"
               onClick={() => router.push("/projects")}
             />
 
             <SummaryStat
-              label="PRE_ORDER"
+              label="งานล่วงหน้า"
               value={projectCounts.preOrder}
               hint="สั่งล่วงหน้า"
               onClick={() => router.push("/projects")}
             />
 
             <SummaryStat
-              label="TODO"
+              label="รอเริ่ม"
               value={projectCounts.todo}
               hint="งานที่ต้องทำ"
               onClick={() => router.push("/projects")}
             />
 
             <SummaryStat
-              label="IN_PROGRESS"
+              label="กำลังทำ"
               value={projectCounts.inProgress}
               hint="กำลังทำ"
               onClick={() => router.push("/my-work")}
             />
 
             <SummaryStat
-              label="BLOCKED"
+              label="ติดปัญหา"
               value={projectCounts.blocked}
               hint="ติดปัญหา"
               onClick={() => router.push("/blocked")}
             />
 
             <SummaryStat
-              label="DONE %"
+              label="ปิดงาน %"
               value={projectCounts.progressPercent}
               hint={`${projectCounts.completed} ปิดแล้ว`}
               onClick={() => router.push("/completed")}
@@ -779,10 +792,39 @@ export default function DashboardPage() {
         </div>
       </DashboardCard>
 
+      <div id="qc-overview" className="mt-4 grid scroll-mt-24 gap-4 xl:grid-cols-2">
+        <DashboardCard title="Draft รอ Senior QC" desc="คลิกเพื่อเปิดรายละเอียดและตรวจงาน">
+          {reviewQueue.length === 0 ? <p className="text-sm text-white/50">ไม่มี Draft รอตรวจ</p> :
+          <div className="space-y-2">
+            {reviewQueue.map(item => <Link key={item.projectId}
+              href={`/projects/${item.projectId}#draft-reviews`}
+              className="block rounded-xl border border-white/10 bg-black/20 p-3 transition hover:bg-white/10">
+              <div className="text-sm font-semibold text-white">{item.title}</div>
+              <div className="mt-1 text-xs text-white/50">Draft {item.draftNumber} · รอ QC</div>
+            </Link>)}
+          </div>}
+        </DashboardCard>
+        <DashboardCard title="ใกล้กำหนดส่ง (72 ชั่วโมง)" desc="งานที่ยังไม่ปิดและต้องติดตาม">
+          {deadlineSoon.length === 0 && overdue.length === 0 ? <p className="text-sm text-white/50">ไม่มีงานใกล้หรือเกินกำหนด</p> :
+          <div className="space-y-2">
+            {overdue.map(p => <Link key={p.id} href={`/projects/${p.id}`}
+              className="block rounded-xl border border-red-500/20 bg-red-500/10 p-3">
+              <div className="text-sm font-semibold">{p.title}</div>
+              <div className="mt-1 text-xs text-red-200">เลยกำหนด · {formatDateTimeTH(p.due_date)}</div>
+            </Link>)}
+            {deadlineSoon.map(p => <Link key={p.id} href={`/projects/${p.id}`}
+              className="block rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="text-sm font-semibold">{p.title}</div>
+              <div className="mt-1 text-xs text-white/55">ครบกำหนด {formatDateTimeTH(p.due_date)}</div>
+            </Link>)}
+          </div>}
+        </DashboardCard>
+      </div>
+
       <DashboardCard
         title="ประกาศทีม"
         desc="ใช้สำหรับแจ้งลา ประชุม ปัญหา และงานด่วนของทีม"
-        className="mt-6 border-[#e5ff78]/10 bg-[radial-gradient(circle_at_top,rgba(229,255,120,0.08),rgba(255,255,255,0.02)_35%,rgba(255,255,255,0.02)_100%)] shadow-[0_0_30px_rgba(229,255,120,0.06)]"
+        className="mt-5"
       >
         <DashboardNoticePreview items={notices} />
       </DashboardCard>
@@ -823,7 +865,7 @@ export default function DashboardPage() {
               emptyText="ไม่มีรายการรออนุมัติ"
               submittingId={approvalSubmittingId}
               onApprove={(id) => handleApprovalAction(id, "approve")}
-              onReject={(id) => handleApprovalAction(id, "reject")}
+              onReject={() => router.push("/approvals")}
             />
           </DashboardCard>
 

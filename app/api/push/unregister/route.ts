@@ -1,33 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServer } from "../../_supabase";
-import { createSupabaseAdmin } from "../../_supabaseAdmin";
+import { NextResponse } from "next/server";
 
-export async function POST(req: NextRequest) {
-  const supabase = await createSupabaseServer();
-  const admin = createSupabaseAdmin();
-
-  const { data: authData } = await supabase.auth.getUser();
-  const user = authData?.user;
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const body = await req.json().catch(() => null);
-  const token = typeof body?.token === "string" ? body.token.trim() : "";
-
-  if (!token) {
-    return NextResponse.json({ error: "Missing token" }, { status: 400 });
-  }
-
-  const { error } = await admin
-    .from("push_tokens")
-    .delete()
-    .eq("user_id", user.id)
-    .eq("token", token);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true });
+/** Legacy FCM endpoint replaced by POST /api/push-subscriptions/delete. */
+export async function POST() {
+  return NextResponse.json({
+    code: "FCM_RETIRED",
+    error: "กรุณาปิด Push จากเมนูแจ้งเตือน",
+  }, { status: 410, headers: { "Cache-Control": "no-store" } });
 }

@@ -279,6 +279,7 @@ function EditMyProfileModal({
 
 export default function MembersPage() {
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<"MEMBER" | "LEADER">("MEMBER");
   const [inviteDepartment, setInviteDepartment] = useState<"VIDEO" | "GRAPHIC" | "ALL">("ALL");
   const [inviteBusy, setInviteBusy] = useState(false);
@@ -355,6 +356,7 @@ export default function MembersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: inviteEmail,
+          display_name: inviteName.trim(),
           role: inviteRole,
           department: inviteDepartment,
         }),
@@ -370,6 +372,7 @@ export default function MembersPage() {
       setInviteLink(typeof json?.inviteLink === "string" ? json.inviteLink : "");
       setInviteMsg(json?.message || "สร้างคำเชิญสำเร็จแล้ว");
       setInviteEmail("");
+      setInviteName("");
       setInviteRole("MEMBER");
       setInviteDepartment("ALL");
     } catch (e: any) {
@@ -605,6 +608,15 @@ export default function MembersPage() {
 
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
               <input
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                placeholder="ชื่อที่แสดง เช่น โอเว่น / บูม"
+                aria-label="ชื่อสมาชิก"
+                required
+                maxLength={120}
+                className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm outline-none focus:border-[#e5ff78] md:col-span-2"
+              />
+              <input
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="email@example.com"
@@ -634,7 +646,7 @@ export default function MembersPage() {
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <button
                 onClick={sendInvite}
-                disabled={inviteBusy}
+                disabled={inviteBusy || !inviteName.trim() || !inviteEmail.trim()}
                 className="rounded-2xl bg-[#e5ff78] px-5 py-2.5 text-sm font-bold text-black hover:opacity-90 disabled:opacity-60"
               >
                 {inviteBusy ? "กำลังสร้างลิงก์..." : "สร้างคำเชิญ"}

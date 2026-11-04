@@ -134,4 +134,11 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f tests/db/workflow_guardrails.sql
       - name: Verify API query schema contract (read only)
         run: psql -X -v ON_ERROR_STOP=1 -f tests/db/staging_api_contract.sql
+      - name: Apply current transition and invitation migrations
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611040001_prevent_skipping_in_progress.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611040002_restrict_direct_completion_requests.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/202611040003_invitation_display_names.sql
+      - name: Verify MEMBER RPC boundaries, transition constraints and invitation names
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/db/release_security.sql
 

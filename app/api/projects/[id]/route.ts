@@ -1,7 +1,7 @@
 // app/api/projects/[id]/route.ts
 import { NextResponse } from "next/server";
 import { createSupabaseServer } from "../../_supabase";
-import { requireActiveManager } from "../../_authorization";
+import { requireActiveManager, requireActiveUser } from "../../_authorization";
 
 function badId(id?: string) {
   return !id || id === "undefined" || id === "null";
@@ -12,7 +12,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   if (badId(id)) return NextResponse.json({ error: "Invalid project id" }, { status: 400 });
 
-  const supabase = await createSupabaseServer();
+  const access = await requireActiveUser();
+  if (access.response) return access.response;
+  const supabase = access.supabase;
 
   const { data, error } = await supabase
     .from("projects")

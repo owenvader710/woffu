@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { CheckCircle2, LockKeyhole, UserPlus } from "lucide-react";
 
-type InviteDetails = { email: string; role: string; department: string };
+type InviteDetails = { email: string; display_name?: string | null; role: string; department: string };
 async function safeJson(response: Response) {
   return response.json().catch(() => null);
 }
@@ -114,7 +114,9 @@ export default function InviteAcceptPage({ params }: { params: Promise<{ token: 
             ) : (
               <form onSubmit={createAccount} className="mt-6 space-y-4">
                 <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                  <p className="text-xs text-white/50">อีเมล</p>
+                  <p className="text-xs text-white/50">ชื่อสมาชิก</p>
+                  <p className="mt-1 text-sm font-semibold">{invite.display_name || "ยังไม่ได้กำหนดชื่อ"}</p>
+                  <p className="mt-3 text-xs text-white/50">อีเมล</p>
                   <p className="mt-1 break-all text-sm font-semibold">{invite.email}</p>
                   <p className="mt-3 text-xs text-white/50">สิทธิ์ / ฝ่าย</p>
                   <p className="mt-1 text-sm">{invite.role} · {invite.department}</p>
